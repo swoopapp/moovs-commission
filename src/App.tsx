@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { AuthGate } from './components/auth/AuthGate';
 import { AppHeader } from './components/layout/AppHeader';
 import { DashboardView } from './components/dashboard/DashboardView';
+import { AgencyDetailView } from './components/agency/AgencyDetailView';
+import { Toaster } from './components/ui/sonner';
 
 function App() {
   const [route, setRoute] = useState(window.location.hash || '#/');
@@ -21,11 +23,12 @@ function App() {
         <AppHeader />
         <main className="max-w-7xl mx-auto px-6 py-6">
           {agencyMatch ? (
-            <div>Agency Detail (coming in Task 8)</div>
+            <AgencyDetailView agencyId={agencyMatch[1]} />
           ) : (
             <DashboardView />
           )}
         </main>
+        <Toaster />
       </div>
     </AuthGate>
   );
