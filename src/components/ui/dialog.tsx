@@ -20,13 +20,11 @@ const DialogOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Overlay
     ref={ref}
-    style={{
-      position: 'fixed',
-      inset: 0,
-      zIndex: 9999,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    }}
-    className={className}
+    className={cn(
+      "fixed inset-0 bg-black/50",
+      className
+    )}
+    style={{ zIndex: 50 }}
     {...props}
   />
 ));
@@ -35,36 +33,21 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+>(({ className, children, style, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
       ref={ref}
-      style={{
-        position: 'fixed',
-        left: '50%',
-        top: '50%',
-        transform: 'translate(-50%, -50%)',
-        zIndex: 9999,
-        width: '100%',
-        maxWidth: '32rem',
-        backgroundColor: 'white',
-        padding: '1.5rem',
-        borderRadius: '0.5rem',
-        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-        border: '1px solid #e5e7eb',
-      }}
-      className={className}
+      className={cn(
+        "fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg bg-white p-6 rounded-lg shadow-xl border border-gray-200",
+        className
+      )}
+      style={{ zIndex: 50, ...style }}
       {...props}
     >
       {children}
       <DialogPrimitive.Close
-        style={{
-          position: 'absolute',
-          right: '1rem',
-          top: '1rem',
-          opacity: 0.7,
-        }}
+        className="absolute right-4 top-4 opacity-70 hover:opacity-100 transition-opacity"
       >
         <XIcon className="h-4 w-4" />
         <span className="sr-only">Close</span>
