@@ -33,6 +33,9 @@ function App() {
           )}
         </main>
         <Toaster />
+        <footer className="fixed bottom-0 left-0 right-0 text-center py-3">
+          <p className="text-xs text-gray-400">Powered by Moovs</p>
+        </footer>
       </div>
     </AuthGate>
   );
