@@ -1,8 +1,33 @@
+import { useState, useEffect } from 'react';
+import { AuthGate } from './components/auth/AuthGate';
+import { AppHeader } from './components/layout/AppHeader';
+import { DashboardView } from './components/dashboard/DashboardView';
+
 function App() {
+  const [route, setRoute] = useState(window.location.hash || '#/');
+
+  useEffect(() => {
+    const onHash = () => setRoute(window.location.hash || '#/');
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  // Parse route for agency detail (Task 8)
+  const agencyMatch = route.match(/^#\/agency\/(.+)$/);
+
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center">
-      <h1 className="text-2xl font-semibold text-gray-900">Moovs Commissions</h1>
-    </div>
+    <AuthGate>
+      <div className="min-h-screen bg-gray-50">
+        <AppHeader />
+        <main className="max-w-7xl mx-auto px-6 py-6">
+          {agencyMatch ? (
+            <div>Agency Detail (coming in Task 8)</div>
+          ) : (
+            <DashboardView />
+          )}
+        </main>
+      </div>
+    </AuthGate>
   );
 }
 
