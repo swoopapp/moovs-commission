@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useOperator } from '../../contexts/OperatorContext';
 import { createAgency, CreateAgencyInput } from '../../services/agencyService';
+import { fetchMoovsCompanies, MoovsCompany } from '../../services/companyLookupService';
 import { AgencyType, CommissionType, CommissionBase } from '../../types/commission';
 import {
   Dialog,
@@ -20,7 +21,7 @@ import {
   SelectValue,
 } from '../ui/select';
 import { Card, CardContent } from '../ui/card';
-import { Percent, DollarSign, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Percent, DollarSign, ArrowRight, ArrowLeft, Loader2, Building2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface CreateAgencyDialogProps {
@@ -68,6 +69,65 @@ export function CreateAgencyDialog({ open, onOpenChange, onCreated }: CreateAgen
   const [contactEmail, setContactEmail] = useState('');
   const [contactPhone, setContactPhone] = useState('');
 
+  // Company lookup
+  const [companies, setCompanies] = useState<MoovsCompany[]>([]);
+  const [companiesLoading, setCompaniesLoading] = useState(false);
+  const [companiesFailed, setCompaniesFailed] = useState(false);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>('none');
+  const [companySearch, setCompanySearch] = useState('');
+
+  // Fetch companies when dialog opens
+  useEffect(() => {
+    if (!open) return;
+    if (!operator.moovsOperatorId) {
+      setCompaniesFailed(true);
+      return;
+    }
+    let cancelled = false;
+    setCompaniesLoading(true);
+    setCompaniesFailed(false);
+    fetchMoovsCompanies(operator.moovsOperatorId)
+      .then((result) => {
+        if (!cancelled) setCompanies(result);
+      })
+      .catch((err) => {
+        console.error('Failed to fetch Moovs companies:', err);
+        if (!cancelled) setCompaniesFailed(true);
+      })
+      .finally(() => {
+        if (!cancelled) setCompaniesLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [open, operator.moovsOperatorId]);
+
+  const filteredCompanies = useMemo(() => {
+    if (!companySearch.trim()) return companies;
+    const q = companySearch.toLowerCase();
+    return companies.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        (c.email && c.email.toLowerCase().includes(q))
+    );
+  }, [companies, companySearch]);
+
+  function handleCompanySelect(companyId: string) {
+    setSelectedCompanyId(companyId);
+    if (companyId === 'none') {
+      // Clear auto-filled fields for manual entry
+      setMoovsCompanyId('');
+      setName('');
+      setContactEmail('');
+      setContactPhone('');
+      return;
+    }
+    const company = companies.find((c) => c.company_id === companyId);
+    if (!company) return;
+    setMoovsCompanyId(company.company_id);
+    setName(company.name);
+    setContactEmail(company.email || '');
+    setContactPhone(company.phone_number || '');
+  }
+
   // Step 2
   const [commissionRate, setCommissionRate] = useState('10');
   const [commissionType, setCommissionType] = useState<CommissionType>('percent');
@@ -92,6 +152,8 @@ export function CreateAgencyDialog({ open, onOpenChange, onCreated }: CreateAgen
     setContractStart('');
     setContractEnd('');
     setNotes('');
+    setSelectedCompanyId('none');
+    setCompanySearch('');
   }
 
   async function handleCreate() {
@@ -147,6 +209,55 @@ export function CreateAgencyDialog({ open, onOpenChange, onCreated }: CreateAgen
 
         {step === 1 ? (
           <div className="space-y-4 py-2">
+            {/* Company Lookup */}
+            <Card className="bg-blue-50/50 border-blue-200">
+              <CardContent className="pt-4 pb-3 space-y-2">
+                <div className="flex items-center gap-2 mb-1">
+                  <Building2 className="h-4 w-4 text-blue-600" />
+                  <Label className="text-sm font-medium text-blue-800">Link to Moovs Company</Label>
+                </div>
+                {companiesLoading ? (
+                  <div className="flex items-center gap-2 py-2 text-sm text-gray-500">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading companies...
+                  </div>
+                ) : companiesFailed || companies.length === 0 ? (
+                  <p className="text-xs text-gray-500">
+                    {companiesFailed
+                      ? 'Could not load Moovs companies. Enter details manually below.'
+                      : 'No Moovs companies found. Enter details manually below.'}
+                  </p>
+                ) : (
+                  <>
+                    <Input
+                      placeholder="Search companies..."
+                      value={companySearch}
+                      onChange={(e) => setCompanySearch(e.target.value)}
+                      className="bg-white"
+                    />
+                    <Select value={selectedCompanyId} onValueChange={handleCompanySelect}>
+                      <SelectTrigger className="bg-white">
+                        <SelectValue placeholder="Select a company..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">None — manual entry</SelectItem>
+                        {filteredCompanies.map((c) => (
+                          <SelectItem key={c.company_id} value={c.company_id}>
+                            {c.name}{c.email ? ` (${c.email})` : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {selectedCompanyId !== 'none' && (
+                      <p className="text-xs text-blue-600">
+                        Fields auto-filled from Moovs. You can override any value below.
+                      </p>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
             <div className="space-y-2">
               <Label htmlFor="agency-name">Agency Name *</Label>
               <Input
@@ -173,16 +284,6 @@ export function CreateAgencyDialog({ open, onOpenChange, onCreated }: CreateAgen
                   </button>
                 ))}
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="moovs-id">Moovs Company ID (optional)</Label>
-              <Input
-                id="moovs-id"
-                value={moovsCompanyId}
-                onChange={(e) => setMoovsCompanyId(e.target.value)}
-                placeholder="For auto-matching reservations"
-              />
             </div>
 
             <div className="space-y-2">

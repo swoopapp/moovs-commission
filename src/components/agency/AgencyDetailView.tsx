@@ -138,6 +138,7 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
             attributions={attributions}
             reservations={reservations}
             agencyId={agencyId}
+            agency={agency}
             onAgentCreated={loadData}
             onFilterByAgent={handleFilterByAgent}
           />

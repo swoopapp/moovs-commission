@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Agent, ReservationAttribution, Reservation } from '../../types/commission';
+import { Agency, Agent, ReservationAttribution, Reservation } from '../../types/commission';
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -12,6 +12,7 @@ interface AgentsTabProps {
   attributions: ReservationAttribution[];
   reservations: Reservation[];
   agencyId: string;
+  agency: Agency;
   onAgentCreated: () => void;
   onFilterByAgent: (agentId: string) => void;
 }
@@ -35,7 +36,7 @@ interface AgentStats {
   commission: number;
 }
 
-export function AgentsTab({ agents, attributions, reservations, agencyId, onAgentCreated, onFilterByAgent }: AgentsTabProps) {
+export function AgentsTab({ agents, attributions, reservations, agencyId, agency, onAgentCreated, onFilterByAgent }: AgentsTabProps) {
   const [showAddDialog, setShowAddDialog] = useState(false);
 
   const reservationMap = useMemo(() => {
@@ -158,6 +159,7 @@ export function AgentsTab({ agents, attributions, reservations, agencyId, onAgen
         open={showAddDialog}
         onOpenChange={setShowAddDialog}
         agencyId={agencyId}
+        agency={agency}
         onCreated={onAgentCreated}
       />
     </div>

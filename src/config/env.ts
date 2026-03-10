@@ -22,4 +22,6 @@ export const config: AppConfig = {
 export const EDGE_FUNCTION_URLS = {
   fetchReservations: `${config.supabaseUrl}/functions/v1/fetch-reservations`,
   fetchOperators: `${config.supabaseUrl}/functions/v1/fetch-operators`,
+  fetchCompanies: `${config.supabaseUrl}/functions/v1/fetch-companies`,
+  fetchContacts: `${config.supabaseUrl}/functions/v1/fetch-contacts`,
 } as const;
