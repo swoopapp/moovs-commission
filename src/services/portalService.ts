@@ -37,15 +37,14 @@ export async function fetchPortalData(token: string): Promise<PortalData | null>
     const agencyData = await fetchAgencyById(agent.agency_id);
     if (!agencyData) return null;
 
-    const [allAttributions, payouts] = await Promise.all([
-      fetchAttributionsByAgency(agencyData.id),
-      fetchPayoutsByAgency(agencyData.id),
-    ]);
+    const allAttributions = await fetchAttributionsByAgency(agencyData.id);
 
     const agentAttributions = allAttributions.filter((a) => a.agent_id === agent.id);
     const reservationIds = [...new Set(agentAttributions.map((a) => a.reservation_id))];
     const reservations = await fetchReservationsByIds(reservationIds);
 
+    // Agent view: payouts are agency-level records without per-agent breakdown,
+    // so we return an empty array to avoid leaking other agents' data.
     return {
       view: 'agent',
       agency: agencyData,
@@ -53,7 +52,7 @@ export async function fetchPortalData(token: string): Promise<PortalData | null>
       currentAgent: agent,
       reservations,
       attributions: agentAttributions,
-      payouts,
+      payouts: [],
     };
   }
 

@@ -103,7 +103,7 @@ export function DashboardView({ syncOpen, onSyncOpenChange, onRegisterExport }: 
         activeAgencies={stats.activeAgencies}
         pendingPayouts={stats.pendingPayouts}
       />
-      <CommissionTrendChart data={stats.monthlyTrend} />
+      <CommissionTrendChart data={stats.agencyMonthlyTrend} agencyNames={stats.topAgencyNames} />
       <AgencyTable rows={stats.agencyRows} onAddAgency={() => setCreateAgencyOpen(true)} />
 
       <SyncTripsDialog

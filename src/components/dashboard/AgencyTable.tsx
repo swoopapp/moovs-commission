@@ -150,7 +150,7 @@ export function AgencyTable({ rows, onAddAgency }: AgencyTableProps) {
                 <TableCell className="text-right">{formatCurrency(row.revenue)}</TableCell>
                 <TableCell className="text-right text-green-600 font-medium">{formatCurrency(row.earned)}</TableCell>
                 <TableCell className="text-right">{formatCurrency(row.paid)}</TableCell>
-                <TableCell className="text-right font-semibold text-amber-600">
+                <TableCell className={`text-right font-semibold ${row.outstanding > 0 ? 'text-red-600' : 'text-green-600'}`}>
                   {formatCurrency(row.outstanding)}
                 </TableCell>
                 <TableCell>

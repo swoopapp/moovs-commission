@@ -18,6 +18,11 @@ export interface MonthlyTrend {
   paid: number;
 }
 
+export interface AgencyMonthlyTrend {
+  month: string;
+  [agencyName: string]: string | number; // dynamic keys per agency name
+}
+
 export interface DashboardStats {
   totalOwed: number;
   paidThisPeriod: number;
@@ -25,6 +30,8 @@ export interface DashboardStats {
   pendingPayouts: number;
   agencyRows: AgencyTableRow[];
   monthlyTrend: MonthlyTrend[];
+  agencyMonthlyTrend: AgencyMonthlyTrend[];
+  topAgencyNames: string[];
 }
 
 export async function fetchDashboardStats(
@@ -138,6 +145,58 @@ export async function fetchDashboardStats(
     };
   });
 
+  // Build per-agency monthly trend (top 5 agencies by total commission)
+  const agencyNameMap = new Map(agencies.map((a) => [a.id, a.name]));
+  const agencyTotalCommission = new Map<string, number>();
+  // Map: agencyId -> monthKey -> commission
+  const agencyMonthMap = new Map<string, Map<string, number>>();
+
+  for (const entry of allAttributionsByAgency) {
+    for (const attr of entry.attributions) {
+      const res = reservationMap.get(attr.reservation_id);
+      const dateStr = res?.pickup_date ?? attr.attributed_at;
+      const date = new Date(dateStr);
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+
+      // Total commission per agency
+      agencyTotalCommission.set(
+        entry.agencyId,
+        (agencyTotalCommission.get(entry.agencyId) ?? 0) + attr.commission_amount,
+      );
+
+      // Per-month commission per agency
+      if (trendMonths.includes(key)) {
+        if (!agencyMonthMap.has(entry.agencyId)) {
+          agencyMonthMap.set(entry.agencyId, new Map());
+        }
+        const monthMap = agencyMonthMap.get(entry.agencyId)!;
+        monthMap.set(key, (monthMap.get(key) ?? 0) + attr.commission_amount);
+      }
+    }
+  }
+
+  // Get top 5 agencies by total commission
+  const top5AgencyIds = [...agencyTotalCommission.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([id]) => id);
+
+  const topAgencyNames = top5AgencyIds.map((id) => agencyNameMap.get(id) ?? id);
+
+  const agencyMonthlyTrend: AgencyMonthlyTrend[] = trendMonths.map((key) => {
+    const [yearStr, monthStr] = key.split('-');
+    const monthIndex = parseInt(monthStr, 10) - 1;
+    const row: AgencyMonthlyTrend = {
+      month: `${monthNames[monthIndex]} ${yearStr.slice(2)}`,
+    };
+    for (const agencyId of top5AgencyIds) {
+      const name = agencyNameMap.get(agencyId) ?? agencyId;
+      const monthMap = agencyMonthMap.get(agencyId);
+      row[name] = Math.round((monthMap?.get(key) ?? 0) * 100) / 100;
+    }
+    return row;
+  });
+
   return {
     totalOwed,
     paidThisPeriod,
@@ -145,5 +204,7 @@ export async function fetchDashboardStats(
     pendingPayouts,
     agencyRows,
     monthlyTrend,
+    agencyMonthlyTrend,
+    topAgencyNames,
   };
 }

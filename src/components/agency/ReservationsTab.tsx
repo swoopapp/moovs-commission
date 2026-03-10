@@ -9,6 +9,7 @@ import {
   TableCell,
 } from '../ui/table';
 import { Badge } from '../ui/badge';
+import { Input } from '../ui/input';
 import {
   Select,
   SelectTrigger,
@@ -52,6 +53,8 @@ interface JoinedReservation {
 export function ReservationsTab({ reservations, attributions, agents }: ReservationsTabProps) {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [agentFilter, setAgentFilter] = useState<string>('all');
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
 
   const agentMap = useMemo(() => {
     const m = new Map<string, Agent>();
@@ -92,9 +95,12 @@ export function ReservationsTab({ reservations, attributions, agents }: Reservat
     return joined.filter((j) => {
       const matchesStatus = statusFilter === 'all' || j.reservation.trip_status?.toLowerCase() === statusFilter.toLowerCase();
       const matchesAgent = agentFilter === 'all' || j.attribution.agent_id === agentFilter;
-      return matchesStatus && matchesAgent;
+      const pickupDate = j.reservation.pickup_date;
+      const matchesFrom = !dateFrom || (pickupDate && pickupDate >= dateFrom);
+      const matchesTo = !dateTo || (pickupDate && pickupDate <= dateTo);
+      return matchesStatus && matchesAgent && matchesFrom && matchesTo;
     });
-  }, [joined, statusFilter, agentFilter]);
+  }, [joined, statusFilter, agentFilter, dateFrom, dateTo]);
 
   function formatRoute(r: Reservation): string {
     const from = r.pickup_location || '';
@@ -113,6 +119,24 @@ export function ReservationsTab({ reservations, attributions, agents }: Reservat
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500 font-medium">{filtered.length} reservations</p>
         <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5">
+          <label className="text-sm text-gray-500">From</label>
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="w-[150px] h-9"
+          />
+        </div>
+        <div className="flex items-center gap-1.5">
+          <label className="text-sm text-gray-500">To</label>
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="w-[150px] h-9"
+          />
+        </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[160px]">
             <SelectValue placeholder="All Statuses" />
