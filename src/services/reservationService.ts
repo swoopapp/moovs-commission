@@ -57,6 +57,14 @@ export async function fetchUnattributedReservations(operatorId: string): Promise
   return fetchReservations(operatorId);
 }
 
+export async function fetchReservationsByIds(ids: string[]): Promise<Reservation[]> {
+  if (ids.length === 0) return [];
+  const idList = ids.map(encodeURIComponent).join(',');
+  const url = `${BASE_REST_URL}/commission_reservations?id=in.(${idList})&order=pickup_date.desc`;
+  const res = await fetch(url, { headers: headers() });
+  return handleResponse<Reservation[]>(res, 'fetchReservationsByIds');
+}
+
 // --- Upsert ---
 
 export async function upsertReservations(

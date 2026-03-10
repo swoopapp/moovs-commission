@@ -4,6 +4,7 @@ import App from './App.tsx';
 import { OperatorProvider } from './contexts/OperatorContext.tsx';
 import { NotFoundPage } from './components/NotFoundPage.tsx';
 import { AdminPanel } from './components/admin/AdminPanel.tsx';
+import { PortalView } from './components/portal/PortalView.tsx';
 import './styles/globals.css';
 
 function getSlugFromPath(): string {
@@ -18,7 +19,10 @@ function Root() {
   if (!slug) return <NotFoundPage />;
   if (slug === 'admin') return <AdminPanel />;
   if (slug === 'portal') {
-    return <div className="min-h-screen bg-white flex items-center justify-center"><p className="text-gray-500">Portal coming soon</p></div>;
+    const pathParts = window.location.pathname.replace(/^\/|\/$/g, '').split('/');
+    const token = pathParts[1] || '';
+    if (!token) return <NotFoundPage />;
+    return <PortalView token={token} />;
   }
   if (notFound) return <NotFoundPage />;
 
