@@ -93,3 +93,10 @@ export interface Payout {
   created_at: string;
   updated_at: string;
 }
+
+export interface PayoutReservation {
+  id: string;
+  payout_id: string;
+  reservation_id: string;
+  created_at: string;
+}

@@ -12,6 +12,7 @@ import { ReservationsTab } from './ReservationsTab';
 import { AgentsTab } from './AgentsTab';
 import { PayoutsTab } from './PayoutsTab';
 import { SettingsTab } from './SettingsTab';
+import { PayoutWizard } from '../payout/PayoutWizard';
 import { toast } from 'sonner';
 
 interface AgencyDetailViewProps {
@@ -28,6 +29,7 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('reservations');
+  const [payoutWizardOpen, setPayoutWizardOpen] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -90,8 +92,7 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
   }
 
   function handleCreatePayout() {
-    // Placeholder — Task 9 will implement the payout wizard
-    toast.info('Payout wizard coming soon');
+    setPayoutWizardOpen(true);
   }
 
   if (loading) {
@@ -156,6 +157,14 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
           />
         </TabsContent>
       </Tabs>
+
+      <PayoutWizard
+        open={payoutWizardOpen}
+        onOpenChange={setPayoutWizardOpen}
+        operatorId={operator.operatorId}
+        agencyId={agencyId}
+        onPayoutCreated={loadData}
+      />
     </div>
   );
 }
