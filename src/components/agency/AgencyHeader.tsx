@@ -13,6 +13,7 @@ import {
   BookOpen,
   TrendingUp,
   Clock,
+  Plus,
 } from 'lucide-react';
 
 interface AgencyHeaderProps {
@@ -23,6 +24,7 @@ interface AgencyHeaderProps {
     commissionEarned: number;
     outstanding: number;
   };
+  onCreatePayout?: () => void;
 }
 
 const TYPE_BADGE_COLORS: Record<string, string> = {
@@ -68,7 +70,7 @@ const miniKPIs = [
   { key: 'outstanding', label: 'Outstanding', icon: Clock, color: 'text-red-600', bgColor: 'bg-red-50', format: 'currency' as const },
 ] as const;
 
-export function AgencyHeader({ agency, stats }: AgencyHeaderProps) {
+export function AgencyHeader({ agency, stats, onCreatePayout }: AgencyHeaderProps) {
   const values: Record<string, number> = stats;
 
   return (
@@ -77,11 +79,11 @@ export function AgencyHeader({ agency, stats }: AgencyHeaderProps) {
       <div className="flex items-start gap-4">
         <Button
           variant="ghost"
-          size="icon"
-          className="mt-1 shrink-0"
+          className="mt-1 shrink-0 gap-1.5"
           onClick={() => { window.location.hash = '#/'; }}
         >
-          <ArrowLeft className="h-5 w-5" />
+          <ArrowLeft className="h-4 w-4" />
+          Back to agencies
         </Button>
 
         <div className="flex-1 min-w-0">
@@ -93,6 +95,12 @@ export function AgencyHeader({ agency, stats }: AgencyHeaderProps) {
             <Badge variant="secondary" className={STATUS_BADGE_COLORS[agency.status] || STATUS_BADGE_COLORS.archived}>
               {agency.status}
             </Badge>
+            {onCreatePayout && (
+              <Button size="sm" className="gap-1.5 ml-auto" onClick={onCreatePayout}>
+                <Plus className="h-4 w-4" />
+                Create Payout
+              </Button>
+            )}
           </div>
 
           {/* Contact info + commission */}

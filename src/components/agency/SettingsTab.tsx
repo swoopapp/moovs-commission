@@ -15,7 +15,7 @@ import {
   SelectItem,
   SelectValue,
 } from '../ui/select';
-import { Copy, Trash2, Link, Percent, DollarSign } from 'lucide-react';
+import { Copy, Trash2, Link, Percent, DollarSign, Info } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface SettingsTabProps {
@@ -34,6 +34,7 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [autoGenerateStatements, setAutoGenerateStatements] = useState(false);
 
   const portalUrl = `${window.location.origin}/portal/${agency.portal_token}`;
   const isActive = agency.status === 'active';
@@ -165,6 +166,20 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
                 </Select>
               </div>
             )}
+
+            {/* Commission explanation */}
+            <div className="bg-blue-50 text-blue-700 text-sm px-4 py-2.5 rounded-lg flex items-start gap-2">
+              <Info className="h-4 w-4 mt-0.5 shrink-0" />
+              {commissionType === 'percent' ? (
+                <span>
+                  This agency earns {commissionRate || 0}% of each trip's{' '}
+                  {commissionBase === 'base_rate' ? 'base rate' : commissionBase === 'total_amount' ? 'total amount' : 'total with gratuity'}{' '}
+                  as commission.
+                </span>
+              ) : (
+                <span>This agency earns ${commissionRate || 0} flat per trip as commission.</span>
+              )}
+            </div>
           </CardContent>
         </Card>
 
@@ -211,6 +226,22 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
               </div>
             </div>
 
+            <div className="flex items-start gap-3 py-1">
+              <Switch
+                id="auto-statements"
+                checked={autoGenerateStatements}
+                onCheckedChange={setAutoGenerateStatements}
+              />
+              <div className="space-y-0.5">
+                <Label htmlFor="auto-statements" className="font-medium cursor-pointer">
+                  Auto-generate monthly statements
+                </Label>
+                <p className="text-sm text-gray-500">
+                  Automatically email a commission statement at the end of each billing period
+                </p>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="notes">Internal Notes</Label>
               <Textarea
@@ -252,6 +283,13 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
                 <Copy className="h-4 w-4" />
               </Button>
             </div>
+
+            <div className="text-sm text-gray-500 space-y-1.5 pt-1">
+              <p className="font-semibold text-gray-700">Access levels available:</p>
+              <p><span className="font-medium text-gray-700">GM</span> — sees all departments and agents</p>
+              <p><span className="font-medium text-gray-700">Manager</span> — sees their department only</p>
+              <p><span className="font-medium text-gray-700">Agent</span> — sees their own bookings only</p>
+            </div>
           </CardContent>
         </Card>
 
@@ -262,7 +300,14 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
           <CardContent>
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-medium text-gray-900">{isActive ? 'Active' : 'Suspended'}</p>
+                <p className="font-medium text-gray-900">
+                  {isActive ? 'Active' : 'Suspended'}
+                  {contractStart && (
+                    <span className="text-sm font-normal text-gray-500 ml-2">
+                      Since {new Date(contractStart + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                    </span>
+                  )}
+                </p>
                 <p className="text-sm text-gray-500">
                   {isActive
                     ? 'Agency is active and can receive commissions'

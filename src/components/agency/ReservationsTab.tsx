@@ -110,7 +110,9 @@ export function ReservationsTab({ reservations, attributions, agents }: Reservat
   return (
     <div className="space-y-3">
       {/* Filters */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-gray-500 font-medium">{filtered.length} reservations</p>
+        <div className="flex items-center gap-3">
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[160px]">
             <SelectValue placeholder="All Statuses" />
@@ -133,6 +135,7 @@ export function ReservationsTab({ reservations, attributions, agents }: Reservat
             ))}
           </SelectContent>
         </Select>
+        </div>
       </div>
 
       {/* Table */}
@@ -159,7 +162,7 @@ export function ReservationsTab({ reservations, attributions, agents }: Reservat
             <TableBody>
               {filtered.map((j) => (
                 <TableRow key={j.attribution.id}>
-                  <TableCell className="font-medium">
+                  <TableCell className="font-medium text-blue-600">
                     {j.reservation.order_number || j.reservation.confirmation_number || '--'}
                   </TableCell>
                   <TableCell>{formatDate(j.reservation.pickup_date)}</TableCell>
@@ -168,7 +171,7 @@ export function ReservationsTab({ reservations, attributions, agents }: Reservat
                   <TableCell>{j.reservation.trip_type || '--'}</TableCell>
                   <TableCell className="max-w-[200px] truncate">{formatRoute(j.reservation)}</TableCell>
                   <TableCell className="text-right">{formatCurrency(j.reservation.total_amount)}</TableCell>
-                  <TableCell className="text-right font-semibold">{formatCurrency(j.attribution.commission_amount)}</TableCell>
+                  <TableCell className="text-right font-semibold text-green-600">{formatCurrency(j.attribution.commission_amount)}</TableCell>
                   <TableCell>
                     <Badge variant="secondary" className={statusBadgeClass(j.reservation.trip_status)}>
                       {j.reservation.trip_status || 'Unknown'}

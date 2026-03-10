@@ -114,7 +114,7 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
 
   return (
     <div className="space-y-6">
-      <AgencyHeader agency={agency} stats={stats} />
+      <AgencyHeader agency={agency} stats={stats} onCreatePayout={handleCreatePayout} />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>

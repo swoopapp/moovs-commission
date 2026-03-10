@@ -38,7 +38,8 @@ const PAYOUT_STATUS_COLORS: Record<string, string> = {
 export function PayoutsTab({ payouts, onCreatePayout }: PayoutsTabProps) {
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-gray-500 font-medium">{payouts.length} payouts</p>
         <Button size="sm" className="gap-1.5" onClick={onCreatePayout}>
           <Plus className="h-4 w-4" />
           Create Payout
@@ -73,7 +74,7 @@ export function PayoutsTab({ payouts, onCreatePayout }: PayoutsTabProps) {
                   <TableCell className="text-right">{p.total_trips}</TableCell>
                   <TableCell className="text-right">{formatCurrency(p.total_revenue)}</TableCell>
                   <TableCell className="text-right">{formatCurrency(p.total_commission)}</TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className={`text-right${p.adjustments < 0 ? ' text-red-600' : ''}`}>
                     {p.adjustments !== 0 ? formatCurrency(p.adjustments) : '--'}
                   </TableCell>
                   <TableCell className="text-right font-semibold">{formatCurrency(p.net_payout)}</TableCell>

@@ -100,7 +100,9 @@ export function AgentsTab({ agents, attributions, reservations, agencyId, onAgen
                         </Badge>
                       </div>
                       {agent.department && (
-                        <p className="text-xs text-gray-500">{agent.department}</p>
+                        <Badge variant="outline" className="bg-green-100 text-green-800 border-green-200 text-xs font-normal">
+                          {agent.department}
+                        </Badge>
                       )}
                     </div>
                   </div>
@@ -141,7 +143,7 @@ export function AgentsTab({ agents, attributions, reservations, agencyId, onAgen
                       <div className="flex items-center justify-center gap-1 text-gray-400 mb-0.5">
                         <DollarSign className="h-3 w-3" />
                       </div>
-                      <p className="text-sm font-semibold text-gray-900">{formatCurrency(stats.commission)}</p>
+                      <p className="text-sm font-semibold text-green-600">{formatCurrency(stats.commission)}</p>
                       <p className="text-xs text-gray-500">Commission</p>
                     </div>
                   </div>
