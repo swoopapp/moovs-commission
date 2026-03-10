@@ -23,6 +23,7 @@ import { Plus, Search } from 'lucide-react';
 
 interface AgencyTableProps {
   rows: AgencyTableRow[];
+  onAddAgency?: () => void;
 }
 
 const TYPE_BADGE_COLORS: Record<AgencyType, string> = {
@@ -52,7 +53,7 @@ function formatRate(row: AgencyTableRow): string {
   return `${agency.commission_rate}%`;
 }
 
-export function AgencyTable({ rows }: AgencyTableProps) {
+export function AgencyTable({ rows, onAddAgency }: AgencyTableProps) {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
 
@@ -92,7 +93,7 @@ export function AgencyTable({ rows }: AgencyTableProps) {
               <SelectItem value="Other">Other</SelectItem>
             </SelectContent>
           </Select>
-          <Button size="sm" className="gap-1.5">
+          <Button size="sm" className="gap-1.5" onClick={onAddAgency}>
             <Plus className="h-4 w-4" />
             Add Agency
           </Button>

@@ -2,7 +2,11 @@ import { useOperator } from '../../contexts/OperatorContext';
 import { Button } from '../ui/button';
 import { RefreshCw } from 'lucide-react';
 
-export function AppHeader() {
+interface AppHeaderProps {
+  onSyncClick?: () => void;
+}
+
+export function AppHeader({ onSyncClick }: AppHeaderProps) {
   const operator = useOperator();
 
   return (
@@ -25,7 +29,7 @@ export function AppHeader() {
 
         {/* Right: Sync button + Operator name */}
         <div className="flex items-center gap-4">
-          <Button variant="outline" size="sm" className="gap-2">
+          <Button variant="outline" size="sm" className="gap-2" onClick={onSyncClick}>
             <RefreshCw className="h-4 w-4" />
             Sync Trips
           </Button>

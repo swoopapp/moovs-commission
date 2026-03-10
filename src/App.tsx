@@ -7,6 +7,7 @@ import { Toaster } from './components/ui/sonner';
 
 function App() {
   const [route, setRoute] = useState(window.location.hash || '#/');
+  const [syncOpen, setSyncOpen] = useState(false);
 
   useEffect(() => {
     const onHash = () => setRoute(window.location.hash || '#/');
@@ -20,12 +21,15 @@ function App() {
   return (
     <AuthGate>
       <div className="min-h-screen bg-gray-50">
-        <AppHeader />
+        <AppHeader onSyncClick={() => setSyncOpen(true)} />
         <main className="max-w-7xl mx-auto px-6 py-6">
           {agencyMatch ? (
             <AgencyDetailView agencyId={agencyMatch[1]} />
           ) : (
-            <DashboardView />
+            <DashboardView
+              syncOpen={syncOpen}
+              onSyncOpenChange={setSyncOpen}
+            />
           )}
         </main>
         <Toaster />
