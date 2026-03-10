@@ -5,7 +5,8 @@ import { calculateCommission } from './attributionService';
 import { fetchAgencies } from './agencyService';
 
 interface SyncOptions {
-  operatorId: string;
+  operatorId: string;        // commission_operators.id — used for Supabase storage
+  moovsOperatorId: string;   // Moovs UUID — used for Metabase edge function
   dateFrom?: string;
   dateTo?: string;
 }
@@ -44,10 +45,10 @@ function transformToReservation(raw: RawReservation, operatorId: string): Omit<R
 }
 
 export async function syncTrips(options: SyncOptions): Promise<SyncResult> {
-  const { operatorId, dateFrom, dateTo } = options;
+  const { operatorId, moovsOperatorId, dateFrom, dateTo } = options;
 
-  // 1. Fetch from Metabase via existing edge function
-  const body: Record<string, unknown> = { operator_id: operatorId };
+  // 1. Fetch from Metabase via existing edge function (uses Moovs UUID)
+  const body: Record<string, unknown> = { operator_id: moovsOperatorId };
   if (dateFrom) body.date_from = dateFrom;
   if (dateTo) body.date_to = dateTo;
 

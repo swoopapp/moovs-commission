@@ -60,29 +60,6 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
         </div>
 
         <div className="space-y-4">
-          {/* SSO Button (if configured) */}
-          {operator.ssoProvider === 'microsoft' && (
-            <>
-              <Button variant="outline" className="w-full h-11 gap-3 text-sm font-medium" disabled>
-                <svg className="w-5 h-5" viewBox="0 0 21 21" fill="none">
-                  <rect x="1" y="1" width="9" height="9" fill="#F25022" />
-                  <rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
-                  <rect x="1" y="11" width="9" height="9" fill="#00A4EF" />
-                  <rect x="11" y="11" width="9" height="9" fill="#FFB900" />
-                </svg>
-                Sign in with Microsoft
-              </Button>
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-200" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-white px-2 text-gray-400">or</span>
-                </div>
-              </div>
-            </>
-          )}
-
           {/* Password form */}
           <form onSubmit={handleSubmit} className="space-y-3">
             <div className="relative">

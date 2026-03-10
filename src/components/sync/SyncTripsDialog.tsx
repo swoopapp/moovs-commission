@@ -21,6 +21,7 @@ interface SyncTripsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   operatorId: string;
+  moovsOperatorId: string;
   onSyncComplete: () => void;
 }
 
@@ -49,6 +50,7 @@ export default function SyncTripsDialog({
   open,
   onOpenChange,
   operatorId,
+  moovsOperatorId,
   onSyncComplete,
 }: SyncTripsDialogProps) {
   const [phase, setPhase] = useState<SyncPhase>('initial');
@@ -105,6 +107,7 @@ export default function SyncTripsDialog({
     try {
       const syncResult = await syncTrips({
         operatorId,
+        moovsOperatorId,
         dateFrom,
         dateTo,
       });

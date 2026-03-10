@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AdminLoginPage, isAdminAuthenticated } from './AdminLoginPage';
-import { OperatorBranding } from '../../types/operatorBranding';
+import { CommissionOperator } from '../../types/commissionOperator';
 import {
-  fetchAllBrandings,
-  createBranding,
-  updateBranding,
-  deleteBranding,
-} from '../../services/operatorBrandingService';
+  fetchAllOperators,
+  createOperator,
+  updateOperator,
+  deleteOperator,
+} from '../../services/commissionOperatorService';
 import { lookupMoovsOperator, MoovsOperatorDetails } from '../../services/moovsOperatorService';
 import { uploadLogo } from '../../services/storageService';
 import { Button } from '../ui/button';
@@ -30,43 +30,44 @@ export function AdminPanel() {
 // --- Form for creating/editing an operator ---
 
 interface OperatorFormData {
-  operator_id: string;
+  moovs_operator_id: string;
   slug: string;
   display_name: string;
   auth_password: string;
   primary_color: string;
   secondary_color: string;
   logo_url: string;
-  sso_provider: string;
-  sso_config: string; // JSON string
+  contact_email: string;
+  contact_phone: string;
 }
 
 const emptyForm: OperatorFormData = {
-  operator_id: '',
+  moovs_operator_id: '',
   slug: '',
   display_name: '',
   auth_password: 'demo',
   primary_color: '',
   secondary_color: '',
   logo_url: '',
-  sso_provider: '',
-  sso_config: '',
+  contact_email: '',
+  contact_phone: '',
 };
 
 interface FormErrors {
-  operator_id?: string;
+  moovs_operator_id?: string;
   slug?: string;
+  display_name?: string;
   auth_password?: string;
 }
 
-function validateForm(form: OperatorFormData, editingId: string | null, existing: OperatorBranding[]): FormErrors {
+function validateForm(form: OperatorFormData, editingId: string | null, existing: CommissionOperator[]): FormErrors {
   const errors: FormErrors = {};
-  if (!form.operator_id.trim()) {
-    errors.operator_id = 'Operator ID is required';
-  } else if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(form.operator_id.trim())) {
-    errors.operator_id = 'Must be a valid UUID';
-  } else if (!editingId && existing.some(op => op.operator_id === form.operator_id.trim())) {
-    errors.operator_id = 'This operator already exists';
+  if (!form.moovs_operator_id.trim()) {
+    errors.moovs_operator_id = 'Moovs Operator ID is required';
+  } else if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(form.moovs_operator_id.trim())) {
+    errors.moovs_operator_id = 'Must be a valid UUID';
+  } else if (!editingId && existing.some(op => op.moovs_operator_id === form.moovs_operator_id.trim())) {
+    errors.moovs_operator_id = 'This operator already exists';
   }
   if (!form.slug.trim()) {
     errors.slug = 'Slug is required';
@@ -75,6 +76,9 @@ function validateForm(form: OperatorFormData, editingId: string | null, existing
   } else if (existing.some(op => op.slug === form.slug.trim() && op.id !== editingId)) {
     errors.slug = 'This slug is already taken';
   }
+  if (!form.display_name.trim()) {
+    errors.display_name = 'Display name is required';
+  }
   if (!editingId && !form.auth_password.trim()) {
     errors.auth_password = 'Password is required for new operators';
   }
@@ -82,7 +86,7 @@ function validateForm(form: OperatorFormData, editingId: string | null, existing
 }
 
 function AdminDashboard() {
-  const [operators, setOperators] = useState<OperatorBranding[]>([]);
+  const [operators, setOperators] = useState<CommissionOperator[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -102,7 +106,7 @@ function AdminDashboard() {
   const loadOperators = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await fetchAllBrandings();
+      const data = await fetchAllOperators();
       setOperators(data);
       setError(null);
     } catch (err) {
@@ -114,18 +118,18 @@ function AdminDashboard() {
 
   useEffect(() => { loadOperators(); }, [loadOperators]);
 
-  const handleEdit = (op: OperatorBranding) => {
+  const handleEdit = (op: CommissionOperator) => {
     setEditingId(op.id);
     setForm({
-      operator_id: op.operator_id,
+      moovs_operator_id: op.moovs_operator_id,
       slug: op.slug,
-      display_name: op.display_name || '',
+      display_name: op.display_name,
       auth_password: op.auth_password,
       primary_color: op.primary_color || '',
       secondary_color: op.secondary_color || '',
       logo_url: op.logo_url || '',
-      sso_provider: op.sso_provider || '',
-      sso_config: op.sso_config ? JSON.stringify(op.sso_config, null, 2) : '',
+      contact_email: op.contact_email || '',
+      contact_phone: op.contact_phone || '',
     });
     setLogoFile(null);
     setMoovsDetails(null);
@@ -155,7 +159,7 @@ function AdminDashboard() {
   };
 
   const handleLookup = async () => {
-    const operatorId = form.operator_id.trim();
+    const operatorId = form.moovs_operator_id.trim();
     if (!operatorId) return;
 
     setLookingUp(true);
@@ -196,33 +200,22 @@ function AdminDashboard() {
         logoUrl = await uploadLogo(logoFile);
       }
 
-      let ssoConfig: Record<string, unknown> | null = null;
-      if (form.sso_config.trim()) {
-        try {
-          ssoConfig = JSON.parse(form.sso_config);
-        } catch {
-          setFormErrors({ ...formErrors });
-          setSaving(false);
-          return;
-        }
-      }
-
       const data = {
-        operator_id: form.operator_id.trim(),
+        moovs_operator_id: form.moovs_operator_id.trim(),
         slug: form.slug.toLowerCase().replace(/[^a-z0-9-]/g, ''),
-        display_name: form.display_name || null,
+        display_name: form.display_name.trim(),
         auth_password: form.auth_password,
         primary_color: form.primary_color || null,
         secondary_color: form.secondary_color || null,
         logo_url: logoUrl || null,
-        sso_provider: form.sso_provider || null,
-        sso_config: ssoConfig,
+        contact_email: form.contact_email || null,
+        contact_phone: form.contact_phone || null,
       };
 
       if (editingId) {
-        await updateBranding(editingId, data);
+        await updateOperator(editingId, data);
       } else {
-        await createBranding(data as Parameters<typeof createBranding>[0]);
+        await createOperator(data as Parameters<typeof createOperator>[0]);
       }
 
       handleCancel();
@@ -237,7 +230,7 @@ function AdminDashboard() {
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this operator? This cannot be undone.')) return;
     try {
-      await deleteBranding(id);
+      await deleteOperator(id);
       await loadOperators();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete');
@@ -299,17 +292,17 @@ function AdminDashboard() {
               </label>
               <div className="flex gap-2">
                 <Input
-                  value={form.operator_id}
-                  onChange={e => updateField('operator_id', e.target.value)}
+                  value={form.moovs_operator_id}
+                  onChange={e => updateField('moovs_operator_id', e.target.value)}
                   placeholder="Paste UUID from Moovs"
                   disabled={!!editingId}
-                  className={formErrors.operator_id ? 'border-red-300' : ''}
+                  className={formErrors.moovs_operator_id ? 'border-red-300' : ''}
                 />
                 {!editingId && (
                   <Button
                     variant="outline"
                     onClick={handleLookup}
-                    disabled={lookingUp || !form.operator_id.trim()}
+                    disabled={lookingUp || !form.moovs_operator_id.trim()}
                     className="gap-2 shrink-0"
                   >
                     {lookingUp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
@@ -317,8 +310,8 @@ function AdminDashboard() {
                   </Button>
                 )}
               </div>
-              {formErrors.operator_id && (
-                <p className="text-red-500 text-xs mt-1">{formErrors.operator_id}</p>
+              {formErrors.moovs_operator_id && (
+                <p className="text-red-500 text-xs mt-1">{formErrors.moovs_operator_id}</p>
               )}
               {lookupError && (
                 <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-center gap-2">
@@ -401,7 +394,11 @@ function AdminDashboard() {
                   value={form.display_name}
                   onChange={e => updateField('display_name', e.target.value)}
                   placeholder="e.g. Acme Transport Co."
+                  className={formErrors.display_name ? 'border-red-300' : ''}
                 />
+                {formErrors.display_name && (
+                  <p className="text-red-500 text-xs mt-1">{formErrors.display_name}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Default Password</label>
@@ -416,17 +413,20 @@ function AdminDashboard() {
                 )}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">SSO Provider</label>
-                <select
-                  value={form.sso_provider}
-                  onChange={e => updateField('sso_provider', e.target.value)}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <option value="">None (password only)</option>
-                  <option value="microsoft">Microsoft SSO</option>
-                  <option value="google">Google SSO</option>
-                  <option value="okta">Okta SSO</option>
-                </select>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Contact Email</label>
+                <Input
+                  value={form.contact_email}
+                  onChange={e => updateField('contact_email', e.target.value)}
+                  placeholder="operator@example.com"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Contact Phone</label>
+                <Input
+                  value={form.contact_phone}
+                  onChange={e => updateField('contact_phone', e.target.value)}
+                  placeholder="(555) 123-4567"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Primary Color</label>
@@ -434,7 +434,7 @@ function AdminDashboard() {
                   <Input
                     value={form.primary_color}
                     onChange={e => updateField('primary_color', e.target.value)}
-                    placeholder="#030213"
+                    placeholder="#1a1a2e"
                   />
                   {form.primary_color && (
                     <div
@@ -450,7 +450,7 @@ function AdminDashboard() {
                   <Input
                     value={form.secondary_color}
                     onChange={e => updateField('secondary_color', e.target.value)}
-                    placeholder="#4A7BF7"
+                    placeholder="#e2e8f0"
                   />
                   {form.secondary_color && (
                     <div
@@ -481,20 +481,6 @@ function AdminDashboard() {
                   </label>
                 </div>
               </div>
-              {form.sso_provider && (
-                <div className="sm:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    SSO Configuration (JSON)
-                  </label>
-                  <textarea
-                    value={form.sso_config}
-                    onChange={e => updateField('sso_config', e.target.value)}
-                    placeholder='{"tenant_id": "...", "client_id": "..."}'
-                    rows={3}
-                    className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring font-mono"
-                  />
-                </div>
-              )}
             </div>
 
             <div className="flex justify-end gap-3 mt-6">
@@ -531,18 +517,16 @@ function AdminDashboard() {
                   )}
                   <div className="min-w-0">
                     <div className="font-medium text-gray-900 truncate">
-                      {op.display_name || op.slug}
+                      {op.display_name}
                     </div>
                     <div className="text-sm text-gray-500 flex items-center gap-2 flex-wrap">
                       <span>/{op.slug}</span>
                       <span className="text-gray-300">&middot;</span>
-                      <span className="font-mono text-xs">{op.operator_id.slice(0, 8)}...</span>
-                      {op.sso_provider && (
-                        <>
-                          <span className="text-gray-300">&middot;</span>
-                          <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">{op.sso_provider} SSO</span>
-                        </>
-                      )}
+                      <span className="font-mono text-xs">{op.moovs_operator_id.slice(0, 8)}...</span>
+                      <span className="text-gray-300">&middot;</span>
+                      <span className={`text-xs px-1.5 py-0.5 rounded ${op.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                        {op.status}
+                      </span>
                     </div>
                   </div>
                 </div>

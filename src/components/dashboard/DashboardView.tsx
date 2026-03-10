@@ -1,47 +1,44 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useOperator } from '../../contexts/OperatorContext';
 import { fetchAgencies } from '../../services/agencyService';
 import { fetchDashboardStats, DashboardStats } from '../../services/dashboardService';
 import { KPICards } from './KPICards';
 import { AgencyTable } from './AgencyTable';
+import SyncTripsDialog from '../sync/SyncTripsDialog';
+import { CreateAgencyDialog } from '../agency/CreateAgencyDialog';
 
-export function DashboardView() {
+interface DashboardViewProps {
+  syncOpen: boolean;
+  onSyncOpenChange: (open: boolean) => void;
+}
+
+export function DashboardView({ syncOpen, onSyncOpenChange }: DashboardViewProps) {
   const operator = useOperator();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [createAgencyOpen, setCreateAgencyOpen] = useState(false);
+
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const agencies = await fetchAgencies(operator.operatorId);
+      const dashStats = await fetchDashboardStats(operator.operatorId, agencies);
+
+      setStats(dashStats);
+    } catch (err) {
+      console.error('Failed to load dashboard:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load dashboard');
+    } finally {
+      setLoading(false);
+    }
+  }, [operator.operatorId]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      try {
-        setLoading(true);
-        setError(null);
-
-        const agencies = await fetchAgencies(operator.operatorId);
-        const dashStats = await fetchDashboardStats(operator.operatorId, agencies);
-
-        if (!cancelled) {
-          setStats(dashStats);
-        }
-      } catch (err) {
-        console.error('Failed to load dashboard:', err);
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to load dashboard');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [operator.operatorId]);
+    loadData();
+  }, [loadData]);
 
   if (loading) {
     return (
@@ -70,7 +67,21 @@ export function DashboardView() {
         activeAgencies={stats.activeAgencies}
         pendingPayouts={stats.pendingPayouts}
       />
-      <AgencyTable rows={stats.agencyRows} />
+      <AgencyTable rows={stats.agencyRows} onAddAgency={() => setCreateAgencyOpen(true)} />
+
+      <SyncTripsDialog
+        open={syncOpen}
+        onOpenChange={onSyncOpenChange}
+        operatorId={operator.operatorId}
+        moovsOperatorId={operator.moovsOperatorId}
+        onSyncComplete={loadData}
+      />
+
+      <CreateAgencyDialog
+        open={createAgencyOpen}
+        onOpenChange={setCreateAgencyOpen}
+        onCreated={loadData}
+      />
     </div>
   );
 }

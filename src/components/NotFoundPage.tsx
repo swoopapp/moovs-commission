@@ -1,14 +1,14 @@
 // src/components/NotFoundPage.tsx
 import { useState, useEffect } from 'react';
-import { fetchAllBrandings } from '../services/operatorBrandingService';
-import { OperatorBranding } from '../types/operatorBranding';
+import { fetchAllOperators } from '../services/commissionOperatorService';
+import { CommissionOperator } from '../types/commissionOperator';
 import moovsLogo from '../assets/moovs-logo.png';
 
 export function NotFoundPage() {
-  const [operators, setOperators] = useState<OperatorBranding[]>([]);
+  const [operators, setOperators] = useState<CommissionOperator[]>([]);
 
   useEffect(() => {
-    fetchAllBrandings()
+    fetchAllOperators()
       .then(setOperators)
       .catch(() => {});
   }, []);

@@ -1,17 +1,16 @@
 // src/contexts/OperatorContext.tsx
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { OperatorConfig } from '../types/operatorBranding';
-import { fetchBrandingBySlug } from '../services/operatorBrandingService';
-import { fetchOperator } from '../services/supabaseService';
+import { CommissionOperatorConfig } from '../types/commissionOperator';
+import { fetchOperatorBySlug } from '../services/commissionOperatorService';
 
 interface OperatorContextValue {
-  operator: OperatorConfig;
+  operator: CommissionOperatorConfig;
   refreshOperator: () => Promise<void>;
 }
 
 const OperatorContext = createContext<OperatorContextValue | null>(null);
 
-export function useOperator(): OperatorConfig {
+export function useOperator(): CommissionOperatorConfig {
   const ctx = useContext(OperatorContext);
   if (!ctx) throw new Error('useOperator must be used within OperatorProvider');
   return ctx.operator;
@@ -30,7 +29,7 @@ interface OperatorProviderProps {
 }
 
 export function OperatorProvider({ slug, children, onNotFound }: OperatorProviderProps) {
-  const [operator, setOperator] = useState<OperatorConfig | null>(null);
+  const [operator, setOperator] = useState<CommissionOperatorConfig | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -38,26 +37,22 @@ export function OperatorProvider({ slug, children, onNotFound }: OperatorProvide
 
     async function load() {
       try {
-        const branding = await fetchBrandingBySlug(slug);
-        if (!branding) {
+        const op = await fetchOperatorBySlug(slug);
+        if (!op) {
           if (!cancelled) onNotFound();
           return;
         }
 
-        // Validate operator exists via edge function
-        const op = await fetchOperator(branding.operator_id);
-
         if (!cancelled) {
           setOperator({
-            operatorId: branding.operator_id,
-            slug: branding.slug,
-            displayName: branding.display_name || op.name,
-            logoUrl: branding.logo_url,
-            primaryColor: branding.primary_color,
-            secondaryColor: branding.secondary_color,
-            authPassword: branding.auth_password,
-            ssoProvider: branding.sso_provider,
-            ssoConfig: branding.sso_config,
+            operatorId: op.id,
+            moovsOperatorId: op.moovs_operator_id,
+            slug: op.slug,
+            displayName: op.display_name,
+            logoUrl: op.logo_url,
+            primaryColor: op.primary_color,
+            secondaryColor: op.secondary_color,
+            authPassword: op.auth_password,
           });
         }
       } catch (err) {
@@ -73,19 +68,17 @@ export function OperatorProvider({ slug, children, onNotFound }: OperatorProvide
   }, [slug, onNotFound]);
 
   const refreshOperator = useCallback(async () => {
-    const branding = await fetchBrandingBySlug(slug);
-    if (!branding) return;
-    const op = await fetchOperator(branding.operator_id);
+    const op = await fetchOperatorBySlug(slug);
+    if (!op) return;
     setOperator({
-      operatorId: branding.operator_id,
-      slug: branding.slug,
-      displayName: branding.display_name || op.name,
-      logoUrl: branding.logo_url,
-      primaryColor: branding.primary_color,
-      secondaryColor: branding.secondary_color,
-      authPassword: branding.auth_password,
-      ssoProvider: branding.sso_provider,
-      ssoConfig: branding.sso_config,
+      operatorId: op.id,
+      moovsOperatorId: op.moovs_operator_id,
+      slug: op.slug,
+      displayName: op.display_name,
+      logoUrl: op.logo_url,
+      primaryColor: op.primary_color,
+      secondaryColor: op.secondary_color,
+      authPassword: op.auth_password,
     });
   }, [slug]);
 

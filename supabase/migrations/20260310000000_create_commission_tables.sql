@@ -1,7 +1,27 @@
 -- =============================================================
 -- Commission Tracking Tables
--- Shares Supabase project + operator_branding with Pebble
+-- Independent from Pebble — uses own commission_operators table
 -- =============================================================
+
+-- 0. Commission Operators (independent from Pebble's operator_branding)
+create table commission_operators (
+  id uuid primary key default gen_random_uuid(),
+  moovs_operator_id text not null unique,
+  slug text not null unique,
+  display_name text not null,
+  auth_password text not null,
+  logo_url text,
+  primary_color text default '#1a1a2e',
+  secondary_color text default '#e2e8f0',
+  contact_email text,
+  contact_phone text,
+  status text not null default 'active' check (status in ('active','inactive')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index idx_commission_operators_slug on commission_operators(slug);
+create index idx_commission_operators_moovs_id on commission_operators(moovs_operator_id);
 
 -- 1. Agencies
 create table agencies (
@@ -135,6 +155,7 @@ create table payout_reservations (
 -- RLS — anon read/write for V1 (same pattern as Pebble demo)
 -- =============================================================
 
+alter table commission_operators enable row level security;
 alter table agencies enable row level security;
 alter table agents enable row level security;
 alter table commission_reservations enable row level security;
@@ -143,6 +164,7 @@ alter table payouts enable row level security;
 alter table payout_reservations enable row level security;
 
 -- Anon full access (sessionStorage auth, not Supabase auth)
+create policy "anon_all_commission_operators" on commission_operators for all to anon using (true) with check (true);
 create policy "anon_all_agencies" on agencies for all to anon using (true) with check (true);
 create policy "anon_all_agents" on agents for all to anon using (true) with check (true);
 create policy "anon_all_reservations" on commission_reservations for all to anon using (true) with check (true);
@@ -151,6 +173,8 @@ create policy "anon_all_payouts" on payouts for all to anon using (true) with ch
 create policy "anon_all_payout_reservations" on payout_reservations for all to anon using (true) with check (true);
 
 -- Auto-update updated_at (reuses function from Pebble migration)
+create trigger commission_operators_updated_at before update on commission_operators
+  for each row execute function update_updated_at();
 create trigger agencies_updated_at before update on agencies
   for each row execute function update_updated_at();
 create trigger payouts_updated_at before update on payouts
