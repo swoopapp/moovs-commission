@@ -108,7 +108,7 @@ export function PortalReservations({ reservations, attributions, agents, view }:
                   <TableCell>{row.reservation.trip_type || '--'}</TableCell>
                   <TableCell className="max-w-[200px] truncate">{formatRoute(row.reservation)}</TableCell>
                   <TableCell className="text-right">{formatCurrency(row.reservation.total_amount)}</TableCell>
-                  <TableCell className="text-right font-semibold">{formatCurrency(row.attribution.commission_amount)}</TableCell>
+                  <TableCell className="text-right text-green-600 font-semibold">{formatCurrency(row.attribution.commission_amount)}</TableCell>
                   <TableCell>
                     <Badge variant="secondary" className={statusBadgeClass(row.reservation.trip_status)}>
                       {row.reservation.trip_status || 'Unknown'}

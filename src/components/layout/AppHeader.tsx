@@ -1,12 +1,13 @@
 import { useOperator } from '../../contexts/OperatorContext';
 import { Button } from '../ui/button';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Download } from 'lucide-react';
 
 interface AppHeaderProps {
   onSyncClick?: () => void;
+  onExportClick?: () => void;
 }
 
-export function AppHeader({ onSyncClick }: AppHeaderProps) {
+export function AppHeader({ onSyncClick, onExportClick }: AppHeaderProps) {
   const operator = useOperator();
 
   return (
@@ -29,6 +30,10 @@ export function AppHeader({ onSyncClick }: AppHeaderProps) {
 
         {/* Right: Sync button + Operator name */}
         <div className="flex items-center gap-4">
+          <Button variant="outline" size="sm" className="gap-2" onClick={onExportClick}>
+            <Download className="h-4 w-4" />
+            Export Report
+          </Button>
           <Button variant="outline" size="sm" className="gap-2" onClick={onSyncClick}>
             <RefreshCw className="h-4 w-4" />
             Sync Trips

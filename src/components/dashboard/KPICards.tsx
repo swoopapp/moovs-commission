@@ -16,6 +16,7 @@ const cards = [
   {
     key: 'totalOwed',
     label: 'Total Commission Owed',
+    subtitle: 'Across all agencies',
     icon: DollarSign,
     color: 'text-red-600',
     bgColor: 'bg-red-50',
@@ -24,6 +25,7 @@ const cards = [
   {
     key: 'paidThisPeriod',
     label: 'Paid This Period',
+    subtitle: 'This month',
     icon: CheckCircle,
     color: 'text-green-600',
     bgColor: 'bg-green-50',
@@ -32,6 +34,7 @@ const cards = [
   {
     key: 'activeAgencies',
     label: 'Active Agencies',
+    subtitle: 'With active agents',
     icon: Building2,
     color: 'text-blue-600',
     bgColor: 'bg-blue-50',
@@ -40,6 +43,7 @@ const cards = [
   {
     key: 'pendingPayouts',
     label: 'Pending Payouts',
+    subtitle: 'Awaiting payment',
     icon: Clock,
     color: 'text-yellow-600',
     bgColor: 'bg-yellow-50',
@@ -66,6 +70,7 @@ export function KPICards({ totalOwed, paidThisPeriod, activeAgencies, pendingPay
               <div>
                 <p className="text-sm text-gray-500 font-medium">{card.label}</p>
                 <p className="text-2xl font-bold text-gray-900">{display}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{card.subtitle}</p>
               </div>
             </CardContent>
           </Card>

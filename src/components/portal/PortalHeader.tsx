@@ -1,5 +1,4 @@
 import { Agency, Agent } from '../../types/commission';
-import { Badge } from '../ui/badge';
 import moovsLogo from '../../assets/moovs-logo.png';
 
 interface PortalHeaderProps {
@@ -9,28 +8,26 @@ interface PortalHeaderProps {
 }
 
 export function PortalHeader({ agency, view, currentAgent }: PortalHeaderProps) {
+  const roleDescription = view === 'gm' ? 'General Manager' : (currentAgent?.name ?? 'Unknown');
+
   return (
     <>
       <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center gap-3">
-            <h1 className="text-xl font-semibold text-gray-900">{agency.name}</h1>
-            <Badge variant="secondary" className="bg-gray-100 text-gray-700">
-              {agency.type}
-            </Badge>
+            <img src={moovsLogo} alt="Moovs" className="h-6 w-auto" />
+            <span className="text-xl font-semibold text-gray-900">Moovs Commissions</span>
+            <span className="text-gray-300">|</span>
+            <span className="text-lg text-gray-600">Agency Portal</span>
           </div>
-          <div className="flex items-center gap-2">
-            <Badge
-              variant="outline"
-              className={
-                view === 'gm'
-                  ? 'border-blue-200 bg-blue-50 text-blue-700'
-                  : 'border-purple-200 bg-purple-50 text-purple-700'
-              }
-            >
-              {view === 'gm' ? 'GM View' : `Agent: ${currentAgent?.name ?? 'Unknown'}`}
-            </Badge>
+          <div className="mt-2 flex items-center gap-2 text-sm text-gray-500">
+            <span>{agency.name}</span>
+            <span className="text-gray-300">|</span>
+            <span>{agency.type}</span>
+            <span className="text-gray-300">|</span>
+            <span>Logged in as: {roleDescription}</span>
           </div>
+          <p className="mt-1 text-xs text-gray-400">This link is shareable with your team</p>
         </div>
       </header>
       <PortalFooter />

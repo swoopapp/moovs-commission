@@ -11,7 +11,7 @@ import {
 } from '../ui/table';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
-import { Download } from 'lucide-react';
+import { Download, FileText } from 'lucide-react';
 
 interface PortalStatementsProps {
   reservations: Reservation[];
@@ -103,7 +103,7 @@ export function PortalStatements({
 
   return (
     <div className="space-y-3">
-      <h2 className="text-lg font-semibold text-gray-900">Statements</h2>
+      <h2 className="text-lg font-semibold text-gray-900">Statements &amp; Payouts</h2>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Outstanding Balance */}
         <Card>
@@ -115,15 +115,26 @@ export function PortalStatements({
             {paymentTerms && (
               <p className="text-sm text-gray-500">Payment Terms: {paymentTerms}</p>
             )}
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => exportCSV(reservations, attributions, agencyName)}
-            >
-              <Download className="h-4 w-4" />
-              Export CSV
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => exportCSV(reservations, attributions, agencyName)}
+              >
+                <Download className="h-4 w-4" />
+                Export CSV
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => window.print()}
+              >
+                <FileText className="h-4 w-4" />
+                Export PDF
+              </Button>
+            </div>
           </CardContent>
         </Card>
 

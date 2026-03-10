@@ -19,7 +19,7 @@ import {
   SelectItem,
   SelectValue,
 } from '../ui/select';
-import { Plus, Search } from 'lucide-react';
+import { Plus, Search, ChevronRight } from 'lucide-react';
 
 interface AgencyTableProps {
   rows: AgencyTableRow[];
@@ -112,6 +112,7 @@ export function AgencyTable({ rows, onAddAgency }: AgencyTableProps) {
           <TableHeader>
             <TableRow>
               <TableHead>Agency</TableHead>
+              <TableHead>Contact</TableHead>
               <TableHead>Type</TableHead>
               <TableHead>Rate</TableHead>
               <TableHead className="text-right">Bookings</TableHead>
@@ -120,6 +121,7 @@ export function AgencyTable({ rows, onAddAgency }: AgencyTableProps) {
               <TableHead className="text-right">Paid</TableHead>
               <TableHead className="text-right">Outstanding</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead className="w-10"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -132,6 +134,9 @@ export function AgencyTable({ rows, onAddAgency }: AgencyTableProps) {
                 }}
               >
                 <TableCell className="font-medium">{row.agency.name}</TableCell>
+                <TableCell className="text-sm text-gray-500">
+                  {row.agency.contact_name || '—'}
+                </TableCell>
                 <TableCell>
                   <Badge
                     variant="secondary"
@@ -143,9 +148,9 @@ export function AgencyTable({ rows, onAddAgency }: AgencyTableProps) {
                 <TableCell>{formatRate(row)}</TableCell>
                 <TableCell className="text-right">{row.bookings}</TableCell>
                 <TableCell className="text-right">{formatCurrency(row.revenue)}</TableCell>
-                <TableCell className="text-right">{formatCurrency(row.earned)}</TableCell>
+                <TableCell className="text-right text-green-600 font-medium">{formatCurrency(row.earned)}</TableCell>
                 <TableCell className="text-right">{formatCurrency(row.paid)}</TableCell>
-                <TableCell className="text-right font-semibold">
+                <TableCell className="text-right font-semibold text-amber-600">
                   {formatCurrency(row.outstanding)}
                 </TableCell>
                 <TableCell>
@@ -155,6 +160,9 @@ export function AgencyTable({ rows, onAddAgency }: AgencyTableProps) {
                   >
                     {row.agency.status}
                   </Badge>
+                </TableCell>
+                <TableCell>
+                  <ChevronRight className="h-4 w-4 text-gray-400" />
                 </TableCell>
               </TableRow>
             ))}
