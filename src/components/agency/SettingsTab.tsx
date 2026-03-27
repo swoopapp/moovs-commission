@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useOperator } from '../../contexts/OperatorContext';
 import { Agency, CommissionType, CommissionBase } from '../../types/commission';
 import { updateAgency, deleteAgency } from '../../services/agencyService';
+import { fetchMoovsCompanies, MoovsCompany } from '../../services/companyLookupService';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -15,7 +17,7 @@ import {
   SelectItem,
   SelectValue,
 } from '../ui/select';
-import { Copy, Trash2, Link, Percent, DollarSign, Info } from 'lucide-react';
+import { Copy, Trash2, Link, Percent, DollarSign, Info, Building2, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface SettingsTabProps {
@@ -24,6 +26,7 @@ interface SettingsTabProps {
 }
 
 export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
+  const operator = useOperator();
   const [commissionRate, setCommissionRate] = useState(agency.commission_rate.toString());
   const [commissionType, setCommissionType] = useState<CommissionType>(agency.commission_type);
   const [commissionBase, setCommissionBase] = useState<CommissionBase>(agency.commission_base);
@@ -38,6 +41,58 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
   const [country, setCountry] = useState(agency.country || 'US');
   const [marketSegment, setMarketSegment] = useState(agency.market_segment || '');
   const [saving, setSaving] = useState(false);
+
+  // Company link
+  const [companies, setCompanies] = useState<MoovsCompany[]>([]);
+  const [companiesLoading, setCompaniesLoading] = useState(false);
+  const [companySearch, setCompanySearch] = useState('');
+
+  useEffect(() => {
+    if (!operator.moovsOperatorId) return;
+    let cancelled = false;
+    setCompaniesLoading(true);
+    fetchMoovsCompanies(operator.moovsOperatorId)
+      .then((result) => { if (!cancelled) setCompanies(result); })
+      .catch((err) => console.error('Failed to fetch companies:', err))
+      .finally(() => { if (!cancelled) setCompaniesLoading(false); });
+    return () => { cancelled = true; };
+  }, [operator.moovsOperatorId]);
+
+  const linkedCompany = useMemo(() => {
+    if (!agency.moovs_company_id) return null;
+    return companies.find((c) => c.company_id === agency.moovs_company_id) || null;
+  }, [agency.moovs_company_id, companies]);
+
+  const filteredCompanies = useMemo(() => {
+    if (!companySearch.trim()) return companies;
+    const q = companySearch.toLowerCase();
+    return companies.filter(
+      (c) => c.name.toLowerCase().includes(q) || (c.email && c.email.toLowerCase().includes(q))
+    );
+  }, [companies, companySearch]);
+
+  async function handleLinkCompany(companyId: string) {
+    try {
+      const updated = await updateAgency(agency.id, { moovs_company_id: companyId });
+      onUpdated(updated);
+      setCompanySearch('');
+      toast.success('Company linked — trips will now auto-match');
+    } catch (err) {
+      console.error('Failed to link company:', err);
+      toast.error('Failed to link company');
+    }
+  }
+
+  async function handleUnlinkCompany() {
+    try {
+      const updated = await updateAgency(agency.id, { moovs_company_id: null });
+      onUpdated(updated);
+      toast.success('Company unlinked');
+    } catch (err) {
+      console.error('Failed to unlink company:', err);
+      toast.error('Failed to unlink company');
+    }
+  }
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [autoGenerateStatements, setAutoGenerateStatements] = useState(false);
@@ -342,8 +397,69 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
         </Card>
       </div>
 
-      {/* Right column: Portal, Status, Danger Zone */}
+      {/* Right column: Company Link, Portal, Status, Danger Zone */}
       <div className="space-y-6">
+        <Card className={agency.moovs_company_id ? 'border-green-200' : 'border-amber-200'}>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Building2 className="h-4 w-4" />
+              Moovs Company Link
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {agency.moovs_company_id ? (
+              <div className="flex items-center justify-between bg-green-50 rounded-lg px-3 py-2">
+                <div>
+                  <p className="text-sm font-medium text-green-800">
+                    {linkedCompany ? linkedCompany.name : 'Linked'}
+                  </p>
+                  <p className="text-xs text-green-600 font-mono">{agency.moovs_company_id}</p>
+                </div>
+                <Button variant="ghost" size="icon" onClick={handleUnlinkCompany} className="text-green-700 hover:text-red-600">
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <>
+                <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+                  Not linked — trips won't auto-match to this agency until a company is linked.
+                </p>
+                {companiesLoading ? (
+                  <div className="flex items-center gap-2 py-2 text-sm text-gray-500">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading companies...
+                  </div>
+                ) : companies.length > 0 ? (
+                  <>
+                    <Input
+                      placeholder="Search companies..."
+                      value={companySearch}
+                      onChange={(e) => setCompanySearch(e.target.value)}
+                    />
+                    <div className="max-h-48 overflow-y-auto border rounded-lg divide-y">
+                      {filteredCompanies.slice(0, 20).map((c) => (
+                        <button
+                          key={c.company_id}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors"
+                          onClick={() => handleLinkCompany(c.company_id)}
+                        >
+                          <span className="font-medium">{c.name}</span>
+                          {c.email && <span className="text-gray-500 ml-2">{c.email}</span>}
+                        </button>
+                      ))}
+                      {filteredCompanies.length === 0 && (
+                        <p className="px-3 py-2 text-sm text-gray-500">No matching companies</p>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-xs text-gray-500">No Moovs companies available for this operator.</p>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">

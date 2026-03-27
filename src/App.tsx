@@ -3,6 +3,7 @@ import { AuthGate } from './components/auth/AuthGate';
 import { AppHeader } from './components/layout/AppHeader';
 import { DashboardView } from './components/dashboard/DashboardView';
 import { AgencyDetailView } from './components/agency/AgencyDetailView';
+import { AgencyMatchingView } from './components/agency/AgencyMatchingView';
 import { Toaster } from './components/ui/sonner';
 
 function App() {
@@ -19,15 +20,17 @@ function App() {
     exportFnRef.current?.();
   }, []);
 
-  // Parse route for agency detail (Task 8)
   const agencyMatch = route.match(/^#\/agency\/(.+)$/);
+  const isMatching = route === '#/matching';
 
   return (
     <AuthGate>
       <div className="min-h-screen bg-gray-50">
         <AppHeader onExportClick={handleExport} />
         <main className="max-w-7xl mx-auto px-6 py-6">
-          {agencyMatch ? (
+          {isMatching ? (
+            <AgencyMatchingView />
+          ) : agencyMatch ? (
             <AgencyDetailView agencyId={agencyMatch[1]} />
           ) : (
             <DashboardView

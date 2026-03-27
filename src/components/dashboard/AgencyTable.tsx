@@ -19,7 +19,7 @@ import {
   SelectItem,
   SelectValue,
 } from '../ui/select';
-import { Plus, Search, ChevronRight } from 'lucide-react';
+import { Plus, Search, ChevronRight, Link2 } from 'lucide-react';
 
 interface AgencyTableProps {
   rows: AgencyTableRow[];
@@ -93,6 +93,10 @@ export function AgencyTable({ rows, onAddAgency }: AgencyTableProps) {
               <SelectItem value="Other">Other</SelectItem>
             </SelectContent>
           </Select>
+          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { window.location.hash = '#/matching'; }}>
+            <Link2 className="h-4 w-4" />
+            Match Agencies
+          </Button>
           <Button size="sm" className="gap-1.5" onClick={onAddAgency}>
             <Plus className="h-4 w-4" />
             Add Agency
