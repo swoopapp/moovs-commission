@@ -7,7 +7,6 @@ import { Toaster } from './components/ui/sonner';
 
 function App() {
   const [route, setRoute] = useState(window.location.hash || '#/');
-  const [syncOpen, setSyncOpen] = useState(false);
   const exportFnRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -26,14 +25,12 @@ function App() {
   return (
     <AuthGate>
       <div className="min-h-screen bg-gray-50">
-        <AppHeader onSyncClick={() => setSyncOpen(true)} onExportClick={handleExport} />
+        <AppHeader onExportClick={handleExport} />
         <main className="max-w-7xl mx-auto px-6 py-6">
           {agencyMatch ? (
             <AgencyDetailView agencyId={agencyMatch[1]} />
           ) : (
             <DashboardView
-              syncOpen={syncOpen}
-              onSyncOpenChange={setSyncOpen}
               onRegisterExport={(fn) => { exportFnRef.current = fn; }}
             />
           )}

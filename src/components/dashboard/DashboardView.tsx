@@ -5,12 +5,9 @@ import { fetchDashboardStats, DashboardStats, AgencyTableRow } from '../../servi
 import { KPICards } from './KPICards';
 import { AgencyTable } from './AgencyTable';
 import { CommissionTrendChart } from './CommissionTrendChart';
-import SyncTripsDialog from '../sync/SyncTripsDialog';
 import { CreateAgencyDialog } from '../agency/CreateAgencyDialog';
 
 interface DashboardViewProps {
-  syncOpen: boolean;
-  onSyncOpenChange: (open: boolean) => void;
   onRegisterExport?: (fn: () => void) => void;
 }
 
@@ -41,7 +38,7 @@ function exportAgenciesToCsv(rows: AgencyTableRow[]) {
   URL.revokeObjectURL(url);
 }
 
-export function DashboardView({ syncOpen, onSyncOpenChange, onRegisterExport }: DashboardViewProps) {
+export function DashboardView({ onRegisterExport }: DashboardViewProps) {
   const operator = useOperator();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -105,14 +102,6 @@ export function DashboardView({ syncOpen, onSyncOpenChange, onRegisterExport }: 
       />
       <CommissionTrendChart data={stats.agencyMonthlyTrend} agencyNames={stats.topAgencyNames} />
       <AgencyTable rows={stats.agencyRows} onAddAgency={() => setCreateAgencyOpen(true)} />
-
-      <SyncTripsDialog
-        open={syncOpen}
-        onOpenChange={onSyncOpenChange}
-        operatorId={operator.operatorId}
-        moovsOperatorId={operator.moovsOperatorId}
-        onSyncComplete={loadData}
-      />
 
       <CreateAgencyDialog
         open={createAgencyOpen}

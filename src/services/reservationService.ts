@@ -20,12 +20,6 @@ async function handleResponse<T>(response: Response, context: string): Promise<T
   return response.json() as Promise<T>;
 }
 
-async function handleVoidResponse(response: Response, context: string): Promise<void> {
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`${context}: ${response.status} ${response.statusText} — ${body}`);
-  }
-}
 
 // --- Lookups ---
 
@@ -65,18 +59,3 @@ export async function fetchReservationsByIds(ids: string[]): Promise<Reservation
   return handleResponse<Reservation[]>(res, 'fetchReservationsByIds');
 }
 
-// --- Upsert ---
-
-export async function upsertReservations(
-  reservations: Omit<Reservation, 'id'>[],
-): Promise<void> {
-  if (reservations.length === 0) return;
-
-  const url = `${BASE_REST_URL}/commission_reservations?on_conflict=operator_id,moovs_trip_id`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: headers({ Prefer: 'resolution=merge-duplicates' }),
-    body: JSON.stringify(reservations),
-  });
-  return handleVoidResponse(res, 'upsertReservations');
-}
