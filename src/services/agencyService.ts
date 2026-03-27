@@ -34,10 +34,48 @@ export type CreateAgencyInput = Omit<Agency, 'id' | 'created_at' | 'updated_at' 
 // --- Lookups ---
 
 export async function fetchAgencies(operatorId: string): Promise<Agency[]> {
-  // Supabase PostgREST defaults to 1000 rows — override with Range header for large lists
   const url = `${BASE_REST_URL}/agencies?operator_id=eq.${encodeURIComponent(operatorId)}&order=created_at.desc`;
   const res = await fetch(url, { headers: headers({ 'Range': '0-9999' }) });
   return handleResponse<Agency[]>(res, 'fetchAgencies');
+}
+
+export interface PaginatedAgencies {
+  agencies: Agency[];
+  total: number;
+}
+
+export async function fetchAgenciesPaginated(
+  operatorId: string,
+  options?: { offset?: number; limit?: number; search?: string; matchedOnly?: boolean; unmatchedOnly?: boolean },
+): Promise<PaginatedAgencies> {
+  const offset = options?.offset ?? 0;
+  const limit = options?.limit ?? 50;
+
+  let url = `${BASE_REST_URL}/agencies?operator_id=eq.${encodeURIComponent(operatorId)}&order=name.asc`;
+
+  if (options?.search) {
+    url += `&name=ilike.*${encodeURIComponent(options.search)}*`;
+  }
+  if (options?.matchedOnly) {
+    url += `&moovs_company_id=not.is.null`;
+  }
+  if (options?.unmatchedOnly) {
+    url += `&moovs_company_id=is.null`;
+  }
+
+  const res = await fetch(url, {
+    headers: headers({
+      'Range': `${offset}-${offset + limit - 1}`,
+      'Prefer': 'count=exact',
+    }),
+  });
+
+  const data = await res.json() as Agency[];
+  const contentRange = res.headers.get('content-range') || '';
+  const totalMatch = contentRange.match(/\/(\d+)/);
+  const total = totalMatch ? parseInt(totalMatch[1]) : data.length;
+
+  return { agencies: data, total };
 }
 
 export async function fetchAgencyById(id: string): Promise<Agency | null> {

@@ -1,86 +1,120 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useOperator } from '../../contexts/OperatorContext';
-import { fetchAgencies, updateAgency } from '../../services/agencyService';
+import { fetchAgenciesPaginated, updateAgency } from '../../services/agencyService';
 import { fetchMoovsCompanies, MoovsCompany } from '../../services/companyLookupService';
 import { Agency } from '../../types/commission';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
-import { Building2, ArrowLeft, Link2, Check, Search, X } from 'lucide-react';
+import { Building2, ArrowLeft, Link2, Check, Search, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
+
+const PAGE_SIZE = 50;
 
 export function AgencyMatchingView() {
   const operator = useOperator();
-  const [agencies, setAgencies] = useState<Agency[]>([]);
   const [companies, setCompanies] = useState<MoovsCompany[]>([]);
   const [loading, setLoading] = useState(true);
-  const [agencySearch, setAgencySearch] = useState('');
   const [companySearch, setCompanySearch] = useState('');
   const [selectedAgencyId, setSelectedAgencyId] = useState<string | null>(null);
   const [showMatched, setShowMatched] = useState(false);
 
-  const loadData = useCallback(async () => {
+  // Paginated agency state
+  const [agencies, setAgencies] = useState<Agency[]>([]);
+  const [agencyTotal, setAgencyTotal] = useState(0);
+  const [agencyPage, setAgencyPage] = useState(0);
+  const [agencySearch, setAgencySearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+
+  // Counts for badges
+  const [unmatchedCount, setUnmatchedCount] = useState(0);
+  const [matchedCount, setMatchedCount] = useState(0);
+
+  // Load companies once
+  useEffect(() => {
+    if (!operator.moovsOperatorId) return;
+    fetchMoovsCompanies(operator.moovsOperatorId)
+      .then(setCompanies)
+      .catch((err) => console.error('Failed to fetch companies:', err));
+  }, [operator.moovsOperatorId]);
+
+  // Load counts
+  const loadCounts = useCallback(async () => {
+    const [unmatched, matched] = await Promise.all([
+      fetchAgenciesPaginated(operator.operatorId, { limit: 1, unmatchedOnly: true }),
+      fetchAgenciesPaginated(operator.operatorId, { limit: 1, matchedOnly: true }),
+    ]);
+    setUnmatchedCount(unmatched.total);
+    setMatchedCount(matched.total);
+  }, [operator.operatorId]);
+
+  // Load agencies page
+  const loadAgencies = useCallback(async () => {
     try {
       setLoading(true);
-      const [agencyList, companyList] = await Promise.all([
-        fetchAgencies(operator.operatorId),
-        operator.moovsOperatorId
-          ? fetchMoovsCompanies(operator.moovsOperatorId)
-          : Promise.resolve([]),
-      ]);
-      setAgencies(agencyList);
-      setCompanies(companyList);
+      const result = await fetchAgenciesPaginated(operator.operatorId, {
+        offset: agencyPage * PAGE_SIZE,
+        limit: PAGE_SIZE,
+        search: agencySearch || undefined,
+        unmatchedOnly: !showMatched,
+        matchedOnly: showMatched,
+      });
+      setAgencies(result.agencies);
+      setAgencyTotal(result.total);
     } catch (err) {
-      console.error('Failed to load matching data:', err);
-      toast.error('Failed to load data');
+      console.error('Failed to load agencies:', err);
+      toast.error('Failed to load agencies');
     } finally {
       setLoading(false);
     }
-  }, [operator.operatorId, operator.moovsOperatorId]);
+  }, [operator.operatorId, agencyPage, agencySearch, showMatched]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { loadAgencies(); }, [loadAgencies]);
+  useEffect(() => { loadCounts(); }, [loadCounts]);
 
-  const unmatchedAgencies = useMemo(() => {
-    let list = agencies.filter((a) => !a.moovs_company_id);
-    if (agencySearch.trim()) {
-      const q = agencySearch.toLowerCase();
-      list = list.filter(
-        (a) =>
-          a.name.toLowerCase().includes(q) ||
-          (a.contact_email && a.contact_email.toLowerCase().includes(q)) ||
-          (a.city && a.city.toLowerCase().includes(q))
-      );
-    }
-    return list;
-  }, [agencies, agencySearch]);
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setAgencySearch(searchInput);
+      setAgencyPage(0);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
-  const matchedAgencies = useMemo(() => {
-    return agencies.filter((a) => a.moovs_company_id);
-  }, [agencies]);
+  // Reset page when switching tabs
+  function handleTabSwitch(matched: boolean) {
+    setShowMatched(matched);
+    setAgencyPage(0);
+    setSelectedAgencyId(null);
+    setSearchInput('');
+    setAgencySearch('');
+  }
 
   const filteredCompanies = useMemo(() => {
-    // Exclude companies already linked to an agency
-    const linkedIds = new Set(agencies.filter((a) => a.moovs_company_id).map((a) => a.moovs_company_id));
-    let list = companies.filter((c) => !linkedIds.has(c.company_id));
-    if (companySearch.trim()) {
-      const q = companySearch.toLowerCase();
-      list = list.filter(
-        (c) =>
-          c.name.toLowerCase().includes(q) ||
-          (c.email && c.email.toLowerCase().includes(q))
-      );
-    }
-    return list;
-  }, [companies, agencies, companySearch]);
+    // For now we don't filter out already-linked companies since we paginate agencies
+    // and don't have the full linked set in memory
+    if (!companySearch.trim()) return companies;
+    const q = companySearch.toLowerCase();
+    return companies.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        (c.email && c.email.toLowerCase().includes(q))
+    );
+  }, [companies, companySearch]);
+
+  const selectedAgency = selectedAgencyId
+    ? agencies.find((a) => a.id === selectedAgencyId) || null
+    : null;
 
   async function handleMatch(agencyId: string, companyId: string) {
     try {
-      const updated = await updateAgency(agencyId, { moovs_company_id: companyId });
-      setAgencies((prev) => prev.map((a) => (a.id === agencyId ? updated : a)));
+      await updateAgency(agencyId, { moovs_company_id: companyId });
       setSelectedAgencyId(null);
       setCompanySearch('');
       const company = companies.find((c) => c.company_id === companyId);
       toast.success(`Linked to ${company?.name || 'company'}`);
+      loadAgencies();
+      loadCounts();
     } catch (err) {
       console.error('Failed to match:', err);
       toast.error('Failed to link company');
@@ -89,26 +123,17 @@ export function AgencyMatchingView() {
 
   async function handleUnmatch(agencyId: string) {
     try {
-      const updated = await updateAgency(agencyId, { moovs_company_id: null });
-      setAgencies((prev) => prev.map((a) => (a.id === agencyId ? updated : a)));
+      await updateAgency(agencyId, { moovs_company_id: null });
       toast.success('Company unlinked');
+      loadAgencies();
+      loadCounts();
     } catch (err) {
       console.error('Failed to unmatch:', err);
       toast.error('Failed to unlink');
     }
   }
 
-  const selectedAgency = selectedAgencyId
-    ? agencies.find((a) => a.id === selectedAgencyId) || null
-    : null;
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
-      </div>
-    );
-  }
+  const totalPages = Math.ceil(agencyTotal / PAGE_SIZE);
 
   return (
     <div className="space-y-6">
@@ -127,10 +152,10 @@ export function AgencyMatchingView() {
         </div>
         <div className="flex items-center gap-3 text-sm">
           <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 font-medium">
-            {unmatchedAgencies.length} unmatched
+            {unmatchedCount} unmatched
           </span>
           <span className="px-2.5 py-1 rounded-full bg-green-100 text-green-800 font-medium">
-            {matchedAgencies.length} matched
+            {matchedCount} matched
           </span>
           <span className="px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 font-medium">
             {companies.length} companies
@@ -148,86 +173,107 @@ export function AgencyMatchingView() {
                 <Button
                   variant={showMatched ? 'outline' : 'default'}
                   size="sm"
-                  onClick={() => setShowMatched(false)}
+                  onClick={() => handleTabSwitch(false)}
                 >
-                  Unmatched ({unmatchedAgencies.length})
+                  Unmatched ({unmatchedCount})
                 </Button>
                 <Button
                   variant={showMatched ? 'default' : 'outline'}
                   size="sm"
-                  onClick={() => setShowMatched(true)}
+                  onClick={() => handleTabSwitch(true)}
                 >
-                  Matched ({matchedAgencies.length})
+                  Matched ({matchedCount})
                 </Button>
               </div>
             </div>
-            {!showMatched && (
-              <div className="relative mt-2">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Search agencies..."
-                  value={agencySearch}
-                  onChange={(e) => setAgencySearch(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
-            )}
+            <div className="relative mt-2">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Search agencies..."
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                className="pl-9"
+              />
+            </div>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="max-h-[600px] overflow-y-auto divide-y">
-              {showMatched ? (
-                matchedAgencies.length === 0 ? (
-                  <p className="px-4 py-8 text-center text-sm text-gray-500">No matched agencies yet</p>
-                ) : (
-                  matchedAgencies.map((a) => {
-                    const company = companies.find((c) => c.company_id === a.moovs_company_id);
-                    return (
-                      <div key={a.id} className="px-4 py-3 flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{a.name}</p>
-                          <p className="text-xs text-green-600 flex items-center gap-1">
-                            <Link2 className="h-3 w-3" />
-                            {company ? company.name : a.moovs_company_id}
-                          </p>
-                        </div>
-                        <Button variant="ghost" size="sm" onClick={() => handleUnmatch(a.id)} className="text-gray-400 hover:text-red-600">
-                          <X className="h-4 w-4" />
-                        </Button>
+            <div className="max-h-[500px] overflow-y-auto divide-y">
+              {loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900" />
+                </div>
+              ) : agencies.length === 0 ? (
+                <p className="px-4 py-8 text-center text-sm text-gray-500">
+                  {agencySearch ? 'No agencies match your search' : showMatched ? 'No matched agencies yet' : 'All agencies are matched!'}
+                </p>
+              ) : showMatched ? (
+                agencies.map((a) => {
+                  const company = companies.find((c) => c.company_id === a.moovs_company_id);
+                  return (
+                    <div key={a.id} className="px-4 py-3 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{a.name}</p>
+                        <p className="text-xs text-green-600 flex items-center gap-1">
+                          <Link2 className="h-3 w-3" />
+                          {company ? company.name : a.moovs_company_id}
+                        </p>
                       </div>
-                    );
-                  })
-                )
+                      <Button variant="ghost" size="sm" onClick={() => handleUnmatch(a.id)} className="text-gray-400 hover:text-red-600">
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  );
+                })
               ) : (
-                unmatchedAgencies.length === 0 ? (
-                  <p className="px-4 py-8 text-center text-sm text-gray-500">
-                    {agencySearch ? 'No agencies match your search' : 'All agencies are matched!'}
-                  </p>
-                ) : (
-                  unmatchedAgencies.map((a) => (
-                    <button
-                      key={a.id}
-                      className={`w-full text-left px-4 py-3 transition-colors ${
-                        selectedAgencyId === a.id
-                          ? 'bg-blue-50 border-l-2 border-blue-500'
-                          : 'hover:bg-gray-50'
-                      }`}
-                      onClick={() => {
-                        setSelectedAgencyId(selectedAgencyId === a.id ? null : a.id);
-                        setCompanySearch('');
-                      }}
-                    >
-                      <p className="text-sm font-medium text-gray-900">{a.name}</p>
-                      <p className="text-xs text-gray-500">
-                        {[a.city, a.state, a.market_segment].filter(Boolean).join(' · ') || 'No location info'}
-                      </p>
-                      {a.contact_email && (
-                        <p className="text-xs text-gray-400">{a.contact_email}</p>
-                      )}
-                    </button>
-                  ))
-                )
+                agencies.map((a) => (
+                  <button
+                    key={a.id}
+                    className={`w-full text-left px-4 py-3 transition-colors ${
+                      selectedAgencyId === a.id
+                        ? 'bg-blue-50 border-l-2 border-blue-500'
+                        : 'hover:bg-gray-50'
+                    }`}
+                    onClick={() => {
+                      setSelectedAgencyId(selectedAgencyId === a.id ? null : a.id);
+                      setCompanySearch('');
+                    }}
+                  >
+                    <p className="text-sm font-medium text-gray-900">{a.name}</p>
+                    <p className="text-xs text-gray-500">
+                      {[a.city, a.state, a.market_segment].filter(Boolean).join(' · ') || 'No location info'}
+                    </p>
+                    {a.contact_email && (
+                      <p className="text-xs text-gray-400">{a.contact_email}</p>
+                    )}
+                  </button>
+                ))
               )}
             </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t bg-gray-50">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={agencyPage === 0}
+                  onClick={() => setAgencyPage((p) => p - 1)}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="text-sm text-gray-600">
+                  Page {agencyPage + 1} of {totalPages} ({agencyTotal} total)
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={agencyPage >= totalPages - 1}
+                  onClick={() => setAgencyPage((p) => p + 1)}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -263,7 +309,7 @@ export function AgencyMatchingView() {
             )}
           </CardHeader>
           <CardContent className="p-0">
-            <div className="max-h-[600px] overflow-y-auto divide-y">
+            <div className="max-h-[500px] overflow-y-auto divide-y">
               {!selectedAgency ? (
                 <p className="px-4 py-8 text-center text-sm text-gray-400">
                   Select an agency to see available companies
