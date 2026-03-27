@@ -34,8 +34,9 @@ export type CreateAgencyInput = Omit<Agency, 'id' | 'created_at' | 'updated_at' 
 // --- Lookups ---
 
 export async function fetchAgencies(operatorId: string): Promise<Agency[]> {
+  // Supabase PostgREST defaults to 1000 rows — override with Range header for large lists
   const url = `${BASE_REST_URL}/agencies?operator_id=eq.${encodeURIComponent(operatorId)}&order=created_at.desc`;
-  const res = await fetch(url, { headers: headers() });
+  const res = await fetch(url, { headers: headers({ 'Range': '0-9999' }) });
   return handleResponse<Agency[]>(res, 'fetchAgencies');
 }
 
