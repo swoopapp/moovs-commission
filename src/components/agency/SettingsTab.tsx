@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useOperator } from '../../contexts/OperatorContext';
 import { Agency, CommissionType, CommissionBase } from '../../types/commission';
-import { updateAgency, deleteAgency } from '../../services/agencyService';
+import { updateAgency, deleteAgency, fetchLinkedCompanyIds } from '../../services/agencyService';
 import { fetchMoovsCompanies, MoovsCompany } from '../../services/companyLookupService';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
@@ -46,17 +46,26 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
   const [companies, setCompanies] = useState<MoovsCompany[]>([]);
   const [companiesLoading, setCompaniesLoading] = useState(false);
   const [companySearch, setCompanySearch] = useState('');
+  const [linkedCompanyIds, setLinkedCompanyIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!operator.moovsOperatorId) return;
     let cancelled = false;
     setCompaniesLoading(true);
-    fetchMoovsCompanies(operator.moovsOperatorId)
-      .then((result) => { if (!cancelled) setCompanies(result); })
+    Promise.all([
+      fetchMoovsCompanies(operator.moovsOperatorId),
+      fetchLinkedCompanyIds(operator.operatorId),
+    ])
+      .then(([companyList, linkedIds]) => {
+        if (!cancelled) {
+          setCompanies(companyList);
+          setLinkedCompanyIds(linkedIds);
+        }
+      })
       .catch((err) => console.error('Failed to fetch companies:', err))
       .finally(() => { if (!cancelled) setCompaniesLoading(false); });
     return () => { cancelled = true; };
-  }, [operator.moovsOperatorId]);
+  }, [operator.moovsOperatorId, operator.operatorId]);
 
   const linkedCompany = useMemo(() => {
     if (!agency.moovs_company_id) return null;
@@ -64,12 +73,21 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
   }, [agency.moovs_company_id, companies]);
 
   const filteredCompanies = useMemo(() => {
-    if (!companySearch.trim()) return companies;
-    const q = companySearch.toLowerCase();
-    return companies.filter(
-      (c) => c.name.toLowerCase().includes(q) || (c.email && c.email.toLowerCase().includes(q))
-    );
-  }, [companies, companySearch]);
+    let list = companies;
+    if (companySearch.trim()) {
+      const q = companySearch.toLowerCase();
+      list = list.filter(
+        (c) => c.name.toLowerCase().includes(q) || (c.email && c.email.toLowerCase().includes(q))
+      );
+    }
+    // Available first, then already-linked
+    return list.sort((a, b) => {
+      const aLinked = linkedCompanyIds.has(a.company_id) && a.company_id !== agency.moovs_company_id;
+      const bLinked = linkedCompanyIds.has(b.company_id) && b.company_id !== agency.moovs_company_id;
+      if (aLinked !== bLinked) return aLinked ? 1 : -1;
+      return a.name.localeCompare(b.name);
+    });
+  }, [companies, companySearch, linkedCompanyIds, agency.moovs_company_id]);
 
   async function handleLinkCompany(companyId: string) {
     try {
@@ -437,16 +455,26 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
                       onChange={(e) => setCompanySearch(e.target.value)}
                     />
                     <div className="max-h-48 overflow-y-auto border rounded-lg divide-y">
-                      {filteredCompanies.slice(0, 20).map((c) => (
-                        <button
-                          key={c.company_id}
-                          className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors"
-                          onClick={() => handleLinkCompany(c.company_id)}
-                        >
-                          <span className="font-medium">{c.name}</span>
-                          {c.email && <span className="text-gray-500 ml-2">{c.email}</span>}
-                        </button>
-                      ))}
+                      {filteredCompanies.slice(0, 20).map((c) => {
+                        const isLinked = linkedCompanyIds.has(c.company_id) && c.company_id !== agency.moovs_company_id;
+                        return (
+                          <button
+                            key={c.company_id}
+                            className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+                              isLinked ? 'opacity-50 cursor-not-allowed bg-gray-50' : 'hover:bg-blue-50'
+                            }`}
+                            onClick={() => !isLinked && handleLinkCompany(c.company_id)}
+                            disabled={isLinked}
+                          >
+                            <span className="font-medium">{c.name}</span>
+                            {isLinked ? (
+                              <span className="text-gray-400 ml-2">Already linked</span>
+                            ) : c.email ? (
+                              <span className="text-gray-500 ml-2">{c.email}</span>
+                            ) : null}
+                          </button>
+                        );
+                      })}
                       {filteredCompanies.length === 0 && (
                         <p className="px-3 py-2 text-sm text-gray-500">No matching companies</p>
                       )}
