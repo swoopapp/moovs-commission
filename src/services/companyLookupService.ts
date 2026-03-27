@@ -1,4 +1,4 @@
-import { config, EDGE_FUNCTION_URLS } from '../config/env';
+import { EDGE_FUNCTION_URLS } from '../config/env';
 
 export interface MoovsCompany {
   company_id: string;
@@ -31,7 +31,6 @@ export async function fetchMoovsCompanies(moovsOperatorId: string): Promise<Moov
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${config.supabaseAnonKey}`,
     },
     body: JSON.stringify({ operator_id: moovsOperatorId }),
   });

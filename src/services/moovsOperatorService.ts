@@ -1,4 +1,4 @@
-import { config, EDGE_FUNCTION_URLS } from '../config/env';
+import { EDGE_FUNCTION_URLS } from '../config/env';
 
 /**
  * Operator details from the fetch-operators edge function.
@@ -31,11 +31,7 @@ export async function lookupMoovsOperator(
   operatorId: string,
 ): Promise<MoovsOperatorDetails | null> {
   try {
-    const res = await fetch(`${EDGE_FUNCTION_URLS.fetchOperators}?operator_id=${operatorId}`, {
-      headers: {
-        Authorization: `Bearer ${config.supabaseAnonKey}`,
-      },
-    });
+    const res = await fetch(`${EDGE_FUNCTION_URLS.fetchOperators}?operator_id=${operatorId}`);
     if (!res.ok) return null;
     const data = await res.json();
     const op = data?.operator || data?.data || null;

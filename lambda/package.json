@@ -1,0 +1,20 @@
+{
+  "name": "commissions-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node20 --outfile=dist/index.js --format=cjs --external:pg-native",
+    "package": "npm run build && cd dist && zip -r ../deploy.zip .",
+    "deploy": "npm run package && aws lambda update-function-code --function-name commissions-api --zip-file fileb://deploy.zip --region us-east-1"
+  },
+  "dependencies": {
+    "hono": "^4.7.0",
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "@types/pg": "^8.11.0",
+    "typescript": "^5.7.0"
+  }
+}

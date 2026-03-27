@@ -1,4 +1,4 @@
-import { config, EDGE_FUNCTION_URLS } from '../config/env';
+import { EDGE_FUNCTION_URLS } from '../config/env';
 
 // --- Types ---
 
@@ -21,12 +21,7 @@ interface FetchOperatorResponse {
 
 async function getJson<T>(url: string, params?: Record<string, string>): Promise<T> {
   const queryString = params ? '?' + new URLSearchParams(params).toString() : '';
-  const res = await fetch(`${url}${queryString}`, {
-    method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${config.supabaseAnonKey}`,
-    },
-  });
+  const res = await fetch(`${url}${queryString}`);
   if (!res.ok) {
     throw new Error(`GET ${url} failed: ${res.status} ${res.statusText}`);
   }

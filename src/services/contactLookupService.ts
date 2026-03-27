@@ -1,4 +1,4 @@
-import { config, EDGE_FUNCTION_URLS } from '../config/env';
+import { EDGE_FUNCTION_URLS } from '../config/env';
 
 export interface MoovsContact {
   contact_id: string;
@@ -38,7 +38,6 @@ export async function fetchMoovsContacts(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${config.supabaseAnonKey}`,
     },
     body: JSON.stringify(body),
   });

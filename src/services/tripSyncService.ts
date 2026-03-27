@@ -1,4 +1,4 @@
-import { config, EDGE_FUNCTION_URLS } from '../config/env';
+import { EDGE_FUNCTION_URLS } from '../config/env';
 import type { Reservation, Agency } from '../types/commission';
 import { upsertReservations } from './reservationService';
 import { calculateCommission } from './attributionService';
@@ -56,7 +56,6 @@ export async function syncTrips(options: SyncOptions): Promise<SyncResult> {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${config.supabaseAnonKey}`,
     },
     body: JSON.stringify(body),
   });
