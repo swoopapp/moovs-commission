@@ -19,7 +19,7 @@ import {
   SelectItem,
   SelectValue,
 } from '../ui/select';
-import { Plus, Search, ChevronRight, Link2 } from 'lucide-react';
+import { Plus, Search, ChevronRight, Link2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 
 interface AgencyTableProps {
   rows: AgencyTableRow[];
@@ -53,17 +53,65 @@ function formatRate(row: AgencyTableRow): string {
   return `${agency.commission_rate}%`;
 }
 
+type SortField = 'name' | 'type' | 'bookings' | 'revenue' | 'earned' | 'paid' | 'outstanding' | 'status';
+type SortDir = 'asc' | 'desc';
+
+function getSortValue(row: AgencyTableRow, field: SortField): string | number {
+  switch (field) {
+    case 'name': return row.agency.name.toLowerCase();
+    case 'type': return row.agency.type;
+    case 'bookings': return row.bookings;
+    case 'revenue': return row.revenue;
+    case 'earned': return row.earned;
+    case 'paid': return row.paid;
+    case 'outstanding': return row.outstanding;
+    case 'status': return row.agency.status;
+  }
+}
+
 export function AgencyTable({ rows, onAddAgency }: AgencyTableProps) {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [sortField, setSortField] = useState<SortField>('name');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+
+  function handleSort(field: SortField) {
+    if (sortField === field) {
+      setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir(field === 'name' || field === 'type' || field === 'status' ? 'asc' : 'desc');
+    }
+  }
+
+  function SortIcon({ field }: { field: SortField }) {
+    if (sortField !== field) return <ArrowUpDown className="h-3 w-3 ml-1 opacity-30" />;
+    return sortDir === 'asc'
+      ? <ArrowUp className="h-3 w-3 ml-1" />
+      : <ArrowDown className="h-3 w-3 ml-1" />;
+  }
 
   const filtered = useMemo(() => {
-    return rows.filter((row) => {
-      const matchesSearch = row.agency.name.toLowerCase().includes(search.toLowerCase());
+    let list = rows.filter((row) => {
+      const matchesSearch =
+        row.agency.name.toLowerCase().includes(search.toLowerCase()) ||
+        (row.agency.contact_name && row.agency.contact_name.toLowerCase().includes(search.toLowerCase())) ||
+        (row.agency.contact_email && row.agency.contact_email.toLowerCase().includes(search.toLowerCase()));
       const matchesType = typeFilter === 'all' || row.agency.type === typeFilter;
-      return matchesSearch && matchesType;
+      const matchesStatus = statusFilter === 'all' || row.agency.status === statusFilter;
+      return matchesSearch && matchesType && matchesStatus;
     });
-  }, [rows, search, typeFilter]);
+
+    list.sort((a, b) => {
+      const aVal = getSortValue(a, sortField);
+      const bVal = getSortValue(b, sortField);
+      const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+
+    return list;
+  }, [rows, search, typeFilter, statusFilter, sortField, sortDir]);
 
   return (
     <div className="bg-white rounded-lg border border-gray-200">
@@ -93,6 +141,17 @@ export function AgencyTable({ rows, onAddAgency }: AgencyTableProps) {
               <SelectItem value="Other">Other</SelectItem>
             </SelectContent>
           </Select>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="All Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="suspended">Suspended</SelectItem>
+              <SelectItem value="archived">Archived</SelectItem>
+            </SelectContent>
+          </Select>
           <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { window.location.hash = '#/matching'; }}>
             <Link2 className="h-4 w-4" />
             Match Agencies
@@ -104,27 +163,51 @@ export function AgencyTable({ rows, onAddAgency }: AgencyTableProps) {
         </div>
       </div>
 
+      {/* Results count */}
+      {(search || typeFilter !== 'all' || statusFilter !== 'all') && (
+        <div className="px-4 py-2 bg-gray-50 border-b text-xs text-gray-500">
+          Showing {filtered.length} of {rows.length} agencies
+          {search && <> matching "{search}"</>}
+        </div>
+      )}
+
       {/* Table */}
       {filtered.length === 0 ? (
         <div className="px-6 py-12 text-center text-gray-500">
           {rows.length === 0
             ? 'No agencies yet. Add your first agency to get started.'
-            : 'No agencies match your search.'}
+            : 'No agencies match your filters.'}
         </div>
       ) : (
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Agency</TableHead>
+              <TableHead className="cursor-pointer select-none" onClick={() => handleSort('name')}>
+                <span className="flex items-center">Agency <SortIcon field="name" /></span>
+              </TableHead>
               <TableHead>Contact</TableHead>
-              <TableHead>Type</TableHead>
+              <TableHead className="cursor-pointer select-none" onClick={() => handleSort('type')}>
+                <span className="flex items-center">Type <SortIcon field="type" /></span>
+              </TableHead>
               <TableHead>Rate</TableHead>
-              <TableHead className="text-right">Bookings</TableHead>
-              <TableHead className="text-right">Revenue</TableHead>
-              <TableHead className="text-right">Earned</TableHead>
-              <TableHead className="text-right">Paid</TableHead>
-              <TableHead className="text-right">Outstanding</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort('bookings')}>
+                <span className="flex items-center justify-end">Bookings <SortIcon field="bookings" /></span>
+              </TableHead>
+              <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort('revenue')}>
+                <span className="flex items-center justify-end">Revenue <SortIcon field="revenue" /></span>
+              </TableHead>
+              <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort('earned')}>
+                <span className="flex items-center justify-end">Earned <SortIcon field="earned" /></span>
+              </TableHead>
+              <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort('paid')}>
+                <span className="flex items-center justify-end">Paid <SortIcon field="paid" /></span>
+              </TableHead>
+              <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort('outstanding')}>
+                <span className="flex items-center justify-end">Outstanding <SortIcon field="outstanding" /></span>
+              </TableHead>
+              <TableHead className="cursor-pointer select-none" onClick={() => handleSort('status')}>
+                <span className="flex items-center">Status <SortIcon field="status" /></span>
+              </TableHead>
               <TableHead className="w-10"></TableHead>
             </TableRow>
           </TableHeader>
