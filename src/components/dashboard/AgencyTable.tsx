@@ -19,7 +19,7 @@ import {
   SelectItem,
   SelectValue,
 } from '../ui/select';
-import { Plus, Search, ChevronRight, Link2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Plus, Search, ChevronRight, Link2, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft } from 'lucide-react';
 
 interface AgencyTableProps {
   rows: AgencyTableRow[];
@@ -75,6 +75,8 @@ export function AgencyTable({ rows, onAddAgency }: AgencyTableProps) {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(25);
 
   function handleSort(field: SortField) {
     if (sortField === field) {
@@ -112,6 +114,13 @@ export function AgencyTable({ rows, onAddAgency }: AgencyTableProps) {
 
     return list;
   }, [rows, search, typeFilter, statusFilter, sortField, sortDir]);
+
+  // Reset to page 0 when filters or page size change
+  const filterKey = `${search}|${typeFilter}|${statusFilter}|${sortField}|${sortDir}|${pageSize}`;
+  useMemo(() => { setPage(0); }, [filterKey]);
+
+  const totalPages = Math.ceil(filtered.length / pageSize);
+  const paged = filtered.slice(page * pageSize, (page + 1) * pageSize);
 
   return (
     <div className="bg-white rounded-lg border border-gray-200">
@@ -212,7 +221,7 @@ export function AgencyTable({ rows, onAddAgency }: AgencyTableProps) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.map((row) => (
+            {paged.map((row) => (
               <TableRow
                 key={row.agency.id}
                 className="cursor-pointer"
@@ -255,6 +264,50 @@ export function AgencyTable({ rows, onAddAgency }: AgencyTableProps) {
             ))}
           </TableBody>
         </Table>
+      )}
+
+      {/* Pagination */}
+      {filtered.length > 0 && (
+        <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            <span>Show</span>
+            <Select value={String(pageSize)} onValueChange={(v) => setPageSize(v === 'all' ? filtered.length : parseInt(v))}>
+              <SelectTrigger className="w-[80px] h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="25">25</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+                <SelectItem value="all">All</SelectItem>
+              </SelectContent>
+            </Select>
+            <span>of {filtered.length} agencies</span>
+          </div>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page === 0}
+                onClick={() => setPage((p) => p - 1)}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="text-sm text-gray-600">
+                Page {page + 1} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page >= totalPages - 1}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

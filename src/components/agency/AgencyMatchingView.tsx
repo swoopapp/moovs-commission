@@ -6,7 +6,7 @@ import { Agency } from '../../types/commission';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
-import { Building2, ArrowLeft, Link2, Check, Search, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Building2, ArrowLeft, Check, Search, X, ChevronLeft, ChevronRight, Link2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const PAGE_SIZE = 50;
@@ -96,22 +96,20 @@ export function AgencyMatchingView() {
   }
 
   const filteredCompanies = useMemo(() => {
-    let list = companies;
-    if (companySearch.trim()) {
-      const q = companySearch.toLowerCase();
-      list = list.filter(
-        (c) =>
-          c.name.toLowerCase().includes(q) ||
-          (c.email && c.email.toLowerCase().includes(q))
-      );
-    }
-    // Sort: available first, then linked
-    return list.sort((a, b) => {
-      const aLinked = linkedCompanyIds.has(a.company_id);
-      const bLinked = linkedCompanyIds.has(b.company_id);
-      if (aLinked !== bLinked) return aLinked ? 1 : -1;
-      return a.name.localeCompare(b.name);
-    });
+    if (!companySearch.trim()) return [];
+    const q = companySearch.toLowerCase();
+    return companies
+      .filter((c) => !linkedCompanyIds.has(c.company_id))
+      .filter((c) =>
+        c.name.toLowerCase().includes(q) ||
+        (c.email && c.email.toLowerCase().includes(q))
+      )
+      .sort((a, b) => {
+        const aStarts = a.name.toLowerCase().startsWith(q) ? 0 : 1;
+        const bStarts = b.name.toLowerCase().startsWith(q) ? 0 : 1;
+        if (aStarts !== bStarts) return aStarts - bStarts;
+        return a.name.localeCompare(b.name);
+      });
   }, [companies, companySearch, linkedCompanyIds]);
 
   const selectedAgency = selectedAgencyId
@@ -246,8 +244,14 @@ export function AgencyMatchingView() {
                         : 'hover:bg-gray-50'
                     }`}
                     onClick={() => {
-                      setSelectedAgencyId(selectedAgencyId === a.id ? null : a.id);
-                      setCompanySearch('');
+                      if (selectedAgencyId === a.id) {
+                        setSelectedAgencyId(null);
+                        setCompanySearch('');
+                      } else {
+                        setSelectedAgencyId(a.id);
+                        // Pre-fill company search with agency name for fuzzy match
+                        setCompanySearch(a.name.split(/[\s\-\/]+/)[0] || '');
+                      }
                     }}
                   >
                     <p className="text-sm font-medium text-gray-900">{a.name}</p>
@@ -326,42 +330,32 @@ export function AgencyMatchingView() {
                 <p className="px-4 py-8 text-center text-sm text-gray-400">
                   Select an agency to see available companies
                 </p>
+              ) : !companySearch.trim() ? (
+                <p className="px-4 py-8 text-center text-sm text-gray-400">
+                  Type a company name to search
+                </p>
               ) : filteredCompanies.length === 0 ? (
                 <p className="px-4 py-8 text-center text-sm text-gray-500">
-                  {companySearch ? 'No matching companies' : 'No available companies'}
+                  No matching companies found
                 </p>
               ) : (
-                filteredCompanies.map((c) => {
-                  const isLinked = linkedCompanyIds.has(c.company_id);
-                  return (
-                    <button
-                      key={c.company_id}
-                      className={`w-full text-left px-4 py-3 transition-colors ${
-                        isLinked
-                          ? 'opacity-50 cursor-not-allowed bg-gray-50'
-                          : 'hover:bg-green-50 group'
-                      }`}
-                      onClick={() => !isLinked && handleMatch(selectedAgencyId!, c.company_id)}
-                      disabled={isLinked}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{c.name}</p>
-                          <p className="text-xs text-gray-500">
-                            {isLinked
-                              ? 'Already linked to another agency'
-                              : [c.email, c.phone_number].filter(Boolean).join(' · ') || 'No contact info'}
-                          </p>
-                        </div>
-                        {isLinked ? (
-                          <Link2 className="h-4 w-4 text-gray-400" />
-                        ) : (
-                          <Check className="h-4 w-4 text-green-600 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        )}
+                filteredCompanies.map((c) => (
+                  <button
+                    key={c.company_id}
+                    className="w-full text-left px-4 py-3 hover:bg-green-50 transition-colors group"
+                    onClick={() => handleMatch(selectedAgencyId!, c.company_id)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{c.name}</p>
+                        <p className="text-xs text-gray-500">
+                          {[c.email, c.phone_number].filter(Boolean).join(' · ') || 'No contact info'}
+                        </p>
                       </div>
-                    </button>
-                  );
-                })
+                      <Check className="h-4 w-4 text-green-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                  </button>
+                ))
               )}
             </div>
           </CardContent>

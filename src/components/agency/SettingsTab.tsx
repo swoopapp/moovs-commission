@@ -73,21 +73,19 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
   }, [agency.moovs_company_id, companies]);
 
   const filteredCompanies = useMemo(() => {
-    let list = companies;
-    if (companySearch.trim()) {
-      const q = companySearch.toLowerCase();
-      list = list.filter(
-        (c) => c.name.toLowerCase().includes(q) || (c.email && c.email.toLowerCase().includes(q))
-      );
-    }
-    // Available first, then already-linked
-    return list.sort((a, b) => {
-      const aLinked = linkedCompanyIds.has(a.company_id) && a.company_id !== agency.moovs_company_id;
-      const bLinked = linkedCompanyIds.has(b.company_id) && b.company_id !== agency.moovs_company_id;
-      if (aLinked !== bLinked) return aLinked ? 1 : -1;
-      return a.name.localeCompare(b.name);
-    });
-  }, [companies, companySearch, linkedCompanyIds, agency.moovs_company_id]);
+    if (!companySearch.trim()) return [];
+    const q = companySearch.toLowerCase();
+    return companies
+      .filter((c) => !linkedCompanyIds.has(c.company_id))
+      .filter((c) => c.name.toLowerCase().includes(q) || (c.email && c.email.toLowerCase().includes(q)))
+      .sort((a, b) => {
+        // Exact prefix match first, then contains
+        const aStarts = a.name.toLowerCase().startsWith(q) ? 0 : 1;
+        const bStarts = b.name.toLowerCase().startsWith(q) ? 0 : 1;
+        if (aStarts !== bStarts) return aStarts - bStarts;
+        return a.name.localeCompare(b.name);
+      });
+  }, [companies, companySearch, linkedCompanyIds]);
 
   async function handleLinkCompany(companyId: string) {
     try {
@@ -454,31 +452,23 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
                       value={companySearch}
                       onChange={(e) => setCompanySearch(e.target.value)}
                     />
-                    <div className="max-h-48 overflow-y-auto border rounded-lg divide-y">
-                      {filteredCompanies.slice(0, 20).map((c) => {
-                        const isLinked = linkedCompanyIds.has(c.company_id) && c.company_id !== agency.moovs_company_id;
-                        return (
+                    {filteredCompanies.length > 0 && (
+                      <div className="max-h-48 overflow-y-auto border rounded-lg divide-y">
+                        {filteredCompanies.slice(0, 10).map((c) => (
                           <button
                             key={c.company_id}
-                            className={`w-full text-left px-3 py-2 text-sm transition-colors ${
-                              isLinked ? 'opacity-50 cursor-not-allowed bg-gray-50' : 'hover:bg-blue-50'
-                            }`}
-                            onClick={() => !isLinked && handleLinkCompany(c.company_id)}
-                            disabled={isLinked}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors"
+                            onClick={() => handleLinkCompany(c.company_id)}
                           >
                             <span className="font-medium">{c.name}</span>
-                            {isLinked ? (
-                              <span className="text-gray-400 ml-2">Already linked</span>
-                            ) : c.email ? (
-                              <span className="text-gray-500 ml-2">{c.email}</span>
-                            ) : null}
+                            {c.email && <span className="text-gray-500 ml-2">{c.email}</span>}
                           </button>
-                        );
-                      })}
-                      {filteredCompanies.length === 0 && (
-                        <p className="px-3 py-2 text-sm text-gray-500">No matching companies</p>
-                      )}
-                    </div>
+                        ))}
+                      </div>
+                    )}
+                    {companySearch.trim() && filteredCompanies.length === 0 && (
+                      <p className="text-xs text-gray-500 py-1">No matching companies found</p>
+                    )}
                   </>
                 ) : (
                   <p className="text-xs text-gray-500">No Moovs companies available for this operator.</p>
