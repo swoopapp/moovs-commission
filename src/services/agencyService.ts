@@ -51,7 +51,7 @@ export async function fetchAgenciesPaginated(
   const offset = options?.offset ?? 0;
   const limit = options?.limit ?? 50;
 
-  let url = `${BASE_REST_URL}/agencies?operator_id=eq.${encodeURIComponent(operatorId)}&order=name.asc`;
+  let url = `${BASE_REST_URL}/agencies?operator_id=eq.${encodeURIComponent(operatorId)}&order=name.asc&limit=${limit}&offset=${offset}`;
 
   if (options?.search) {
     url += `&name=ilike.*${encodeURIComponent(options.search)}*`;
@@ -64,10 +64,7 @@ export async function fetchAgenciesPaginated(
   }
 
   const res = await fetch(url, {
-    headers: headers({
-      'Range': `${offset}-${offset + limit - 1}`,
-      'Prefer': 'count=exact',
-    }),
+    headers: headers({ 'Prefer': 'count=exact' }),
   });
 
   const data = await res.json() as Agency[];
