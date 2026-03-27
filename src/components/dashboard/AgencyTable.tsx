@@ -1,6 +1,5 @@
-import { useState, useMemo } from 'react';
-import { AgencyTableRow } from '../../services/dashboardService';
-import { AgencyType, AgencyStatus } from '../../types/commission';
+import { useState, useEffect } from 'react';
+import { Agency, AgencyType, AgencyStatus } from '../../types/commission';
 import {
   Table,
   TableHeader,
@@ -19,11 +18,25 @@ import {
   SelectItem,
   SelectValue,
 } from '../ui/select';
-import { Plus, Search, ChevronRight, Link2, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '../ui/tooltip';
+import { Plus, Search, ChevronRight, Link2, ChevronLeft, Link, Unlink } from 'lucide-react';
 
 interface AgencyTableProps {
-  rows: AgencyTableRow[];
+  agencies: Agency[];
+  totalAgencies: number;
+  page: number;
+  pageSize: number;
+  loading?: boolean;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (size: number) => void;
+  onSearchChange: (search: string) => void;
   onAddAgency?: () => void;
+  onRefresh?: () => void;
 }
 
 const TYPE_BADGE_COLORS: Record<AgencyType, string> = {
@@ -41,86 +54,35 @@ const STATUS_BADGE_COLORS: Record<AgencyStatus, string> = {
   archived: 'bg-gray-100 text-gray-600',
 };
 
-function formatCurrency(amount: number): string {
-  return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-function formatRate(row: AgencyTableRow): string {
-  const { agency } = row;
+function formatRate(agency: Agency): string {
   if (agency.commission_type === 'flat') {
     return `$${agency.commission_rate}`;
   }
   return `${agency.commission_rate}%`;
 }
 
-type SortField = 'name' | 'type' | 'bookings' | 'revenue' | 'earned' | 'paid' | 'outstanding' | 'status';
-type SortDir = 'asc' | 'desc';
+export function AgencyTable({
+  agencies,
+  totalAgencies,
+  page,
+  pageSize,
+  loading,
+  onPageChange,
+  onPageSizeChange,
+  onSearchChange,
+  onAddAgency,
+}: AgencyTableProps) {
+  const [searchInput, setSearchInput] = useState('');
 
-function getSortValue(row: AgencyTableRow, field: SortField): string | number {
-  switch (field) {
-    case 'name': return row.agency.name.toLowerCase();
-    case 'type': return row.agency.type;
-    case 'bookings': return row.bookings;
-    case 'revenue': return row.revenue;
-    case 'earned': return row.earned;
-    case 'paid': return row.paid;
-    case 'outstanding': return row.outstanding;
-    case 'status': return row.agency.status;
-  }
-}
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onSearchChange(searchInput);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput, onSearchChange]);
 
-export function AgencyTable({ rows, onAddAgency }: AgencyTableProps) {
-  const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [sortField, setSortField] = useState<SortField>('name');
-  const [sortDir, setSortDir] = useState<SortDir>('asc');
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(25);
-
-  function handleSort(field: SortField) {
-    if (sortField === field) {
-      setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDir(field === 'name' || field === 'type' || field === 'status' ? 'asc' : 'desc');
-    }
-  }
-
-  function SortIcon({ field }: { field: SortField }) {
-    if (sortField !== field) return <ArrowUpDown className="h-3 w-3 ml-1 opacity-30" />;
-    return sortDir === 'asc'
-      ? <ArrowUp className="h-3 w-3 ml-1" />
-      : <ArrowDown className="h-3 w-3 ml-1" />;
-  }
-
-  const filtered = useMemo(() => {
-    let list = rows.filter((row) => {
-      const matchesSearch =
-        row.agency.name.toLowerCase().includes(search.toLowerCase()) ||
-        (row.agency.contact_name && row.agency.contact_name.toLowerCase().includes(search.toLowerCase())) ||
-        (row.agency.contact_email && row.agency.contact_email.toLowerCase().includes(search.toLowerCase()));
-      const matchesType = typeFilter === 'all' || row.agency.type === typeFilter;
-      const matchesStatus = statusFilter === 'all' || row.agency.status === statusFilter;
-      return matchesSearch && matchesType && matchesStatus;
-    });
-
-    list.sort((a, b) => {
-      const aVal = getSortValue(a, sortField);
-      const bVal = getSortValue(b, sortField);
-      const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
-      return sortDir === 'asc' ? cmp : -cmp;
-    });
-
-    return list;
-  }, [rows, search, typeFilter, statusFilter, sortField, sortDir]);
-
-  // Reset to page 0 when filters or page size change
-  const filterKey = `${search}|${typeFilter}|${statusFilter}|${sortField}|${sortDir}|${pageSize}`;
-  useMemo(() => { setPage(0); }, [filterKey]);
-
-  const totalPages = Math.ceil(filtered.length / pageSize);
-  const paged = filtered.slice(page * pageSize, (page + 1) * pageSize);
+  const totalPages = Math.ceil(totalAgencies / pageSize);
 
   return (
     <div className="bg-white rounded-lg border border-gray-200">
@@ -130,37 +92,12 @@ export function AgencyTable({ rows, onAddAgency }: AgencyTableProps) {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input
             placeholder="Search agencies..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             className="pl-9"
           />
         </div>
         <div className="flex items-center gap-3">
-          <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="All Types" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              <SelectItem value="Hotel">Hotel</SelectItem>
-              <SelectItem value="DMC">DMC</SelectItem>
-              <SelectItem value="Travel Agent">Travel Agent</SelectItem>
-              <SelectItem value="OTA">OTA</SelectItem>
-              <SelectItem value="Concierge">Concierge</SelectItem>
-              <SelectItem value="Other">Other</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="All Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="suspended">Suspended</SelectItem>
-              <SelectItem value="archived">Archived</SelectItem>
-            </SelectContent>
-          </Select>
           <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { window.location.hash = '#/matching'; }}>
             <Link2 className="h-4 w-4" />
             Match Agencies
@@ -172,89 +109,80 @@ export function AgencyTable({ rows, onAddAgency }: AgencyTableProps) {
         </div>
       </div>
 
-      {/* Results count */}
-      {(search || typeFilter !== 'all' || statusFilter !== 'all') && (
-        <div className="px-4 py-2 bg-gray-50 border-b text-xs text-gray-500">
-          Showing {filtered.length} of {rows.length} agencies
-          {search && <> matching "{search}"</>}
-        </div>
-      )}
-
       {/* Table */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900" />
+        </div>
+      ) : agencies.length === 0 ? (
         <div className="px-6 py-12 text-center text-gray-500">
-          {rows.length === 0
+          {totalAgencies === 0
             ? 'No agencies yet. Add your first agency to get started.'
-            : 'No agencies match your filters.'}
+            : 'No agencies match your search.'}
         </div>
       ) : (
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="cursor-pointer select-none" onClick={() => handleSort('name')}>
-                <span className="flex items-center">Agency <SortIcon field="name" /></span>
-              </TableHead>
+              <TableHead className="w-8"></TableHead>
+              <TableHead>Agency</TableHead>
               <TableHead>Contact</TableHead>
-              <TableHead className="cursor-pointer select-none" onClick={() => handleSort('type')}>
-                <span className="flex items-center">Type <SortIcon field="type" /></span>
-              </TableHead>
+              <TableHead>Type</TableHead>
               <TableHead>Rate</TableHead>
-              <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort('bookings')}>
-                <span className="flex items-center justify-end">Bookings <SortIcon field="bookings" /></span>
-              </TableHead>
-              <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort('revenue')}>
-                <span className="flex items-center justify-end">Revenue <SortIcon field="revenue" /></span>
-              </TableHead>
-              <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort('earned')}>
-                <span className="flex items-center justify-end">Earned <SortIcon field="earned" /></span>
-              </TableHead>
-              <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort('paid')}>
-                <span className="flex items-center justify-end">Paid <SortIcon field="paid" /></span>
-              </TableHead>
-              <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort('outstanding')}>
-                <span className="flex items-center justify-end">Outstanding <SortIcon field="outstanding" /></span>
-              </TableHead>
-              <TableHead className="cursor-pointer select-none" onClick={() => handleSort('status')}>
-                <span className="flex items-center">Status <SortIcon field="status" /></span>
-              </TableHead>
+              <TableHead>Location</TableHead>
+              <TableHead>Status</TableHead>
               <TableHead className="w-10"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {paged.map((row) => (
+            {agencies.map((agency) => (
               <TableRow
-                key={row.agency.id}
+                key={agency.id}
                 className="cursor-pointer"
                 onClick={() => {
-                  window.location.hash = `#/agency/${row.agency.id}`;
+                  window.location.hash = `#/agency/${agency.id}`;
                 }}
               >
-                <TableCell className="font-medium">{row.agency.name}</TableCell>
+                <TableCell>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span>
+                          {agency.moovs_company_id ? (
+                            <Link className="h-4 w-4 text-green-500" />
+                          ) : (
+                            <Unlink className="h-4 w-4 text-gray-300" />
+                          )}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {agency.moovs_company_id ? 'Linked to Moovs company' : 'Not linked — trips won\'t auto-match'}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </TableCell>
+                <TableCell className="font-medium">{agency.name}</TableCell>
                 <TableCell className="text-sm text-gray-500">
-                  {row.agency.contact_name || '—'}
+                  {agency.contact_name || '—'}
                 </TableCell>
                 <TableCell>
                   <Badge
                     variant="secondary"
-                    className={TYPE_BADGE_COLORS[row.agency.type]}
+                    className={TYPE_BADGE_COLORS[agency.type]}
                   >
-                    {row.agency.type}
+                    {agency.type}
                   </Badge>
                 </TableCell>
-                <TableCell>{formatRate(row)}</TableCell>
-                <TableCell className="text-right">{row.bookings}</TableCell>
-                <TableCell className="text-right">{formatCurrency(row.revenue)}</TableCell>
-                <TableCell className="text-right text-green-600 font-medium">{formatCurrency(row.earned)}</TableCell>
-                <TableCell className="text-right">{formatCurrency(row.paid)}</TableCell>
-                <TableCell className={`text-right font-semibold ${row.outstanding > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  {formatCurrency(row.outstanding)}
+                <TableCell>{formatRate(agency)}</TableCell>
+                <TableCell className="text-sm text-gray-500">
+                  {[agency.city, agency.state].filter(Boolean).join(', ') || '—'}
                 </TableCell>
                 <TableCell>
                   <Badge
                     variant="secondary"
-                    className={STATUS_BADGE_COLORS[row.agency.status]}
+                    className={STATUS_BADGE_COLORS[agency.status]}
                   >
-                    {row.agency.status}
+                    {agency.status}
                   </Badge>
                 </TableCell>
                 <TableCell>
@@ -267,48 +195,46 @@ export function AgencyTable({ rows, onAddAgency }: AgencyTableProps) {
       )}
 
       {/* Pagination */}
-      {filtered.length > 0 && (
-        <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-gray-500">
-            <span>Show</span>
-            <Select value={String(pageSize)} onValueChange={(v) => setPageSize(v === 'all' ? filtered.length : parseInt(v))}>
-              <SelectTrigger className="w-[80px] h-8">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="10">10</SelectItem>
-                <SelectItem value="25">25</SelectItem>
-                <SelectItem value="50">50</SelectItem>
-                <SelectItem value="all">All</SelectItem>
-              </SelectContent>
-            </Select>
-            <span>of {filtered.length} agencies</span>
-          </div>
-          {totalPages > 1 && (
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page === 0}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <span className="text-sm text-gray-600">
-                Page {page + 1} of {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= totalPages - 1}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
+      <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm text-gray-500">
+          <span>Show</span>
+          <Select value={String(pageSize)} onValueChange={(v) => onPageSizeChange(v === 'all' ? 9999 : parseInt(v))}>
+            <SelectTrigger className="w-[80px] h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="10">10</SelectItem>
+              <SelectItem value="25">25</SelectItem>
+              <SelectItem value="50">50</SelectItem>
+              <SelectItem value="all">All</SelectItem>
+            </SelectContent>
+          </Select>
+          <span>of {totalAgencies} agencies</span>
         </div>
-      )}
+        {totalPages > 1 && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page === 0}
+              onClick={() => onPageChange(page - 1)}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-sm text-gray-600">
+              Page {page + 1} of {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= totalPages - 1}
+              onClick={() => onPageChange(page + 1)}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

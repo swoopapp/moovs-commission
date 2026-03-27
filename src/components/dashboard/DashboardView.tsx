@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useOperator } from '../../contexts/OperatorContext';
-import { fetchAgencies } from '../../services/agencyService';
+import { fetchAgenciesPaginated } from '../../services/agencyService';
 import { fetchDashboardStats, DashboardStats, AgencyTableRow } from '../../services/dashboardService';
+import { Agency } from '../../types/commission';
 import { KPICards } from './KPICards';
 import { AgencyTable } from './AgencyTable';
 import { CommissionTrendChart } from './CommissionTrendChart';
@@ -41,30 +42,53 @@ function exportAgenciesToCsv(rows: AgencyTableRow[]) {
 export function DashboardView({ onRegisterExport }: DashboardViewProps) {
   const operator = useOperator();
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [agencies, setAgencies] = useState<Agency[]>([]);
+  const [totalAgencies, setTotalAgencies] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [tableLoading, setTableLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createAgencyOpen, setCreateAgencyOpen] = useState(false);
 
-  const loadData = useCallback(async () => {
+  // Table pagination state
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(25);
+  const [search, setSearch] = useState('');
+
+  // Load KPI stats (only agencies with attributions — lightweight)
+  const loadStats = useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null);
-
-      const agencies = await fetchAgencies(operator.operatorId);
-      const dashStats = await fetchDashboardStats(operator.operatorId, agencies);
-
+      // Only fetch agencies that have attributions for KPI computation
+      // For now use a reasonable page to get stats — this will be fast since
+      // most agencies have 0 attributions
+      const dashStats = await fetchDashboardStats(operator.operatorId, []);
       setStats(dashStats);
     } catch (err) {
-      console.error('Failed to load dashboard:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load dashboard');
-    } finally {
-      setLoading(false);
+      console.error('Failed to load stats:', err);
     }
   }, [operator.operatorId]);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  // Load paginated agencies for table
+  const loadAgencies = useCallback(async () => {
+    try {
+      setTableLoading(true);
+      const result = await fetchAgenciesPaginated(operator.operatorId, {
+        offset: page * pageSize,
+        limit: pageSize,
+        search: search || undefined,
+      });
+      setAgencies(result.agencies);
+      setTotalAgencies(result.total);
+    } catch (err) {
+      console.error('Failed to load agencies:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load agencies');
+    } finally {
+      setTableLoading(false);
+      setLoading(false);
+    }
+  }, [operator.operatorId, page, pageSize, search]);
+
+  useEffect(() => { loadStats(); }, [loadStats]);
+  useEffect(() => { loadAgencies(); }, [loadAgencies]);
 
   // Register export function with parent
   useEffect(() => {
@@ -90,23 +114,36 @@ export function DashboardView({ onRegisterExport }: DashboardViewProps) {
     );
   }
 
-  if (!stats) return null;
-
   return (
     <div className="space-y-6">
-      <KPICards
-        totalOwed={stats.totalOwed}
-        paidThisPeriod={stats.paidThisPeriod}
-        activeAgencies={stats.activeAgencies}
-        pendingPayouts={stats.pendingPayouts}
+      {stats && (
+        <>
+          <KPICards
+            totalOwed={stats.totalOwed}
+            paidThisPeriod={stats.paidThisPeriod}
+            activeAgencies={totalAgencies}
+            pendingPayouts={stats.pendingPayouts}
+          />
+          <CommissionTrendChart data={stats.agencyMonthlyTrend} agencyNames={stats.topAgencyNames} />
+        </>
+      )}
+      <AgencyTable
+        agencies={agencies}
+        totalAgencies={totalAgencies}
+        page={page}
+        pageSize={pageSize}
+        loading={tableLoading}
+        onPageChange={setPage}
+        onPageSizeChange={(size) => { setPageSize(size); setPage(0); }}
+        onSearchChange={(q) => { setSearch(q); setPage(0); }}
+        onAddAgency={() => setCreateAgencyOpen(true)}
+        onRefresh={() => { loadAgencies(); loadStats(); }}
       />
-      <CommissionTrendChart data={stats.agencyMonthlyTrend} agencyNames={stats.topAgencyNames} />
-      <AgencyTable rows={stats.agencyRows} onAddAgency={() => setCreateAgencyOpen(true)} />
 
       <CreateAgencyDialog
         open={createAgencyOpen}
         onOpenChange={setCreateAgencyOpen}
-        onCreated={loadData}
+        onCreated={() => { loadAgencies(); loadStats(); }}
       />
     </div>
   );
