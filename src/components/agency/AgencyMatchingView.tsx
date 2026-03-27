@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useOperator } from '../../contexts/OperatorContext';
-import { fetchAgenciesPaginated, updateAgency } from '../../services/agencyService';
+import { fetchAgenciesPaginated, updateAgency, fetchLinkedCompanyIds } from '../../services/agencyService';
 import { fetchMoovsCompanies, MoovsCompany } from '../../services/companyLookupService';
 import { Agency } from '../../types/commission';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -30,6 +30,9 @@ export function AgencyMatchingView() {
   const [unmatchedCount, setUnmatchedCount] = useState(0);
   const [matchedCount, setMatchedCount] = useState(0);
 
+  // Set of company IDs already linked to an agency
+  const [linkedCompanyIds, setLinkedCompanyIds] = useState<Set<string>>(new Set());
+
   // Load companies once
   useEffect(() => {
     if (!operator.moovsOperatorId) return;
@@ -38,14 +41,16 @@ export function AgencyMatchingView() {
       .catch((err) => console.error('Failed to fetch companies:', err));
   }, [operator.moovsOperatorId]);
 
-  // Load counts
+  // Load counts + linked company IDs
   const loadCounts = useCallback(async () => {
-    const [unmatched, matched] = await Promise.all([
+    const [unmatched, matched, linked] = await Promise.all([
       fetchAgenciesPaginated(operator.operatorId, { limit: 1, unmatchedOnly: true }),
       fetchAgenciesPaginated(operator.operatorId, { limit: 1, matchedOnly: true }),
+      fetchLinkedCompanyIds(operator.operatorId),
     ]);
     setUnmatchedCount(unmatched.total);
     setMatchedCount(matched.total);
+    setLinkedCompanyIds(linked);
   }, [operator.operatorId]);
 
   // Load agencies page
@@ -91,16 +96,23 @@ export function AgencyMatchingView() {
   }
 
   const filteredCompanies = useMemo(() => {
-    // For now we don't filter out already-linked companies since we paginate agencies
-    // and don't have the full linked set in memory
-    if (!companySearch.trim()) return companies;
-    const q = companySearch.toLowerCase();
-    return companies.filter(
-      (c) =>
-        c.name.toLowerCase().includes(q) ||
-        (c.email && c.email.toLowerCase().includes(q))
-    );
-  }, [companies, companySearch]);
+    let list = companies;
+    if (companySearch.trim()) {
+      const q = companySearch.toLowerCase();
+      list = list.filter(
+        (c) =>
+          c.name.toLowerCase().includes(q) ||
+          (c.email && c.email.toLowerCase().includes(q))
+      );
+    }
+    // Sort: available first, then linked
+    return list.sort((a, b) => {
+      const aLinked = linkedCompanyIds.has(a.company_id);
+      const bLinked = linkedCompanyIds.has(b.company_id);
+      if (aLinked !== bLinked) return aLinked ? 1 : -1;
+      return a.name.localeCompare(b.name);
+    });
+  }, [companies, companySearch, linkedCompanyIds]);
 
   const selectedAgency = selectedAgencyId
     ? agencies.find((a) => a.id === selectedAgencyId) || null
@@ -319,23 +331,37 @@ export function AgencyMatchingView() {
                   {companySearch ? 'No matching companies' : 'No available companies'}
                 </p>
               ) : (
-                filteredCompanies.map((c) => (
-                  <button
-                    key={c.company_id}
-                    className="w-full text-left px-4 py-3 hover:bg-green-50 transition-colors group"
-                    onClick={() => handleMatch(selectedAgencyId!, c.company_id)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{c.name}</p>
-                        <p className="text-xs text-gray-500">
-                          {[c.email, c.phone_number].filter(Boolean).join(' · ') || 'No contact info'}
-                        </p>
+                filteredCompanies.map((c) => {
+                  const isLinked = linkedCompanyIds.has(c.company_id);
+                  return (
+                    <button
+                      key={c.company_id}
+                      className={`w-full text-left px-4 py-3 transition-colors ${
+                        isLinked
+                          ? 'opacity-50 cursor-not-allowed bg-gray-50'
+                          : 'hover:bg-green-50 group'
+                      }`}
+                      onClick={() => !isLinked && handleMatch(selectedAgencyId!, c.company_id)}
+                      disabled={isLinked}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{c.name}</p>
+                          <p className="text-xs text-gray-500">
+                            {isLinked
+                              ? 'Already linked to another agency'
+                              : [c.email, c.phone_number].filter(Boolean).join(' · ') || 'No contact info'}
+                          </p>
+                        </div>
+                        {isLinked ? (
+                          <Link2 className="h-4 w-4 text-gray-400" />
+                        ) : (
+                          <Check className="h-4 w-4 text-green-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        )}
                       </div>
-                      <Check className="h-4 w-4 text-green-600 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </div>
-                  </button>
-                ))
+                    </button>
+                  );
+                })
               )}
             </div>
           </CardContent>

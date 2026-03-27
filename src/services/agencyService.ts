@@ -78,6 +78,13 @@ export async function fetchAgenciesPaginated(
   return { agencies: data, total };
 }
 
+export async function fetchLinkedCompanyIds(operatorId: string): Promise<Set<string>> {
+  const url = `${BASE_REST_URL}/agencies?operator_id=eq.${encodeURIComponent(operatorId)}&moovs_company_id=not.is.null&select=moovs_company_id`;
+  const res = await fetch(url, { headers: headers({ 'Range': '0-9999' }) });
+  const rows = await handleResponse<Array<{ moovs_company_id: string }>>(res, 'fetchLinkedCompanyIds');
+  return new Set(rows.map((r) => r.moovs_company_id));
+}
+
 export async function fetchAgencyById(id: string): Promise<Agency | null> {
   const url = `${BASE_REST_URL}/agencies?id=eq.${encodeURIComponent(id)}&limit=1`;
   const res = await fetch(url, { headers: headers() });
