@@ -31,6 +31,12 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
   const [contractStart, setContractStart] = useState(agency.contract_start || '');
   const [contractEnd, setContractEnd] = useState(agency.contract_end || '');
   const [notes, setNotes] = useState(agency.notes || '');
+  const [address, setAddress] = useState(agency.address || '');
+  const [city, setCity] = useState(agency.city || '');
+  const [agencyState, setAgencyState] = useState(agency.state || '');
+  const [zipCode, setZipCode] = useState(agency.zip_code || '');
+  const [country, setCountry] = useState(agency.country || 'US');
+  const [marketSegment, setMarketSegment] = useState(agency.market_segment || '');
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -50,6 +56,12 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
         contract_start: contractStart || null,
         contract_end: contractEnd || null,
         notes: notes || null,
+        address: address || null,
+        city: city || null,
+        state: agencyState || null,
+        zip_code: zipCode || null,
+        country: country || null,
+        market_segment: marketSegment || null,
       });
       onUpdated(updated);
       toast.success('Agency settings saved');
@@ -179,6 +191,76 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
               ) : (
                 <span>This agency earns ${commissionRate || 0} flat per trip as commission.</span>
               )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Address & Segment</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="address">Address</Label>
+              <Input
+                id="address"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="Street address"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="city">City</Label>
+                <Input
+                  id="city"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="agency-state">State</Label>
+                <Input
+                  id="agency-state"
+                  value={agencyState}
+                  onChange={(e) => setAgencyState(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="zip-code">Zip Code</Label>
+                <Input
+                  id="zip-code"
+                  value={zipCode}
+                  onChange={(e) => setZipCode(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="country">Country</Label>
+                <Input
+                  id="country"
+                  value={country}
+                  onChange={(e) => setCountry(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="market-segment">Market Segment</Label>
+              <Select value={marketSegment || 'none'} onValueChange={(v) => setMarketSegment(v === 'none' ? '' : v)}>
+                <SelectTrigger className="max-w-[250px]">
+                  <SelectValue placeholder="Select segment" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  <SelectItem value="US Domestic">US Domestic</SelectItem>
+                  <SelectItem value="Japan">Japan</SelectItem>
+                  <SelectItem value="China">China</SelectItem>
+                  <SelectItem value="Korea">Korea</SelectItem>
+                  <SelectItem value="Military">Military</SelectItem>
+                  <SelectItem value="Oceania">Oceania</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </CardContent>
         </Card>

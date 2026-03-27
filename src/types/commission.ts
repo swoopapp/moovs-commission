@@ -18,6 +18,12 @@ export interface Agency {
   contact_name: string | null;
   contact_email: string | null;
   contact_phone: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  zip_code: string | null;
+  country: string | null;
+  market_segment: string | null;
   payment_terms: string | null;
   contract_start: string | null;
   contract_end: string | null;

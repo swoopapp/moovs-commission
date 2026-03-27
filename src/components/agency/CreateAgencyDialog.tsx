@@ -68,6 +68,12 @@ export function CreateAgencyDialog({ open, onOpenChange, onCreated }: CreateAgen
   const [contactName, setContactName] = useState('');
   const [contactEmail, setContactEmail] = useState('');
   const [contactPhone, setContactPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [city, setCity] = useState('');
+  const [agencyState, setAgencyState] = useState('');
+  const [zipCode, setZipCode] = useState('');
+  const [country, setCountry] = useState('US');
+  const [marketSegment, setMarketSegment] = useState('');
 
   // Company lookup
   const [companies, setCompanies] = useState<MoovsCompany[]>([]);
@@ -145,6 +151,12 @@ export function CreateAgencyDialog({ open, onOpenChange, onCreated }: CreateAgen
     setContactName('');
     setContactEmail('');
     setContactPhone('');
+    setAddress('');
+    setCity('');
+    setAgencyState('');
+    setZipCode('');
+    setCountry('US');
+    setMarketSegment('');
     setCommissionRate('10');
     setCommissionType('percent');
     setCommissionBase('total_amount');
@@ -167,6 +179,12 @@ export function CreateAgencyDialog({ open, onOpenChange, onCreated }: CreateAgen
         contact_name: contactName.trim() || null,
         contact_email: contactEmail.trim() || null,
         contact_phone: contactPhone.trim() || null,
+        address: address.trim() || null,
+        city: city.trim() || null,
+        state: agencyState.trim() || null,
+        zip_code: zipCode.trim() || null,
+        country: country.trim() || null,
+        market_segment: marketSegment.trim() || null,
         commission_rate: parseFloat(commissionRate) || 0,
         commission_type: commissionType,
         commission_base: commissionBase,
