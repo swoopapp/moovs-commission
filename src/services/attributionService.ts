@@ -1,21 +1,12 @@
 import { config } from '../config/env';
 import { Agency, Reservation, ReservationAttribution } from '../types/commission';
 
-const BASE_REST_URL = `${config.supabaseUrl}/rest/v1`;
-
-function headers(extra?: Record<string, string>): Record<string, string> {
-  return {
-    apikey: config.supabaseAnonKey,
-    Authorization: `Bearer ${config.supabaseAnonKey}`,
-    'Content-Type': 'application/json',
-    ...extra,
-  };
-}
+const API = config.apiBaseUrl;
 
 async function handleResponse<T>(response: Response, context: string): Promise<T> {
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`${context}: ${response.status} ${response.statusText} — ${body}`);
+    throw new Error(`${context}: ${response.status} ${response.statusText} - ${body}`);
   }
   return response.json() as Promise<T>;
 }
@@ -32,16 +23,14 @@ export async function fetchAttributionsByReservations(
   if (reservationIds.length === 0) return [];
 
   const idList = reservationIds.map(encodeURIComponent).join(',');
-  const url = `${BASE_REST_URL}/reservation_attributions?reservation_id=in.(${idList})`;
-  const res = await fetch(url, { headers: headers() });
+  const res = await fetch(`${API}/attributions?reservation_ids=${idList}`);
   return handleResponse<ReservationAttribution[]>(res, 'fetchAttributionsByReservations');
 }
 
 export async function fetchAttributionsByAgency(
   agencyId: string,
 ): Promise<ReservationAttribution[]> {
-  const url = `${BASE_REST_URL}/reservation_attributions?agency_id=eq.${encodeURIComponent(agencyId)}&order=attributed_at.desc`;
-  const res = await fetch(url, { headers: headers() });
+  const res = await fetch(`${API}/attributions?agency_id=${encodeURIComponent(agencyId)}`);
   return handleResponse<ReservationAttribution[]>(res, 'fetchAttributionsByAgency');
 }
 
@@ -50,10 +39,9 @@ export async function fetchAttributionsByAgency(
 export async function createAttribution(
   data: CreateAttributionInput,
 ): Promise<ReservationAttribution> {
-  const url = `${BASE_REST_URL}/reservation_attributions`;
-  const res = await fetch(url, {
+  const res = await fetch(`${API}/attributions`, {
     method: 'POST',
-    headers: headers({ Prefer: 'return=representation' }),
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
   const rows = await handleResponse<ReservationAttribution[]>(res, 'createAttribution');
@@ -66,10 +54,9 @@ export async function createAttributions(
 ): Promise<ReservationAttribution[]> {
   if (data.length === 0) return [];
 
-  const url = `${BASE_REST_URL}/reservation_attributions`;
-  const res = await fetch(url, {
+  const res = await fetch(`${API}/attributions`, {
     method: 'POST',
-    headers: headers({ Prefer: 'return=representation' }),
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
   return handleResponse<ReservationAttribution[]>(res, 'createAttributions');

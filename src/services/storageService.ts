@@ -1,27 +1,19 @@
 import { config } from '../config/env';
 
-const STORAGE_BUCKET = 'operator-logos';
-
 export async function uploadLogo(file: File): Promise<string> {
-  const ext = file.name.split('.').pop() || 'png';
-  const path = `logos/${crypto.randomUUID()}.${ext}`;
-  const url = `${config.supabaseUrl}/storage/v1/object/${STORAGE_BUCKET}/${path}`;
+  const formData = new FormData();
+  formData.append('file', file);
 
-  const res = await fetch(url, {
+  const res = await fetch(`${config.apiBaseUrl}/upload-logo`, {
     method: 'POST',
-    headers: {
-      apikey: config.supabaseAnonKey,
-      Authorization: `Bearer ${config.supabaseAnonKey}`,
-      'Content-Type': file.type,
-    },
-    body: file,
+    body: formData,
   });
 
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`uploadLogo: ${res.status} — ${body}`);
+    throw new Error(`uploadLogo: ${res.status} - ${body}`);
   }
 
-  // Return public URL
-  return `${config.supabaseUrl}/storage/v1/object/public/${STORAGE_BUCKET}/${path}`;
+  const { url } = await res.json() as { url: string };
+  return url;
 }
