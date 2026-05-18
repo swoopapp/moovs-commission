@@ -5,6 +5,11 @@ export interface CommissionOperator {
   display_name: string;
   auth_password?: string;
   auth_password_set?: boolean;
+  portal_token_enabled?: boolean;
+  portal_token_created_at?: string | null;
+  portal_token_last_used_at?: string | null;
+  portal_token_expires_at?: string | null;
+  portal_token?: string;
   logo_url: string | null;
   primary_color: string | null;
   secondary_color: string | null;

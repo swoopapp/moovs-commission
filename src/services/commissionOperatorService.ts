@@ -35,7 +35,7 @@ export async function fetchAllOperators(): Promise<CommissionOperator[]> {
 // --- CRUD ---
 
 export async function createOperator(
-  data: Pick<CommissionOperator, 'moovs_operator_id' | 'slug' | 'display_name' | 'auth_password'> &
+  data: Pick<CommissionOperator, 'moovs_operator_id' | 'slug' | 'display_name'> &
     Partial<Pick<CommissionOperator, 'logo_url' | 'primary_color' | 'secondary_color' | 'contact_email' | 'contact_phone' | 'status'>>,
 ): Promise<CommissionOperator> {
   const res = await fetch(`${API}/commission-operators`, {
@@ -67,4 +67,20 @@ export async function deleteOperator(id: string): Promise<void> {
     method: 'DELETE',
   });
   return handleVoidResponse(res, 'deleteOperator');
+}
+
+export async function generateOperatorPortalToken(id: string): Promise<CommissionOperator> {
+  const res = await fetch(`${API}/commission-operators/${encodeURIComponent(id)}/portal-token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  return handleResponse<CommissionOperator>(res, 'generateOperatorPortalToken');
+}
+
+export async function revokeOperatorPortalToken(id: string): Promise<void> {
+  const res = await fetch(`${API}/commission-operators/${encodeURIComponent(id)}/portal-token`, {
+    method: 'DELETE',
+  });
+  return handleVoidResponse(res, 'revokeOperatorPortalToken');
 }

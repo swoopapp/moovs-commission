@@ -1,42 +1,15 @@
 // src/components/auth/LoginPage.tsx
-import { useState } from 'react';
 import { Button } from '../ui/button';
-import { Input } from '../ui/input';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { useOperator } from '../../contexts/OperatorContext';
-import { authenticateWithPassword } from '../../services/authService';
-import { Eye, EyeOff, Lock } from 'lucide-react';
+import { Link2, ShieldCheck } from 'lucide-react';
 
 interface LoginPageProps {
-  onAuthenticated: () => void;
+  error?: string | null;
 }
 
-export function LoginPage({ onAuthenticated }: LoginPageProps) {
+export function LoginPage({ error }: LoginPageProps) {
   const operator = useOperator();
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError('');
-
-    try {
-      const success = await authenticateWithPassword(operator.slug, password);
-      if (success) {
-        onAuthenticated();
-      } else {
-        setError('Invalid password');
-        setPassword('');
-      }
-    } catch {
-      setError('Unable to sign in. Try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center px-4">
@@ -62,32 +35,19 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
           </div>
         </div>
 
-        <div className="space-y-4">
-          {/* Password form */}
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <Input
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => { setPassword(e.target.value); setError(''); }}
-                placeholder="Enter password"
-                className={`pl-9 pr-10 h-11 ${error ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
-                autoFocus
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-            {error && <p className="text-sm text-red-500">{error}</p>}
-            <Button type="submit" className="w-full h-11" disabled={!password || isLoading}>
-              {isLoading ? 'Signing in...' : 'Sign in'}
-            </Button>
-          </form>
+        <div className="space-y-4 rounded-xl border border-gray-200 bg-gray-50 p-4 text-center">
+          <ShieldCheck className="mx-auto h-8 w-8 text-emerald-600" />
+          <div>
+            <h2 className="font-medium text-gray-900">Secure link required</h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Password login is disabled. Use the secure commission portal link sent by Moovs.
+            </p>
+          </div>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          <Button type="button" variant="outline" className="w-full h-11" disabled>
+            <Link2 className="mr-2 h-4 w-4" />
+            Waiting for secure link
+          </Button>
         </div>
       </div>
 

@@ -39,6 +39,24 @@ export async function authenticateWithPassword(slug: string, password: string): 
   return true;
 }
 
+export async function authenticateWithPortalToken(slug: string, token: string): Promise<boolean> {
+  const response = await fetch('/api/operator-auth/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ slug, token }),
+  });
+
+  if (!response.ok) return false;
+
+  const session: AuthSession = {
+    authenticated: true,
+    method: 'sso',
+    timestamp: Date.now(),
+  };
+  sessionStorage.setItem(authKey(slug), JSON.stringify(session));
+  return true;
+}
+
 export function logout(slug: string): void {
   sessionStorage.removeItem(authKey(slug));
 }

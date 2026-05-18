@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import crypto from 'crypto';
 import { appQuery } from '../appDb.js';
 import { hasAdminSecret } from '../config.js';
 
@@ -6,6 +7,14 @@ const app = new Hono();
 
 function requireAdmin(c: any) {
   return hasAdminSecret(c.req.header('x-admin-secret'));
+}
+
+function generatePortalToken(): string {
+  return crypto.randomBytes(32).toString('base64url');
+}
+
+function hashPortalToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
 }
 
 // GET /commission-operators — list all, or ?slug=X for single lookup
@@ -38,6 +47,86 @@ app.get('/commission-operators/:id', async (c) => {
   }
 });
 
+// POST /commission-operators/portal-token/verify
+app.post('/commission-operators/portal-token/verify', async (c) => {
+  try {
+    const { slug, token } = await c.req.json();
+    if (!slug || !token) return c.json({ error: 'Missing slug or token' }, 400);
+
+    const r = await appQuery(
+      `SELECT * FROM commission_operators
+       WHERE slug = $1
+         AND portal_token_hash = $2
+         AND portal_token_enabled = true
+         AND status = 'active'
+         AND (portal_token_expires_at IS NULL OR portal_token_expires_at > now())
+       LIMIT 1`,
+      [slug, hashPortalToken(String(token))],
+    );
+
+    if (r.rows.length === 0) return c.json({ error: 'Invalid token' }, 401);
+
+    await appQuery(
+      `UPDATE commission_operators SET portal_token_last_used_at = now(), updated_at = now() WHERE id = $1`,
+      [r.rows[0].id],
+    );
+
+    return c.json(r.rows[0]);
+  } catch (err: any) {
+    console.error('Error verifying commission operator portal token:', err);
+    return c.json({ error: 'Internal Server Error' }, 500);
+  }
+});
+
+// POST /commission-operators/:id/portal-token
+app.post('/commission-operators/:id/portal-token', async (c) => {
+  try {
+    if (!requireAdmin(c)) return c.json({ error: 'Unauthorized' }, 401);
+    const id = c.req.param('id');
+    const body = await c.req.json().catch(() => ({}));
+    const token = generatePortalToken();
+    const r = await appQuery(
+      `UPDATE commission_operators
+       SET portal_token_hash = $1,
+           portal_token_enabled = true,
+           portal_token_expires_at = $2,
+           portal_token_created_at = now(),
+           portal_token_last_used_at = NULL,
+           updated_at = now()
+       WHERE id = $3
+       RETURNING *`,
+      [hashPortalToken(token), body?.expires_at || null, id],
+    );
+    if (r.rows.length === 0) return c.json({ error: 'Not found' }, 404);
+    return c.json({ ...r.rows[0], portal_token: token });
+  } catch (err: any) {
+    console.error('Error generating commission operator portal token:', err);
+    return c.json({ error: err.message || 'Internal Server Error' }, 500);
+  }
+});
+
+// DELETE /commission-operators/:id/portal-token
+app.delete('/commission-operators/:id/portal-token', async (c) => {
+  try {
+    if (!requireAdmin(c)) return c.json({ error: 'Unauthorized' }, 401);
+    const r = await appQuery(
+      `UPDATE commission_operators
+       SET portal_token_hash = NULL,
+           portal_token_enabled = false,
+           portal_token_expires_at = NULL,
+           portal_token_last_used_at = NULL,
+           updated_at = now()
+       WHERE id = $1`,
+      [c.req.param('id')],
+    );
+    if (r.rowCount === 0) return c.json({ error: 'Not found' }, 404);
+    return c.json({ ok: true });
+  } catch (err: any) {
+    console.error('Error revoking commission operator portal token:', err);
+    return c.json({ error: 'Internal Server Error' }, 500);
+  }
+});
+
 // POST /commission-operators
 app.post('/commission-operators', async (c) => {
   try {
@@ -46,7 +135,7 @@ app.post('/commission-operators', async (c) => {
     const { moovs_operator_id, slug, display_name, auth_password, logo_url, primary_color, secondary_color, contact_email, contact_phone, status } = body;
     const r = await appQuery(
       `INSERT INTO commission_operators (moovs_operator_id, slug, display_name, auth_password, logo_url, primary_color, secondary_color, contact_email, contact_phone, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE($10, 'active'))
+       VALUES ($1, $2, $3, COALESCE($4, encode(gen_random_bytes(32), 'hex')), $5, $6, $7, $8, $9, COALESCE($10, 'active'))
        RETURNING *`,
       [moovs_operator_id, slug, display_name, auth_password, logo_url, primary_color, secondary_color, contact_email, contact_phone, status],
     );

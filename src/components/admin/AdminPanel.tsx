@@ -7,6 +7,8 @@ import {
   createOperator,
   updateOperator,
   deleteOperator,
+  generateOperatorPortalToken,
+  revokeOperatorPortalToken,
 } from '../../services/commissionOperatorService';
 import { lookupMoovsOperator, MoovsOperatorDetails } from '../../services/moovsOperatorService';
 import { uploadLogo } from '../../services/storageService';
@@ -15,6 +17,7 @@ import { Input } from '../ui/input';
 import {
   Plus, Pencil, Trash2, ExternalLink, X, Search, Loader2,
   CheckCircle2, AlertCircle, Truck, Users, Calendar, Activity,
+  Link2, Ban,
 } from 'lucide-react';
 import moovsLogo from '../../assets/moovs-logo.png';
 
@@ -28,7 +31,6 @@ interface OperatorFormData {
   moovs_operator_id: string;
   slug: string;
   display_name: string;
-  auth_password: string;
   primary_color: string;
   secondary_color: string;
   logo_url: string;
@@ -40,7 +42,6 @@ const emptyForm: OperatorFormData = {
   moovs_operator_id: '',
   slug: '',
   display_name: '',
-  auth_password: '',
   primary_color: '',
   secondary_color: '',
   logo_url: '',
@@ -52,7 +53,6 @@ interface FormErrors {
   moovs_operator_id?: string;
   slug?: string;
   display_name?: string;
-  auth_password?: string;
 }
 
 function validateForm(form: OperatorFormData, editingId: string | null, existing: CommissionOperator[]): FormErrors {
@@ -74,9 +74,6 @@ function validateForm(form: OperatorFormData, editingId: string | null, existing
   if (!form.display_name.trim()) {
     errors.display_name = 'Display name is required';
   }
-  if (!editingId && !form.auth_password.trim()) {
-    errors.auth_password = 'Password is required for new operators';
-  }
   return errors;
 }
 
@@ -92,6 +89,8 @@ function AdminDashboard() {
   const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [saving, setSaving] = useState(false);
   const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [tokenActionId, setTokenActionId] = useState<string | null>(null);
 
   // Moovs lookup state
   const [lookingUp, setLookingUp] = useState(false);
@@ -119,7 +118,6 @@ function AdminDashboard() {
       moovs_operator_id: op.moovs_operator_id,
       slug: op.slug,
       display_name: op.display_name,
-      auth_password: '',
       primary_color: op.primary_color || '',
       secondary_color: op.secondary_color || '',
       logo_url: op.logo_url || '',
@@ -205,13 +203,10 @@ function AdminDashboard() {
         contact_email: form.contact_email || null,
         contact_phone: form.contact_phone || null,
       };
-      const password = form.auth_password.trim();
-      const payload = password ? { ...data, auth_password: password } : data;
-
       if (editingId) {
-        await updateOperator(editingId, payload);
+        await updateOperator(editingId, data);
       } else {
-        await createOperator(payload as Parameters<typeof createOperator>[0]);
+        await createOperator(data as Parameters<typeof createOperator>[0]);
       }
 
       handleCancel();
@@ -230,6 +225,42 @@ function AdminDashboard() {
       await loadOperators();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete');
+    }
+  };
+
+  const handleGeneratePortalLink = async (op: CommissionOperator) => {
+    setTokenActionId(op.id);
+    setError(null);
+    setNotice(null);
+    try {
+      const updated = await generateOperatorPortalToken(op.id);
+      if (!updated.portal_token) throw new Error('Token was not returned');
+
+      const url = new URL(`/${op.slug}`, window.location.origin);
+      url.searchParams.set('commission_token', updated.portal_token);
+      await navigator.clipboard.writeText(url.toString());
+      setNotice(`Secure portal link copied for ${op.display_name}.`);
+      await loadOperators();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate portal link');
+    } finally {
+      setTokenActionId(null);
+    }
+  };
+
+  const handleRevokePortalLink = async (op: CommissionOperator) => {
+    if (!confirm(`Revoke secure portal link for ${op.display_name}? Existing copied links will stop working.`)) return;
+    setTokenActionId(op.id);
+    setError(null);
+    setNotice(null);
+    try {
+      await revokeOperatorPortalToken(op.id);
+      setNotice(`Secure portal link revoked for ${op.display_name}.`);
+      await loadOperators();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to revoke portal link');
+    } finally {
+      setTokenActionId(null);
     }
   };
 
@@ -266,6 +297,12 @@ function AdminDashboard() {
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
             {error}
             <button onClick={() => setError(null)} className="ml-2 underline">dismiss</button>
+          </div>
+        )}
+        {notice && (
+          <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-700 text-sm">
+            {notice}
+            <button onClick={() => setNotice(null)} className="ml-2 underline">dismiss</button>
           </div>
         )}
 
@@ -397,21 +434,6 @@ function AdminDashboard() {
                 )}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {editingId ? 'Reset Password' : 'Default Password'}
-                </label>
-                <Input
-                  type="password"
-                  value={form.auth_password}
-                  onChange={e => updateField('auth_password', e.target.value)}
-                  placeholder={editingId ? 'Leave blank to keep current password' : 'Login password'}
-                  className={formErrors.auth_password ? 'border-red-300' : ''}
-                />
-                {formErrors.auth_password && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.auth_password}</p>
-                )}
-              </div>
-              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Contact Email</label>
                 <Input
                   value={form.contact_email}
@@ -526,10 +548,36 @@ function AdminDashboard() {
                       <span className={`text-xs px-1.5 py-0.5 rounded ${op.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
                         {op.status}
                       </span>
+                      {op.portal_token_enabled && (
+                        <>
+                          <span className="text-gray-300">&middot;</span>
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">
+                            secure link enabled
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => handleGeneratePortalLink(op)}
+                    disabled={tokenActionId === op.id}
+                    className="p-2.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 disabled:opacity-50"
+                    title="Generate and copy secure portal link"
+                  >
+                    {tokenActionId === op.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+                  </button>
+                  {op.portal_token_enabled && (
+                    <button
+                      onClick={() => handleRevokePortalLink(op)}
+                      disabled={tokenActionId === op.id}
+                      className="p-2.5 text-gray-400 hover:text-amber-600 rounded-lg hover:bg-amber-50 disabled:opacity-50"
+                      title="Revoke secure portal link"
+                    >
+                      <Ban className="w-4 h-4" />
+                    </button>
+                  )}
                   <a
                     href={`/${op.slug}`}
                     target="_blank"

@@ -66,6 +66,11 @@ export async function ensureCommissionTables(): Promise<void> {
       slug TEXT NOT NULL UNIQUE,
       display_name TEXT NOT NULL,
       auth_password TEXT NOT NULL,
+      portal_token_hash TEXT,
+      portal_token_enabled BOOLEAN NOT NULL DEFAULT false,
+      portal_token_created_at TIMESTAMPTZ,
+      portal_token_last_used_at TIMESTAMPTZ,
+      portal_token_expires_at TIMESTAMPTZ,
       logo_url TEXT,
       primary_color TEXT DEFAULT '#1a1a2e',
       secondary_color TEXT DEFAULT '#e2e8f0',
@@ -76,8 +81,15 @@ export async function ensureCommissionTables(): Promise<void> {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `);
+  await appQuery(`ALTER TABLE commission_operators ALTER COLUMN auth_password SET DEFAULT encode(gen_random_bytes(32), 'hex')`);
+  await appQuery(`ALTER TABLE commission_operators ADD COLUMN IF NOT EXISTS portal_token_hash TEXT`);
+  await appQuery(`ALTER TABLE commission_operators ADD COLUMN IF NOT EXISTS portal_token_enabled BOOLEAN NOT NULL DEFAULT false`);
+  await appQuery(`ALTER TABLE commission_operators ADD COLUMN IF NOT EXISTS portal_token_created_at TIMESTAMPTZ`);
+  await appQuery(`ALTER TABLE commission_operators ADD COLUMN IF NOT EXISTS portal_token_last_used_at TIMESTAMPTZ`);
+  await appQuery(`ALTER TABLE commission_operators ADD COLUMN IF NOT EXISTS portal_token_expires_at TIMESTAMPTZ`);
   await appQuery(`CREATE INDEX IF NOT EXISTS idx_commission_operators_slug ON commission_operators(slug)`);
   await appQuery(`CREATE INDEX IF NOT EXISTS idx_commission_operators_moovs_id ON commission_operators(moovs_operator_id)`);
+  await appQuery(`CREATE INDEX IF NOT EXISTS idx_commission_operators_portal_token_hash ON commission_operators(portal_token_hash) WHERE portal_token_hash IS NOT NULL`);
 
   // 1. Agencies
   await appQuery(`
