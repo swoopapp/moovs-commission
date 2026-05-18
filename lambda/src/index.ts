@@ -16,7 +16,7 @@ import commissionReservations from './routes/commissionReservations.js';
 import attributions from './routes/attributions.js';
 import payoutsCrud from './routes/payoutsCrud.js';
 import upload from './routes/upload.js';
-import migrate from './routes/migrate.js';
+import { getAdminSecret, getDashboardSecret, safeSecretEqual } from './config.js';
 
 const app = new Hono();
 
@@ -25,21 +25,29 @@ const app = new Hono();
 // Health check
 app.get('/health', (c) => c.json({ status: 'ok' }));
 
-// Debug endpoints (Moovs read replica)
-import { query as dbQuery } from './db.js';
-app.get('/debug-schema', async (c) => {
-  const table = c.req.query('table') || 'shuttle_booking';
-  const r = await dbQuery(
-    `SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = 'swoop' AND table_name = $1 ORDER BY ordinal_position`,
-    [table]
-  );
-  return c.json({ table, columns: r.rows });
-});
-app.get('/debug-query', async (c) => {
-  const sql = c.req.query('sql');
-  if (!sql) return c.json({ error: 'Missing sql param' }, 400);
-  const r = await dbQuery(sql);
-  return c.json({ rows: r.rows, count: r.rowCount });
+app.use('*', async (c, next) => {
+  if (process.env.REQUIRE_DASHBOARD_AUTH !== 'true') {
+    await next();
+    return;
+  }
+
+  const path = new URL(c.req.url).pathname;
+  if (path === '/health') {
+    await next();
+    return;
+  }
+
+  if (safeSecretEqual(c.req.header('x-dashboard-secret'), getDashboardSecret())) {
+    await next();
+    return;
+  }
+
+  if (safeSecretEqual(c.req.header('x-admin-secret'), getAdminSecret())) {
+    await next();
+    return;
+  }
+
+  return c.json({ error: 'Unauthorized' }, 401);
 });
 
 // Existing routes (Moovs data)
@@ -56,7 +64,6 @@ app.route('/', commissionReservations);
 app.route('/', attributions);
 app.route('/', payoutsCrud);
 app.route('/', upload);
-app.route('/', migrate);
 
 // 404 fallback
 app.notFound((c) => c.json({ error: 'Not found' }, 404));

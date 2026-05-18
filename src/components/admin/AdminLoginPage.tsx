@@ -43,7 +43,7 @@ export function AdminLoginPage({ onAuthenticated }: AdminLoginPageProps) {
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4">
       <div className="w-full max-w-sm space-y-8">
         <div className="flex flex-col items-center space-y-4">
-          <img src={moovsLogo} alt="Moovs" className="h-10 w-auto" />
+          <img src={typeof moovsLogo === 'string' ? moovsLogo : moovsLogo.src} alt="Moovs" className="h-10 w-auto" />
           <h1 className="text-xl font-semibold text-gray-900">Admin Panel</h1>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">

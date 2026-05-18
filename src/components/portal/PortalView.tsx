@@ -49,7 +49,7 @@ export function PortalView({ token }: PortalViewProps) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4">
         <div className="text-center space-y-4 max-w-sm">
-          <img src={moovsLogo} alt="Moovs" className="h-10 w-auto mx-auto" />
+          <img src={typeof moovsLogo === 'string' ? moovsLogo : moovsLogo.src} alt="Moovs" className="h-10 w-auto mx-auto" />
           <h1 className="text-xl font-semibold text-gray-900">Link Not Found</h1>
           <p className="text-gray-500 text-sm">
             This portal link is invalid or has expired. Please contact your operator for an updated link.

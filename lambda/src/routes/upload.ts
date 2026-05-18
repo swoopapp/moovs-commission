@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { hasAdminSecret } from '../config.js';
 
 const upload = new Hono();
 
@@ -11,13 +12,17 @@ const s3 = new S3Client({ region: REGION });
 
 // POST /upload-logo
 upload.post('/upload-logo', async (c) => {
+  if (!hasAdminSecret(c.req.header('x-admin-secret'))) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
   const formData = await c.req.formData();
   const file = formData.get('file') as File | null;
 
   if (!file) return c.json({ error: 'No file provided' }, 400);
   if (file.size > MAX_SIZE) return c.json({ error: 'File exceeds 5MB limit' }, 400);
 
-  const allowed = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml']);
+  const allowed = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
   if (!allowed.has(file.type)) {
     return c.json({ error: `File type "${file.type}" is not allowed` }, 400);
   }

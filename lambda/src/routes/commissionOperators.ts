@@ -1,12 +1,18 @@
 import { Hono } from 'hono';
 import { appQuery } from '../appDb.js';
+import { hasAdminSecret } from '../config.js';
 
 const app = new Hono();
+
+function requireAdmin(c: any) {
+  return hasAdminSecret(c.req.header('x-admin-secret'));
+}
 
 // GET /commission-operators — list all, or ?slug=X for single lookup
 app.get('/commission-operators', async (c) => {
   try {
     const slug = c.req.query('slug');
+    if (!slug && !requireAdmin(c)) return c.json({ error: 'Unauthorized' }, 401);
     if (slug) {
       const r = await appQuery('SELECT * FROM commission_operators WHERE slug = $1 LIMIT 1', [slug]);
       return c.json(r.rows);
@@ -22,6 +28,7 @@ app.get('/commission-operators', async (c) => {
 // GET /commission-operators/:id
 app.get('/commission-operators/:id', async (c) => {
   try {
+    if (!requireAdmin(c)) return c.json({ error: 'Unauthorized' }, 401);
     const r = await appQuery('SELECT * FROM commission_operators WHERE id = $1', [c.req.param('id')]);
     if (r.rows.length === 0) return c.json({ error: 'Not found' }, 404);
     return c.json(r.rows[0]);
@@ -34,6 +41,7 @@ app.get('/commission-operators/:id', async (c) => {
 // POST /commission-operators
 app.post('/commission-operators', async (c) => {
   try {
+    if (!requireAdmin(c)) return c.json({ error: 'Unauthorized' }, 401);
     const body = await c.req.json();
     const { moovs_operator_id, slug, display_name, auth_password, logo_url, primary_color, secondary_color, contact_email, contact_phone, status } = body;
     const r = await appQuery(
@@ -52,6 +60,7 @@ app.post('/commission-operators', async (c) => {
 // PATCH /commission-operators/:id
 app.patch('/commission-operators/:id', async (c) => {
   try {
+    if (!requireAdmin(c)) return c.json({ error: 'Unauthorized' }, 401);
     const id = c.req.param('id');
     const body = await c.req.json();
     const allowedFields = ['display_name', 'slug', 'auth_password', 'logo_url', 'primary_color', 'secondary_color', 'contact_email', 'contact_phone', 'status'];
@@ -83,6 +92,7 @@ app.patch('/commission-operators/:id', async (c) => {
 // DELETE /commission-operators/:id
 app.delete('/commission-operators/:id', async (c) => {
   try {
+    if (!requireAdmin(c)) return c.json({ error: 'Unauthorized' }, 401);
     await appQuery('DELETE FROM commission_operators WHERE id = $1', [c.req.param('id')]);
     return c.body(null, 204);
   } catch (err: any) {

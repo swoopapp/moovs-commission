@@ -3,18 +3,16 @@ interface AppConfig {
   defaultOperatorId: string;
 }
 
-function getEnvVar(key: string, fallback?: string): string {
-  const value = import.meta.env[key] as string | undefined;
-  if (!value && fallback === undefined) {
-    console.warn(`Missing environment variable: ${key}`);
-    return '';
+function getPublicEnv(key: string): string | undefined {
+  if (typeof process !== 'undefined') {
+    return process.env[key];
   }
-  return value || fallback || '';
+  return undefined;
 }
 
 export const config: AppConfig = {
-  apiBaseUrl: getEnvVar('VITE_API_BASE_URL', 'https://wvx7dgl297.execute-api.us-east-1.amazonaws.com'),
-  defaultOperatorId: getEnvVar('VITE_DEFAULT_OPERATOR_ID'),
+  apiBaseUrl: getPublicEnv('NEXT_PUBLIC_COMMISSION_API_BASE_URL') || '/api/commission-api',
+  defaultOperatorId: getPublicEnv('NEXT_PUBLIC_DEFAULT_OPERATOR_ID') || '',
 };
 
 export const EDGE_FUNCTION_URLS = {

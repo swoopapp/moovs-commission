@@ -1,5 +1,6 @@
+'use client';
+
 import { useState, useEffect, useCallback } from 'react';
-import { AdminLoginPage, isAdminAuthenticated } from './AdminLoginPage';
 import { CommissionOperator } from '../../types/commissionOperator';
 import {
   fetchAllOperators,
@@ -18,12 +19,6 @@ import {
 import moovsLogo from '../../assets/moovs-logo.png';
 
 export function AdminPanel() {
-  const [authed, setAuthed] = useState(() => isAdminAuthenticated());
-
-  if (!authed) {
-    return <AdminLoginPage onAuthenticated={() => setAuthed(true)} />;
-  }
-
   return <AdminDashboard />;
 }
 
@@ -255,7 +250,7 @@ function AdminDashboard() {
       <div className="bg-white border-b border-gray-200 px-4 md:px-8 py-4">
         <div className="flex items-center justify-between max-w-5xl mx-auto">
           <div className="flex items-center gap-3">
-            <img src={moovsLogo} alt="Moovs" className="h-8 w-auto" />
+            <img src={typeof moovsLogo === 'string' ? moovsLogo : moovsLogo.src} alt="Moovs" className="h-8 w-auto" />
             <span className="text-lg font-semibold text-gray-900">Commissions Admin</span>
           </div>
           <Button onClick={handleNew} className="gap-2">

@@ -1,18 +1,36 @@
 import pg from 'pg';
+import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 
 const { Pool } = pg;
+
+const smClient = new SecretsManagerClient({ region: 'us-east-1' });
+let cachedPassword: string | null = null;
+
+async function getAppDbPassword(): Promise<string> {
+  if (cachedPassword) return cachedPassword;
+
+  const secretName = process.env.APP_DB_SECRET_NAME;
+  if (!secretName) throw new Error('APP_DB_SECRET_NAME env var is required');
+
+  const res = await smClient.send(new GetSecretValueCommand({ SecretId: secretName }));
+  const secret = JSON.parse(res.SecretString!);
+  cachedPassword = secret.password;
+  return cachedPassword!;
+}
 
 let pool: pg.Pool | null = null;
 
 export async function getAppPool(): Promise<pg.Pool> {
   if (pool) return pool;
 
+  const password = await getAppDbPassword();
+
   pool = new Pool({
     host: process.env.APP_DB_HOST || 'prototype-db.c4xzucffjf3i.us-east-1.rds.amazonaws.com',
     port: 5432,
     database: process.env.APP_DB_NAME || 'postgres',
     user: process.env.APP_DB_USER || 'postgres',
-    password: process.env.APP_DB_PASSWORD,
+    password,
     ssl: { rejectUnauthorized: false },
     max: 5,
     connectionTimeoutMillis: 10000,

@@ -17,7 +17,7 @@ export function NotFoundPage() {
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4">
       <div className="text-center space-y-6 max-w-md">
         <img
-          src={moovsLogo}
+          src={typeof moovsLogo === 'string' ? moovsLogo : moovsLogo.src}
           alt="Moovs"
           className="h-12 w-auto mx-auto"
         />

@@ -1,0 +1,19 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - nvm use 22 || nvm install 22
+        - npm ci --prefer-offline --legacy-peer-deps
+    build:
+      commands:
+        - env | grep -E '^(AUTH_|GOOGLE_|NEXTAUTH_URL|ADMIN_ALLOWED_DOMAINS|ADMIN_SECRET|DASHBOARD_SECRET|COMMISSION_API_URL|DASHBOARD_API_URL|API_PROXY_URL|NEXT_PUBLIC_)' >> .env.production
+        - npm run build
+  artifacts:
+    baseDirectory: .next
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - node_modules/**/*
+      - .next/cache/**/*

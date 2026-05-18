@@ -28,7 +28,20 @@ app.get('/agencies', async (c) => {
     if (unmatchedOnly) conditions.push('moovs_company_id IS NULL');
 
     const where = conditions.join(' AND ');
-    const fields = selectOnly || '*';
+    const allowedSelectFields = new Set([
+      'id', 'operator_id', 'moovs_company_id', 'name', 'type', 'commission_rate',
+      'commission_type', 'commission_base', 'contact_name', 'contact_email',
+      'contact_phone', 'address', 'city', 'state', 'zip_code', 'country',
+      'market_segment', 'payment_terms', 'contract_start', 'contract_end',
+      'status', 'portal_token', 'notes', 'last_synced_at', 'created_at', 'updated_at',
+    ]);
+    const fields = selectOnly
+      ? selectOnly.split(',').map((f) => f.trim()).filter(Boolean)
+      : [];
+    if (fields.some((field) => !allowedSelectFields.has(field))) {
+      return c.json({ error: 'Invalid select field' }, 400);
+    }
+    const selectClause = fields.length ? fields.join(', ') : '*';
 
     if (limit > 0) {
       // Paginated mode: return { agencies, total }
@@ -36,7 +49,7 @@ app.get('/agencies', async (c) => {
       const total = parseInt(countR.rows[0].count);
 
       const dataR = await appQuery(
-        `SELECT ${fields} FROM agencies WHERE ${where} ORDER BY name ASC LIMIT $${idx++} OFFSET $${idx++}`,
+        `SELECT ${selectClause} FROM agencies WHERE ${where} ORDER BY name ASC LIMIT $${idx++} OFFSET $${idx++}`,
         [...params, limit, offset],
       );
       return c.json({ agencies: dataR.rows, total });
@@ -44,7 +57,7 @@ app.get('/agencies', async (c) => {
 
     // Unpaginated
     const r = await appQuery(
-      `SELECT ${fields} FROM agencies WHERE ${where} ORDER BY created_at DESC`,
+      `SELECT ${selectClause} FROM agencies WHERE ${where} ORDER BY created_at DESC`,
       params,
     );
     return c.json(r.rows);
