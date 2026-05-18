@@ -40,7 +40,7 @@ const emptyForm: OperatorFormData = {
   moovs_operator_id: '',
   slug: '',
   display_name: '',
-  auth_password: 'demo',
+  auth_password: '',
   primary_color: '',
   secondary_color: '',
   logo_url: '',
@@ -119,7 +119,7 @@ function AdminDashboard() {
       moovs_operator_id: op.moovs_operator_id,
       slug: op.slug,
       display_name: op.display_name,
-      auth_password: op.auth_password,
+      auth_password: '',
       primary_color: op.primary_color || '',
       secondary_color: op.secondary_color || '',
       logo_url: op.logo_url || '',
@@ -199,18 +199,19 @@ function AdminDashboard() {
         moovs_operator_id: form.moovs_operator_id.trim(),
         slug: form.slug.toLowerCase().replace(/[^a-z0-9-]/g, ''),
         display_name: form.display_name.trim(),
-        auth_password: form.auth_password,
         primary_color: form.primary_color || null,
         secondary_color: form.secondary_color || null,
         logo_url: logoUrl || null,
         contact_email: form.contact_email || null,
         contact_phone: form.contact_phone || null,
       };
+      const password = form.auth_password.trim();
+      const payload = password ? { ...data, auth_password: password } : data;
 
       if (editingId) {
-        await updateOperator(editingId, data);
+        await updateOperator(editingId, payload);
       } else {
-        await createOperator(data as Parameters<typeof createOperator>[0]);
+        await createOperator(payload as Parameters<typeof createOperator>[0]);
       }
 
       handleCancel();
@@ -396,11 +397,14 @@ function AdminDashboard() {
                 )}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Default Password</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {editingId ? 'Reset Password' : 'Default Password'}
+                </label>
                 <Input
+                  type="password"
                   value={form.auth_password}
                   onChange={e => updateField('auth_password', e.target.value)}
-                  placeholder="Login password"
+                  placeholder={editingId ? 'Leave blank to keep current password' : 'Login password'}
                   className={formErrors.auth_password ? 'border-red-300' : ''}
                 />
                 {formErrors.auth_password && (

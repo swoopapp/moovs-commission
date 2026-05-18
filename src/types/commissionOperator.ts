@@ -3,7 +3,8 @@ export interface CommissionOperator {
   moovs_operator_id: string;
   slug: string;
   display_name: string;
-  auth_password: string;
+  auth_password?: string;
+  auth_password_set?: boolean;
   logo_url: string | null;
   primary_color: string | null;
   secondary_color: string | null;
@@ -22,5 +23,4 @@ export interface CommissionOperatorConfig {
   logoUrl: string | null;
   primaryColor: string | null;
   secondaryColor: string | null;
-  authPassword: string;
 }

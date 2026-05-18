@@ -52,7 +52,6 @@ export function OperatorProvider({ slug, children, onNotFound }: OperatorProvide
             logoUrl: op.logo_url,
             primaryColor: op.primary_color,
             secondaryColor: op.secondary_color,
-            authPassword: op.auth_password,
           });
         }
       } catch (err) {
@@ -78,7 +77,6 @@ export function OperatorProvider({ slug, children, onNotFound }: OperatorProvide
       logoUrl: op.logo_url,
       primaryColor: op.primary_color,
       secondaryColor: op.secondary_color,
-      authPassword: op.auth_password,
     });
   }, [slug]);
 

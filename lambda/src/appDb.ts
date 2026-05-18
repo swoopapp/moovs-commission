@@ -113,6 +113,7 @@ export async function ensureCommissionTables(): Promise<void> {
   await appQuery(`CREATE INDEX IF NOT EXISTS idx_agencies_operator ON agencies(operator_id)`);
   await appQuery(`CREATE INDEX IF NOT EXISTS idx_agencies_company ON agencies(moovs_company_id)`);
   await appQuery(`CREATE INDEX IF NOT EXISTS idx_agencies_portal_token ON agencies(portal_token)`);
+  await appQuery(`ALTER TABLE agencies ALTER COLUMN portal_token SET DEFAULT encode(gen_random_bytes(32), 'hex')`);
 
   // 2. Agents
   await appQuery(`
@@ -131,6 +132,7 @@ export async function ensureCommissionTables(): Promise<void> {
   `);
   await appQuery(`CREATE INDEX IF NOT EXISTS idx_agents_agency ON agents(agency_id)`);
   await appQuery(`CREATE INDEX IF NOT EXISTS idx_agents_portal_token ON agents(portal_token)`);
+  await appQuery(`ALTER TABLE agents ALTER COLUMN portal_token SET DEFAULT encode(gen_random_bytes(32), 'hex')`);
 
   // 3. Commission Reservations
   await appQuery(`

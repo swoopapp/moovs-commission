@@ -1,6 +1,9 @@
 export const dynamic = 'force-dynamic';
 
 import { getAdminSecret, getCommissionApiBase, getDashboardSecret, requireAuthResponse } from '@/lib/admin-auth';
+import { sanitizeOperator } from '@/lib/commission-api';
+import { getOperatorSession } from '@/lib/operator-session';
+import { hashPassword } from '@/lib/password';
 
 type CommissionProxyContext = {
   params: Promise<{ path?: string[] }>;
@@ -23,15 +26,116 @@ function isAdminOnlyRequest(path: string, request: Request): boolean {
   return false;
 }
 
+function isPublicRequest(path: string, request: Request): boolean {
+  const url = new URL(request.url);
+  return (
+    path === 'health' ||
+    (path === 'commission-operators' && request.method === 'GET' && url.searchParams.has('slug'))
+  );
+}
+
+async function hasAdminAuth(): Promise<boolean> {
+  return (await requireAuthResponse()) === null;
+}
+
+async function authorizeProxyRequest(path: string, request: Request, adminOnly: boolean): Promise<Response | null> {
+  if (adminOnly) return requireAuthResponse();
+  if (isPublicRequest(path, request)) return null;
+  if (await hasAdminAuth()) return null;
+
+  const session = await getOperatorSession();
+  if (!session) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const url = new URL(request.url);
+
+  if (path === 'agencies' && request.method === 'GET') {
+    const operatorId = url.searchParams.get('operator_id');
+    if (operatorId !== session.operatorId) return Response.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  if (path === 'agencies' && request.method === 'POST') {
+    const body = await request.clone().json().catch(() => null);
+    if (body?.operator_id !== session.operatorId) return Response.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  if (path.startsWith('agencies/linked-companies/')) {
+    const operatorId = path.split('/')[2];
+    if (operatorId !== session.operatorId) return Response.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  if (path === 'commission-reservations') {
+    const operatorId = url.searchParams.get('operator_id');
+    if (operatorId !== session.operatorId) return Response.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  if (path === 'payouts' && request.method === 'GET') {
+    const operatorId = url.searchParams.get('operator_id');
+    if (operatorId && operatorId !== session.operatorId) return Response.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  if (path === 'payouts' && request.method === 'POST') {
+    const body = await request.clone().json().catch(() => null);
+    if (body?.operator_id !== session.operatorId) return Response.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  return null;
+}
+
+async function prepareRequestBody(path: string, request: Request, adminOnly: boolean): Promise<BodyInit | undefined> {
+  if (request.method === 'GET' || request.method === 'HEAD') return undefined;
+
+  const contentType = request.headers.get('content-type') || '';
+  if (
+    contentType.includes('application/json') &&
+    path.startsWith('commission-operators') &&
+    (request.method === 'POST' || request.method === 'PATCH')
+  ) {
+    const body = await request.clone().json().catch(() => null);
+    if (body && typeof body.auth_password === 'string' && body.auth_password.trim()) {
+      body.auth_password = hashPassword(body.auth_password);
+      return Buffer.from(JSON.stringify(body));
+    }
+    if (adminOnly && body && body.auth_password === '') {
+      delete body.auth_password;
+      return Buffer.from(JSON.stringify(body));
+    }
+  }
+
+  return request.arrayBuffer();
+}
+
+async function sanitizeResponse(path: string, request: Request, upstream: Response): Promise<Response> {
+  const responseHeaders = new Headers({ 'Cache-Control': 'no-store' });
+  const upstreamContentType = upstream.headers.get('content-type');
+  if (upstreamContentType) responseHeaders.set('content-type', upstreamContentType);
+
+  const shouldSanitizeOperators = path === 'commission-operators' || path.startsWith('commission-operators/');
+  if (shouldSanitizeOperators && upstream.ok && upstreamContentType?.includes('application/json')) {
+    const data = await upstream.json();
+    const sanitized = Array.isArray(data)
+      ? data.map((row) => sanitizeOperator(row))
+      : sanitizeOperator(data);
+    return Response.json(sanitized, {
+      status: upstream.status,
+      statusText: upstream.statusText,
+      headers: { 'Cache-Control': 'no-store' },
+    });
+  }
+
+  return new Response(upstream.body, {
+    status: upstream.status,
+    statusText: upstream.statusText,
+    headers: responseHeaders,
+  });
+}
+
 async function proxyCommissionApi(request: Request, context: CommissionProxyContext) {
   const { path = [] } = await context.params;
   const pathText = path.join('/');
 
   const adminOnly = isAdminOnlyRequest(pathText, request);
-  if (adminOnly) {
-    const denied = await requireAuthResponse();
-    if (denied) return denied;
-  }
+  const denied = await authorizeProxyRequest(pathText, request, adminOnly);
+  if (denied) return denied;
 
   let apiBase: string;
   let dashboardSecret: string;
@@ -68,20 +172,10 @@ async function proxyCommissionApi(request: Request, context: CommissionProxyCont
     cache: 'no-store',
   };
 
-  if (request.method !== 'GET' && request.method !== 'HEAD') {
-    init.body = await request.arrayBuffer();
-  }
+  init.body = await prepareRequestBody(pathText, request, adminOnly);
 
   const upstream = await fetch(targetUrl, init);
-  const responseHeaders = new Headers({ 'Cache-Control': 'no-store' });
-  const upstreamContentType = upstream.headers.get('content-type');
-  if (upstreamContentType) responseHeaders.set('content-type', upstreamContentType);
-
-  return new Response(upstream.body, {
-    status: upstream.status,
-    statusText: upstream.statusText,
-    headers: responseHeaders,
-  });
+  return sanitizeResponse(pathText, request, upstream);
 }
 
 export function OPTIONS() {

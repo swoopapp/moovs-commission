@@ -21,17 +21,22 @@ export function isAuthenticated(slug: string): boolean {
   }
 }
 
-export function authenticateWithPassword(slug: string, password: string, expected: string): boolean {
-  if (password === expected) {
-    const session: AuthSession = {
-      authenticated: true,
-      method: 'password',
-      timestamp: Date.now(),
-    };
-    sessionStorage.setItem(authKey(slug), JSON.stringify(session));
-    return true;
-  }
-  return false;
+export async function authenticateWithPassword(slug: string, password: string): Promise<boolean> {
+  const response = await fetch('/api/operator-auth/password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ slug, password }),
+  });
+
+  if (!response.ok) return false;
+
+  const session: AuthSession = {
+    authenticated: true,
+    method: 'password',
+    timestamp: Date.now(),
+  };
+  sessionStorage.setItem(authKey(slug), JSON.stringify(session));
+  return true;
 }
 
 export function logout(slug: string): void {

@@ -18,21 +18,24 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
 
-    setTimeout(() => {
-      const success = authenticateWithPassword(operator.slug, password, operator.authPassword);
+    try {
+      const success = await authenticateWithPassword(operator.slug, password);
       if (success) {
         onAuthenticated();
       } else {
         setError('Invalid password');
         setPassword('');
       }
+    } catch {
+      setError('Unable to sign in. Try again.');
+    } finally {
       setIsLoading(false);
-    }, 300);
+    }
   };
 
   return (

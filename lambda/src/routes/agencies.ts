@@ -103,6 +103,21 @@ app.get('/agencies/:id', async (c) => {
   }
 });
 
+// POST /agencies/:id/regenerate-token
+app.post('/agencies/:id/regenerate-token', async (c) => {
+  try {
+    const r = await appQuery(
+      `UPDATE agencies SET portal_token = encode(gen_random_bytes(32), 'hex') WHERE id = $1 RETURNING *`,
+      [c.req.param('id')],
+    );
+    if (r.rows.length === 0) return c.json({ error: 'Not found' }, 404);
+    return c.json(r.rows);
+  } catch (err: any) {
+    console.error('Error regenerating agency portal token:', err);
+    return c.json({ error: err.message || 'Internal Server Error' }, 500);
+  }
+});
+
 // POST /agencies
 app.post('/agencies', async (c) => {
   try {
