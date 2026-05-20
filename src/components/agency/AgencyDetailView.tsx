@@ -6,7 +6,7 @@ import { fetchAgents } from '../../services/agentService';
 import { fetchCurrentReservations, fetchReservations } from '../../services/reservationService';
 import { fetchAttributionsByAgency } from '../../services/attributionService';
 import { fetchPayoutsByAgency } from '../../services/payoutService';
-import { mergeAgencyAttributions } from '../../services/commissionTripService';
+import { mergeAgencyAttributions, primaryAgencyClientKey } from '../../services/commissionTripService';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
 import { AgencyHeader } from './AgencyHeader';
 import { ReservationsTab } from './ReservationsTab';
@@ -105,14 +105,16 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
     async function loadInitialReservations() {
       try {
         setReservationsLoading(true);
+        const clientKey = primaryAgencyClientKey(currentAgency);
         const options = {
           dateFrom: reservationWindow.dateFrom,
           dateTo: reservationWindow.dateTo,
           companyId: currentAgency.moovs_company_id ?? undefined,
+          clientKey,
           limit: RESERVATION_PAGE_SIZE,
           offset: 0,
         };
-        const rows = currentAgency.moovs_company_id
+        const rows = clientKey
           ? await fetchCurrentReservations(operator.operatorId, operator.moovsOperatorId, options)
           : await fetchReservations(operator.operatorId, options);
 
@@ -146,14 +148,16 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
 
     try {
       setReservationsLoading(true);
+      const clientKey = primaryAgencyClientKey(agency);
       const options = {
         dateFrom: reservationWindow.dateFrom,
         dateTo: reservationWindow.dateTo,
         companyId: agency.moovs_company_id ?? undefined,
+        clientKey,
         limit: RESERVATION_PAGE_SIZE,
         offset: reservationOffset,
       };
-      const rows = agency.moovs_company_id
+      const rows = clientKey
         ? await fetchCurrentReservations(operator.operatorId, operator.moovsOperatorId, options)
         : await fetchReservations(operator.operatorId, options);
 

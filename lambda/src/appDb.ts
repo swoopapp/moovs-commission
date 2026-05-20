@@ -127,6 +127,34 @@ export async function ensureCommissionTables(): Promise<void> {
   await appQuery(`CREATE INDEX IF NOT EXISTS idx_agencies_portal_token ON agencies(portal_token)`);
   await appQuery(`ALTER TABLE agencies ALTER COLUMN portal_token SET DEFAULT encode(gen_random_bytes(32), 'hex')`);
 
+  // 1a. Agency Client Links — generic whitelabel client identities.
+  // Supports standard Moovs companies (`company:<uuid>`) and Shuttle client overrides (`shuttle_client:<uuid>`).
+  await appQuery(`
+    CREATE TABLE IF NOT EXISTS agency_client_links (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      agency_id UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+      operator_id UUID NOT NULL,
+      client_key TEXT NOT NULL,
+      client_type TEXT NOT NULL,
+      client_id TEXT NOT NULL,
+      display_name_snapshot TEXT,
+      is_primary BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE(agency_id, client_key)
+    )
+  `);
+  await appQuery(`CREATE INDEX IF NOT EXISTS idx_agency_client_links_agency ON agency_client_links(agency_id)`);
+  await appQuery(`CREATE INDEX IF NOT EXISTS idx_agency_client_links_operator ON agency_client_links(operator_id)`);
+  await appQuery(`CREATE INDEX IF NOT EXISTS idx_agency_client_links_client_key ON agency_client_links(operator_id, client_key)`);
+  await appQuery(`
+    INSERT INTO agency_client_links (agency_id, operator_id, client_key, client_type, client_id, display_name_snapshot, is_primary)
+    SELECT id, operator_id, 'company:' || moovs_company_id, 'company', moovs_company_id, name, true
+    FROM agencies
+    WHERE moovs_company_id IS NOT NULL
+    ON CONFLICT (agency_id, client_key) DO NOTHING
+  `);
+
   // 2. Agents
   await appQuery(`
     CREATE TABLE IF NOT EXISTS agents (
@@ -165,12 +193,21 @@ export async function ensureCommissionTables(): Promise<void> {
       total_amount NUMERIC DEFAULT 0,
       total_with_gratuity NUMERIC DEFAULT 0,
       trip_status TEXT,
+      client_keys TEXT[] NOT NULL DEFAULT '{}',
       synced_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       UNIQUE(operator_id, moovs_trip_id)
     )
   `);
+  await appQuery(`ALTER TABLE commission_reservations ADD COLUMN IF NOT EXISTS client_keys TEXT[] NOT NULL DEFAULT '{}'`);
+  await appQuery(`
+    UPDATE commission_reservations
+    SET client_keys = ARRAY['company:' || moovs_company_id]
+    WHERE moovs_company_id IS NOT NULL
+      AND (client_keys IS NULL OR cardinality(client_keys) = 0)
+  `);
   await appQuery(`CREATE INDEX IF NOT EXISTS idx_reservations_operator ON commission_reservations(operator_id)`);
   await appQuery(`CREATE INDEX IF NOT EXISTS idx_reservations_company ON commission_reservations(moovs_company_id)`);
+  await appQuery(`CREATE INDEX IF NOT EXISTS idx_reservations_client_keys ON commission_reservations USING GIN(client_keys)`);
   await appQuery(`CREATE INDEX IF NOT EXISTS idx_reservations_pickup ON commission_reservations(pickup_date)`);
   await appQuery(`CREATE INDEX IF NOT EXISTS idx_reservations_order ON commission_reservations(order_number)`);
 

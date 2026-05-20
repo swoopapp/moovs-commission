@@ -6,6 +6,21 @@ export type AgentRole = 'agent' | 'gm';
 export type PayoutMethod = 'ACH' | 'Wire' | 'Check' | 'Cash' | 'Other';
 export type PayoutStatus = 'draft' | 'pending' | 'paid';
 
+export type AgencyClientType = 'company' | 'shuttle_client';
+
+export interface AgencyClientLink {
+  id: string;
+  agency_id: string;
+  operator_id: string;
+  client_key: string;
+  client_type: AgencyClientType;
+  client_id: string;
+  display_name_snapshot: string | null;
+  is_primary: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Agency {
   id: string;
   operator_id: string;
@@ -33,6 +48,7 @@ export interface Agency {
   last_synced_at: string | null;
   created_at: string;
   updated_at: string;
+  client_links?: AgencyClientLink[];
 }
 
 export interface Agent {
@@ -66,6 +82,7 @@ export interface Reservation {
   total_with_gratuity: number;
   trip_status: string | null;
   synced_at: string;
+  client_keys?: string[];
 }
 
 export interface ReservationAttribution {

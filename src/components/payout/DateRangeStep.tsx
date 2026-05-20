@@ -8,7 +8,7 @@ import { Agency, Reservation, ReservationAttribution } from '../../types/commiss
 import { fetchAttributionsByAgency } from '../../services/attributionService';
 import { fetchCurrentReservations } from '../../services/reservationService';
 import { fetchAllPayoutReservations } from '../../services/payoutService';
-import { mergeAgencyAttributions } from '../../services/commissionTripService';
+import { mergeAgencyAttributions, primaryAgencyClientKey } from '../../services/commissionTripService';
 
 export interface TripWithCommission {
   reservation: Reservation;
@@ -63,6 +63,7 @@ export function DateRangeStep({
           dateFrom,
           dateTo,
           companyId: agency.moovs_company_id ?? undefined,
+          clientKey: primaryAgencyClientKey(agency),
         }),
         fetchAllPayoutReservations(agencyId),
       ]);

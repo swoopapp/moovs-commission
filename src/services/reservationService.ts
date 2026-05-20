@@ -19,6 +19,7 @@ interface FetchReservationsOptions {
   dateFrom?: string;
   dateTo?: string;
   companyId?: string;
+  clientKey?: string;
   limit?: number;
   offset?: number;
 }
@@ -37,6 +38,9 @@ export async function fetchReservations(
   }
   if (options?.companyId) {
     url += `&company_id=${encodeURIComponent(options.companyId)}`;
+  }
+  if (options?.clientKey) {
+    url += `&client_key=${encodeURIComponent(options.clientKey)}`;
   }
   if (options?.limit) {
     url += `&limit=${encodeURIComponent(String(options.limit))}`;
@@ -60,6 +64,13 @@ function text(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   const str = String(value).trim();
   return str ? str : null;
+}
+
+function textArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => text(item))
+    .filter((item): item is string => Boolean(item));
 }
 
 function liveId(operatorId: string, moovsTripId: string): string {
@@ -95,6 +106,7 @@ function transformLiveReservation(raw: RawMoovsReservation, operatorId: string):
     total_amount: totalAmount,
     total_with_gratuity: Math.round((totalAmount + gratuity) * 100) / 100,
     trip_status: text(raw['Status Slug']),
+    client_keys: textArray(raw['Client Keys']),
     synced_at: new Date().toISOString(),
   };
 }
@@ -112,6 +124,7 @@ export async function fetchLiveReservations(
       date_from: options?.dateFrom,
       date_to: options?.dateTo,
       company_id: options?.companyId,
+      client_key: options?.clientKey,
       limit: options?.limit,
       offset: options?.offset,
     }),
@@ -137,6 +150,7 @@ export async function fetchCurrentReservations(
         dateFrom: options.dateFrom,
         dateTo: options.dateTo,
         companyId: options.companyId,
+        clientKey: options.clientKey,
       }
     : undefined;
 

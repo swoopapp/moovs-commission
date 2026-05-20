@@ -19,9 +19,10 @@ const RESERVATION_FIELDS = [
   'total_amount',
   'total_with_gratuity',
   'trip_status',
+  'client_keys',
 ];
 
-// GET /commission-reservations — ?operator_id required, ?date_from, ?date_to, ?company_id, ?limit, ?offset
+// GET /commission-reservations — ?operator_id required, ?date_from, ?date_to, ?company_id, ?client_key, ?limit, ?offset
 app.get('/commission-reservations', async (c) => {
   try {
     const operatorId = c.req.query('operator_id');
@@ -30,6 +31,7 @@ app.get('/commission-reservations', async (c) => {
     const dateFrom = c.req.query('date_from');
     const dateTo = c.req.query('date_to');
     const companyId = c.req.query('company_id');
+    const clientKey = c.req.query('client_key');
     const limitParam = c.req.query('limit');
     const offsetParam = c.req.query('offset');
 
@@ -48,6 +50,14 @@ app.get('/commission-reservations', async (c) => {
     if (companyId) {
       conditions.push(`moovs_company_id = $${idx++}`);
       params.push(companyId);
+    }
+    if (clientKey) {
+      const [clientType, clientId] = clientKey.split(':');
+      if (!clientType || !clientId || !['company', 'shuttle_client'].includes(clientType)) {
+        return c.json({ error: 'Invalid client_key' }, 400);
+      }
+      conditions.push(`client_keys @> ARRAY[$${idx++}]::text[]`);
+      params.push(clientKey);
     }
 
     const parsedLimit = Number.parseInt(limitParam ?? '', 10);
@@ -88,7 +98,14 @@ app.post('/commission-reservations/upsert', async (c) => {
         return c.json({ error: 'Missing operator_id or moovs_trip_id' }, 400);
       }
 
-      const values = RESERVATION_FIELDS.map((field) => item[field] ?? null);
+      const values = RESERVATION_FIELDS.map((field) => {
+        if (field === 'client_keys') {
+          if (Array.isArray(item.client_keys)) return item.client_keys.filter(Boolean);
+          if (item.moovs_company_id) return [`company:${item.moovs_company_id}`];
+          return [];
+        }
+        return item[field] ?? null;
+      });
       const placeholders = RESERVATION_FIELDS.map((_, i) => `$${i + 1}`).join(', ');
       const updates = RESERVATION_FIELDS
         .filter((field) => !['operator_id', 'moovs_trip_id'].includes(field))

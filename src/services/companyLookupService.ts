@@ -14,6 +14,9 @@ export interface MoovsCompany {
   created_at: string | null;
   updated_at: string | null;
   source?: 'company' | 'shuttle_client';
+  client_key?: string;
+  client_type?: 'company' | 'shuttle_client';
+  client_id?: string;
 }
 
 interface FetchCompaniesResponse {

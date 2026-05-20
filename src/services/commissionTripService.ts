@@ -1,6 +1,26 @@
 import { Agency, Reservation, ReservationAttribution } from '../types/commission';
 import { calculateCommission } from './attributionService';
 
+export function agencyClientKeys(agency: Agency): string[] {
+  const keys = (agency.client_links ?? [])
+    .map((link) => link.client_key)
+    .filter((key): key is string => Boolean(key));
+
+  if (keys.length > 0) return Array.from(new Set(keys));
+  return agency.moovs_company_id ? [`company:${agency.moovs_company_id}`] : [];
+}
+
+export function primaryAgencyClientKey(agency: Agency): string | undefined {
+  const primary = agency.client_links?.find((link) => link.is_primary) ?? agency.client_links?.[0];
+  return primary?.client_key ?? (agency.moovs_company_id ? `company:${agency.moovs_company_id}` : undefined);
+}
+
+export function reservationClientKeys(reservation: Reservation): string[] {
+  const keys = reservation.client_keys?.filter(Boolean) ?? [];
+  if (keys.length > 0) return Array.from(new Set(keys));
+  return reservation.moovs_company_id ? [`company:${reservation.moovs_company_id}`] : [];
+}
+
 export function syntheticAttributionId(reservation: Reservation, agency: Agency): string {
   return `live:${agency.id}:${reservation.moovs_trip_id}`;
 }
@@ -31,12 +51,14 @@ export function mergeAgencyAttributions(
   const byReservationId = new Map(persistedAttributions.map((attr) => [attr.reservation_id, attr]));
   const merged: ReservationAttribution[] = [...persistedAttributions];
   const seenReservationIds = new Set(persistedAttributions.map((attr) => attr.reservation_id));
+  const clientKeys = agencyClientKeys(agency);
 
-  if (!agency.moovs_company_id) return merged;
+  if (clientKeys.length === 0) return merged;
+  const agencyKeySet = new Set(clientKeys);
 
   for (const reservation of reservations) {
     if (byReservationId.has(reservation.id)) continue;
-    if (reservation.moovs_company_id !== agency.moovs_company_id) continue;
+    if (!reservationClientKeys(reservation).some((key) => agencyKeySet.has(key))) continue;
     if (seenReservationIds.has(reservation.id)) continue;
 
     merged.push(buildSyntheticAttribution(reservation, agency));

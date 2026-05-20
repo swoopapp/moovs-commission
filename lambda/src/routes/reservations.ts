@@ -3,11 +3,11 @@ import { query } from '../db.js';
 
 const app = new Hono();
 
-// POST /fetch-reservations { operator_id, date_from?, date_to?, company_id?, limit?, offset? }
+// POST /fetch-reservations { operator_id, date_from?, date_to?, company_id?, client_key?, limit?, offset? }
 // Returns BOTH regular trips and shuttle bookings in a unified format
 app.post('/fetch-reservations', async (c) => {
   try {
-    const { operator_id, date_from, date_to, company_id, limit, offset } = await c.req.json();
+    const { operator_id, date_from, date_to, company_id, client_key, limit, offset } = await c.req.json();
 
     if (!operator_id) {
       return c.json({ error: 'Missing operator_id' }, 400);
@@ -18,6 +18,8 @@ app.post('/fetch-reservations', async (c) => {
     let shuttleDateFilter = '';
     let tripCompanyFilter = '';
     let shuttleCompanyFilter = '';
+    let tripClientFilter = '';
+    let shuttleClientFilter = '';
 
     if (date_from) {
       params.push(date_from);
@@ -32,7 +34,27 @@ app.post('/fetch-reservations', async (c) => {
     if (company_id) {
       params.push(company_id);
       tripCompanyFilter += ` AND req.company_id::text = $${params.length}`;
-      shuttleCompanyFilter += ` AND COALESCE(sc.company_id::text, sp.company_id::text) = $${params.length}`;
+      shuttleCompanyFilter += ` AND (
+        sc.company_id::text = $${params.length}
+        OR sp.company_id::text = $${params.length}
+        OR rd.company_id::text = $${params.length}
+      )`;
+    }
+    if (typeof client_key === 'string' && client_key.trim()) {
+      const [clientType, clientId] = client_key.trim().split(':');
+      if (clientType === 'company' && clientId) {
+        params.push(clientId);
+        tripClientFilter += ` AND req.company_id::text = $${params.length}`;
+        shuttleClientFilter += ` AND (
+          sc.company_id::text = $${params.length}
+          OR sp.company_id::text = $${params.length}
+          OR rd.company_id::text = $${params.length}
+        )`;
+      } else if (clientType === 'shuttle_client' && clientId) {
+        params.push(clientId);
+        tripClientFilter += ` AND req.company_id::text = $${params.length} AND false`;
+        shuttleClientFilter += ` AND sb.shuttle_client_id::text = $${params.length}`;
+      }
     }
 
     const parsedLimit = Number.parseInt(String(limit ?? ''), 10);
@@ -70,7 +92,11 @@ app.post('/fetch-reservations', async (c) => {
         COALESCE(r.booster_seat_amt, 0) / 100.0 as "Booster Seat Amt",
         COALESCE(r.promo_code_amt, 0) / 100.0 as "Promo Code Amt",
         r.status_slug as "Status Slug",
-        'trip' as "Source"
+        'trip' as "Source",
+        CASE
+          WHEN req.company_id IS NOT NULL THEN ARRAY['company:' || req.company_id::text]
+          ELSE ARRAY[]::text[]
+        END as "Client Keys"
       FROM request req
       JOIN trip t ON t.request_id = req.request_id AND t.removed_at IS NULL
       LEFT JOIN route r ON r.trip_id = t.trip_id AND r.removed_at IS NULL
@@ -84,7 +110,7 @@ app.post('/fetch-reservations', async (c) => {
       ) dropoff ON true
       LEFT JOIN vehicle v ON r.vehicle_id = v.vehicle_id
       LEFT JOIN vehicle fv ON fr.vehicle_id = fv.vehicle_id
-      WHERE req.operator_id = $1${tripDateFilter}${tripCompanyFilter}
+      WHERE req.operator_id = $1${tripDateFilter}${tripCompanyFilter}${tripClientFilter}
       ORDER BY pickup.date_time ASC NULLS LAST`,
       params
     );
@@ -95,7 +121,7 @@ app.post('/fetch-reservations', async (c) => {
         sb.booking_id as "Trip ID",
         sb.external_reservation_id as "Order Number",
         sb.external_reservation_id as "Confirmation Number",
-        COALESCE(sc.company_id, sp.company_id) as "Company ID",
+        COALESCE(sc.company_id, sp.company_id, rd.company_id) as "Company ID",
         COALESCE(sb.scheduled_pickup_time, sb.travel_date::timestamptz) as "Pickup Date Time",
         sb.scheduled_dropoff_time as "Dropoff Time Local",
         sb.pickup_location as "Pickup Address",
@@ -119,13 +145,21 @@ app.post('/fetch-reservations', async (c) => {
         sb.booking_status as "Status Slug",
         'shuttle' as "Source",
         sb.passenger_count as "Passenger Count",
-        sc.name as "Shuttle Client Name"
+        sc.name as "Shuttle Client Name",
+        ARRAY_REMOVE(ARRAY[
+          CASE WHEN sb.shuttle_client_id IS NOT NULL THEN 'shuttle_client:' || sb.shuttle_client_id::text END,
+          CASE WHEN sc.company_id IS NOT NULL THEN 'company:' || sc.company_id::text END,
+          CASE WHEN sp.company_id IS NOT NULL THEN 'company:' || sp.company_id::text END,
+          CASE WHEN rd.company_id IS NOT NULL THEN 'company:' || rd.company_id::text END
+        ], NULL) as "Client Keys"
       FROM shuttle_booking sb
-      LEFT JOIN shuttle_client sc ON sb.shuttle_client_id = sc.shuttle_client_id
-      LEFT JOIN shuttle_passenger sp ON sb.shuttle_passenger_id = sp.shuttle_passenger_id
+      LEFT JOIN shuttle_client sc ON sb.shuttle_client_id = sc.shuttle_client_id AND sc.operator_id = sb.operator_id
+      LEFT JOIN shuttle_passenger sp ON sb.shuttle_passenger_id = sp.shuttle_passenger_id AND sp.operator_id = sb.operator_id
       LEFT JOIN shuttle_payment pay ON pay.booking_id = sb.booking_id
+      LEFT JOIN shuttle_route_definition_version rv ON rv.route_version_id = sb.route_version_id
+      LEFT JOIN shuttle_route_definition rd ON rd.route_definition_id = rv.route_definition_id AND rd.operator_id = sb.operator_id
       WHERE sb.operator_id = $1
-        AND sb.cancelled_at IS NULL${shuttleDateFilter}${shuttleCompanyFilter}
+        AND sb.cancelled_at IS NULL${shuttleDateFilter}${shuttleCompanyFilter}${shuttleClientFilter}
       ORDER BY COALESCE(sb.scheduled_pickup_time, sb.travel_date::timestamptz) ASC NULLS LAST`,
       params
     );
@@ -205,6 +239,7 @@ function formatTrip(row: any) {
     'Total Amount ($)': total,
     'Status Slug': row['Status Slug'] || '',
     'Source': 'trip',
+    'Client Keys': Array.isArray(row['Client Keys']) ? row['Client Keys'] : [],
   };
 }
 
@@ -235,6 +270,7 @@ function formatShuttle(row: any) {
     'Total Amount ($)': baseRate,
     'Status Slug': row['Status Slug'] || '',
     'Source': 'shuttle',
+    'Client Keys': Array.isArray(row['Client Keys']) ? row['Client Keys'] : [],
     'Passenger Count': row['Passenger Count'] || 1,
     'Shuttle Client Name': row['Shuttle Client Name'] || null,
   };

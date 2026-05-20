@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useOperator } from '../../contexts/OperatorContext';
 import { Agency, CommissionType, CommissionBase } from '../../types/commission';
-import { updateAgency, deleteAgency, fetchLinkedCompanyIds } from '../../services/agencyService';
+import { updateAgency, deleteAgency, fetchLinkedClientKeys } from '../../services/agencyService';
 import { fetchMoovsCompanies, MoovsCompany } from '../../services/companyLookupService';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
@@ -25,6 +25,10 @@ interface SettingsTabProps {
   onUpdated: (agency: Agency) => void;
 }
 
+function clientKeyFor(company: MoovsCompany): string {
+  return company.client_key || `${company.client_type || company.source || 'company'}:${company.client_id || company.company_id}`;
+}
+
 export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
   const operator = useOperator();
   const [commissionRate, setCommissionRate] = useState(agency.commission_rate.toString());
@@ -46,7 +50,7 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
   const [companies, setCompanies] = useState<MoovsCompany[]>([]);
   const [companiesLoading, setCompaniesLoading] = useState(false);
   const [companySearch, setCompanySearch] = useState('');
-  const [linkedCompanyIds, setLinkedCompanyIds] = useState<Set<string>>(new Set());
+  const [linkedClientKeys, setLinkedClientKeys] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!operator.moovsOperatorId) return;
@@ -54,12 +58,12 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
     setCompaniesLoading(true);
     Promise.all([
       fetchMoovsCompanies(operator.moovsOperatorId, { limit: 100, offset: 0 }),
-      fetchLinkedCompanyIds(operator.operatorId),
+      fetchLinkedClientKeys(operator.operatorId),
     ])
-      .then(([companyResult, linkedIds]) => {
+      .then(([companyResult, linkedKeys]) => {
         if (!cancelled) {
           setCompanies(companyResult.companies);
-          setLinkedCompanyIds(linkedIds);
+          setLinkedClientKeys(linkedKeys);
         }
       })
       .catch((err) => console.error('Failed to fetch companies:', err))
@@ -67,16 +71,18 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
     return () => { cancelled = true; };
   }, [operator.moovsOperatorId, operator.operatorId]);
 
+  const primaryClientLink = agency.client_links?.find((link) => link.is_primary) ?? agency.client_links?.[0] ?? null;
+  const primaryClientKey = primaryClientLink?.client_key ?? (agency.moovs_company_id ? `company:${agency.moovs_company_id}` : null);
   const linkedCompany = useMemo(() => {
-    if (!agency.moovs_company_id) return null;
-    return companies.find((c) => c.company_id === agency.moovs_company_id) || null;
-  }, [agency.moovs_company_id, companies]);
+    if (!primaryClientKey) return null;
+    return companies.find((c) => clientKeyFor(c) === primaryClientKey) || null;
+  }, [primaryClientKey, companies]);
 
   const filteredCompanies = useMemo(() => {
     if (!companySearch.trim()) return [];
     const q = companySearch.toLowerCase();
     return companies
-      .filter((c) => !linkedCompanyIds.has(c.company_id))
+      .filter((c) => !linkedClientKeys.has(clientKeyFor(c)))
       .filter((c) => c.name.toLowerCase().includes(q) || (c.email && c.email.toLowerCase().includes(q)))
       .sort((a, b) => {
         // Exact prefix match first, then contains
@@ -85,25 +91,34 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
         if (aStarts !== bStarts) return aStarts - bStarts;
         return a.name.localeCompare(b.name);
       });
-  }, [companies, companySearch, linkedCompanyIds]);
+  }, [companies, companySearch, linkedClientKeys]);
 
-  async function handleLinkCompany(companyId: string) {
+  async function handleLinkCompany(company: MoovsCompany) {
     try {
-      const updated = await updateAgency(agency.id, { moovs_company_id: companyId });
+      const updated = await updateAgency(agency.id, {
+        moovs_company_id: company.client_type === 'company' || company.source === 'company' ? company.company_id : null,
+        client_links: [{
+          client_key: clientKeyFor(company),
+          client_type: company.client_type || company.source || 'company',
+          client_id: company.client_id || company.company_id,
+          display_name_snapshot: company.name,
+          is_primary: true,
+        }],
+      });
       onUpdated(updated);
       setCompanySearch('');
-      toast.success('Company linked — trips will now auto-match');
+      toast.success('Client linked — trips will now auto-match');
     } catch (err) {
       console.error('Failed to link company:', err);
-      toast.error('Failed to link company');
+      toast.error('Failed to link client');
     }
   }
 
   async function handleUnlinkCompany() {
     try {
-      const updated = await updateAgency(agency.id, { moovs_company_id: null });
+      const updated = await updateAgency(agency.id, { moovs_company_id: null, client_links: [] });
       onUpdated(updated);
-      toast.success('Company unlinked');
+      toast.success('Client unlinked');
     } catch (err) {
       console.error('Failed to unlink company:', err);
       toast.error('Failed to unlink company');
@@ -415,21 +430,21 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
 
       {/* Right column: Company Link, Portal, Status, Danger Zone */}
       <div className="space-y-6">
-        <Card className={agency.moovs_company_id ? 'border-green-200' : 'border-amber-200'}>
+        <Card className={primaryClientKey ? 'border-green-200' : 'border-amber-200'}>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Building2 className="h-4 w-4" />
-              Moovs Company Link
+              Moovs Client Link
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {agency.moovs_company_id ? (
+            {primaryClientKey ? (
               <div className="flex items-center justify-between bg-green-50 rounded-lg px-3 py-2">
                 <div>
                   <p className="text-sm font-medium text-green-800">
-                    {linkedCompany ? linkedCompany.name : 'Linked'}
+                    {linkedCompany ? linkedCompany.name : primaryClientLink?.display_name_snapshot || 'Linked'}
                   </p>
-                  <p className="text-xs text-green-600 font-mono">{agency.moovs_company_id}</p>
+                  <p className="text-xs text-green-600 font-mono">{primaryClientKey}</p>
                 </div>
                 <Button variant="ghost" size="icon" onClick={handleUnlinkCompany} className="text-green-700 hover:text-red-600">
                   <X className="h-4 w-4" />
@@ -456,12 +471,15 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
                       <div className="max-h-48 overflow-y-auto border rounded-lg divide-y">
                         {filteredCompanies.slice(0, 10).map((c) => (
                           <button
-                            key={c.company_id}
+                            key={clientKeyFor(c)}
                             className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors"
-                            onClick={() => handleLinkCompany(c.company_id)}
+                            onClick={() => handleLinkCompany(c)}
                           >
                             <span className="font-medium">{c.name}</span>
                             {c.email && <span className="text-gray-500 ml-2">{c.email}</span>}
+                            <span className="text-[11px] uppercase tracking-wide text-gray-400 ml-2">
+                              {c.source === 'shuttle_client' ? 'Shuttle client' : 'Company'}
+                            </span>
                           </button>
                         ))}
                       </div>

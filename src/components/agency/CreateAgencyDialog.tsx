@@ -56,6 +56,10 @@ const BASE_LABELS: Record<CommissionBase, string> = {
   total_with_gratuity: 'Total with Gratuity',
 };
 
+function clientKeyFor(company: MoovsCompany): string {
+  return company.client_key || `${company.client_type || company.source || 'company'}:${company.client_id || company.company_id}`;
+}
+
 export function CreateAgencyDialog({ open, onOpenChange, onCreated }: CreateAgencyDialogProps) {
   const operator = useOperator();
   const [step, setStep] = useState(1);
@@ -145,9 +149,9 @@ export function CreateAgencyDialog({ open, onOpenChange, onCreated }: CreateAgen
     }
   }
 
-  function handleCompanySelect(companyId: string) {
-    setSelectedCompanyId(companyId);
-    if (companyId === 'none') {
+  function handleCompanySelect(clientKey: string) {
+    setSelectedCompanyId(clientKey);
+    if (clientKey === 'none') {
       // Clear auto-filled fields for manual entry
       setSelectedCompany(null);
       setMoovsCompanyId('');
@@ -156,10 +160,10 @@ export function CreateAgencyDialog({ open, onOpenChange, onCreated }: CreateAgen
       setContactPhone('');
       return;
     }
-    const company = companies.find((c) => c.company_id === companyId);
+    const company = companies.find((c) => clientKeyFor(c) === clientKey);
     if (!company) return;
     setSelectedCompany(company);
-    setMoovsCompanyId(company.company_id);
+    setMoovsCompanyId(company.client_type === 'company' || company.source === 'company' ? company.company_id : '');
     setName(company.name);
     setContactEmail(company.email || '');
     setContactPhone(company.phone_number || '');
@@ -210,6 +214,15 @@ export function CreateAgencyDialog({ open, onOpenChange, onCreated }: CreateAgen
         name: name.trim(),
         type,
         moovs_company_id: moovsCompanyId.trim() || null,
+        client_links: selectedCompany
+          ? [{
+              client_key: clientKeyFor(selectedCompany),
+              client_type: selectedCompany.client_type || selectedCompany.source || 'company',
+              client_id: selectedCompany.client_id || selectedCompany.company_id,
+              display_name_snapshot: selectedCompany.name,
+              is_primary: true,
+            }]
+          : [],
         contact_name: contactName.trim() || null,
         contact_email: contactEmail.trim() || null,
         contact_phone: contactPhone.trim() || null,
@@ -310,15 +323,18 @@ export function CreateAgencyDialog({ open, onOpenChange, onCreated }: CreateAgen
                         ) : (
                           companies.map((c) => (
                             <button
-                              key={`${c.company_id}-${c.source ?? 'company'}`}
+                              key={clientKeyFor(c)}
                               type="button"
-                              onClick={() => handleCompanySelect(c.company_id)}
+                              onClick={() => handleCompanySelect(clientKeyFor(c))}
                               className={`block w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${
-                                selectedCompanyId === c.company_id ? 'bg-blue-50 text-blue-700 font-medium' : ''
+                                selectedCompanyId === clientKeyFor(c) ? 'bg-blue-50 text-blue-700 font-medium' : ''
                               }`}
                             >
                               <span className="block truncate">
                                 {c.name}{c.email ? ` (${c.email})` : ''}
+                              </span>
+                              <span className="text-[11px] uppercase tracking-wide text-gray-400">
+                                {c.source === 'shuttle_client' ? 'Shuttle client' : 'Company'}
                               </span>
                             </button>
                           ))

@@ -32,6 +32,9 @@ app.post('/fetch-companies', async (c) => {
       `WITH unified AS (
         SELECT
           c.company_id::text AS company_id,
+          ('company:' || c.company_id::text) AS client_key,
+          'company'::text AS client_type,
+          c.company_id::text AS client_id,
           c.name,
           c.email,
           c.phone_number,
@@ -52,7 +55,10 @@ app.post('/fetch-companies', async (c) => {
         UNION ALL
 
         SELECT
-          COALESCE(sc.company_id::text, sc.shuttle_client_id::text) AS company_id,
+          sc.shuttle_client_id::text AS company_id,
+          ('shuttle_client:' || sc.shuttle_client_id::text) AS client_key,
+          'shuttle_client'::text AS client_type,
+          sc.shuttle_client_id::text AS client_id,
           sc.name,
           sc.email,
           sc.phone AS phone_number,
@@ -68,13 +74,6 @@ app.post('/fetch-companies', async (c) => {
         FROM shuttle_client sc
         WHERE sc.operator_id = $1
           AND sc.removed_at IS NULL
-          AND NOT EXISTS (
-            SELECT 1
-            FROM company existing
-            WHERE existing.company_id = sc.company_id
-              AND existing.operator_id = sc.operator_id
-              AND existing.removed_at IS NULL
-          )
           ${searchSql.replaceAll('name', 'sc.name').replaceAll('email', 'sc.email')}
       )
       SELECT *, COUNT(*) OVER()::int AS total_count
@@ -86,6 +85,9 @@ app.post('/fetch-companies', async (c) => {
 
     const companies = result.rows.map((row) => ({
       company_id: row.company_id,
+      client_key: row.client_key,
+      client_type: row.client_type,
+      client_id: row.client_id,
       name: row.name || null,
       email: row.email || null,
       phone_number: row.phone_number || null,

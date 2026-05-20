@@ -148,7 +148,7 @@ export function AgencyTable({
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <span>
-                          {agency.moovs_company_id ? (
+                          {(agency.client_links?.length || agency.moovs_company_id) ? (
                             <Link className="h-4 w-4 text-green-500" />
                           ) : (
                             <Unlink className="h-4 w-4 text-gray-300" />
@@ -156,7 +156,7 @@ export function AgencyTable({
                         </span>
                       </TooltipTrigger>
                       <TooltipContent>
-                        {agency.moovs_company_id ? 'Linked to Moovs company' : 'Not linked — trips won\'t auto-match'}
+                        {(agency.client_links?.length || agency.moovs_company_id) ? 'Linked to Moovs client' : 'Not linked — trips won\'t auto-match'}
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>

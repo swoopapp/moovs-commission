@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useOperator } from '../../contexts/OperatorContext';
-import { fetchAgenciesPaginated, updateAgency, fetchLinkedCompanyIds } from '../../services/agencyService';
+import { fetchAgenciesPaginated, updateAgency, fetchLinkedClientKeys } from '../../services/agencyService';
 import { fetchMoovsCompanies, MoovsCompany } from '../../services/companyLookupService';
 import { Agency } from '../../types/commission';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -10,6 +10,16 @@ import { Building2, ArrowLeft, Check, Search, X, ChevronLeft, ChevronRight, Link
 import { toast } from 'sonner';
 
 const PAGE_SIZE = 50;
+
+function clientKeyFor(company: MoovsCompany): string {
+  return company.client_key || `${company.client_type || company.source || 'company'}:${company.client_id || company.company_id}`;
+}
+
+function primaryClientKey(agency: Agency): string | null {
+  return agency.client_links?.find((link) => link.is_primary)?.client_key
+    ?? agency.client_links?.[0]?.client_key
+    ?? (agency.moovs_company_id ? `company:${agency.moovs_company_id}` : null);
+}
 
 export function AgencyMatchingView() {
   const operator = useOperator();
@@ -30,8 +40,8 @@ export function AgencyMatchingView() {
   const [unmatchedCount, setUnmatchedCount] = useState(0);
   const [matchedCount, setMatchedCount] = useState(0);
 
-  // Set of company IDs already linked to an agency
-  const [linkedCompanyIds, setLinkedCompanyIds] = useState<Set<string>>(new Set());
+  // Set of client keys already linked to an agency
+  const [linkedClientKeys, setLinkedClientKeys] = useState<Set<string>>(new Set());
 
   // Load companies once
   useEffect(() => {
@@ -46,11 +56,11 @@ export function AgencyMatchingView() {
     const [unmatched, matched, linked] = await Promise.all([
       fetchAgenciesPaginated(operator.operatorId, { limit: 1, unmatchedOnly: true }),
       fetchAgenciesPaginated(operator.operatorId, { limit: 1, matchedOnly: true }),
-      fetchLinkedCompanyIds(operator.operatorId),
+      fetchLinkedClientKeys(operator.operatorId),
     ]);
     setUnmatchedCount(unmatched.total);
     setMatchedCount(matched.total);
-    setLinkedCompanyIds(linked);
+    setLinkedClientKeys(linked);
   }, [operator.operatorId]);
 
   // Load agencies page
@@ -99,7 +109,7 @@ export function AgencyMatchingView() {
     if (!companySearch.trim()) return [];
     const q = companySearch.toLowerCase();
     return companies
-      .filter((c) => !linkedCompanyIds.has(c.company_id))
+      .filter((c) => !linkedClientKeys.has(clientKeyFor(c)))
       .filter((c) =>
         c.name.toLowerCase().includes(q) ||
         (c.email && c.email.toLowerCase().includes(q))
@@ -110,19 +120,27 @@ export function AgencyMatchingView() {
         if (aStarts !== bStarts) return aStarts - bStarts;
         return a.name.localeCompare(b.name);
       });
-  }, [companies, companySearch, linkedCompanyIds]);
+  }, [companies, companySearch, linkedClientKeys]);
 
   const selectedAgency = selectedAgencyId
     ? agencies.find((a) => a.id === selectedAgencyId) || null
     : null;
 
-  async function handleMatch(agencyId: string, companyId: string) {
+  async function handleMatch(agencyId: string, company: MoovsCompany) {
     try {
-      await updateAgency(agencyId, { moovs_company_id: companyId });
+      await updateAgency(agencyId, {
+        moovs_company_id: company.client_type === 'company' || company.source === 'company' ? company.company_id : null,
+        client_links: [{
+          client_key: clientKeyFor(company),
+          client_type: company.client_type || company.source || 'company',
+          client_id: company.client_id || company.company_id,
+          display_name_snapshot: company.name,
+          is_primary: true,
+        }],
+      });
       setSelectedAgencyId(null);
       setCompanySearch('');
-      const company = companies.find((c) => c.company_id === companyId);
-      toast.success(`Linked to ${company?.name || 'company'}`);
+      toast.success(`Linked to ${company.name || 'client'}`);
       loadAgencies();
       loadCounts();
     } catch (err) {
@@ -133,8 +151,8 @@ export function AgencyMatchingView() {
 
   async function handleUnmatch(agencyId: string) {
     try {
-      await updateAgency(agencyId, { moovs_company_id: null });
-      toast.success('Company unlinked');
+      await updateAgency(agencyId, { moovs_company_id: null, client_links: [] });
+      toast.success('Client unlinked');
       loadAgencies();
       loadCounts();
     } catch (err) {
@@ -218,14 +236,16 @@ export function AgencyMatchingView() {
                 </p>
               ) : showMatched ? (
                 agencies.map((a) => {
-                  const company = companies.find((c) => c.company_id === a.moovs_company_id);
+                  const key = primaryClientKey(a);
+                  const company = key ? companies.find((c) => clientKeyFor(c) === key) : null;
+                  const link = a.client_links?.find((item) => item.client_key === key) ?? a.client_links?.[0];
                   return (
                     <div key={a.id} className="px-4 py-3 flex items-center justify-between">
                       <div>
                         <p className="text-sm font-medium text-gray-900">{a.name}</p>
                         <p className="text-xs text-green-600 flex items-center gap-1">
                           <Link2 className="h-3 w-3" />
-                          {company ? company.name : a.moovs_company_id}
+                          {company ? company.name : link?.display_name_snapshot || key}
                         </p>
                       </div>
                       <Button variant="ghost" size="sm" onClick={() => handleUnmatch(a.id)} className="text-gray-400 hover:text-red-600">
@@ -341,15 +361,18 @@ export function AgencyMatchingView() {
               ) : (
                 filteredCompanies.map((c) => (
                   <button
-                    key={c.company_id}
+                    key={clientKeyFor(c)}
                     className="w-full text-left px-4 py-3 hover:bg-green-50 transition-colors group"
-                    onClick={() => handleMatch(selectedAgencyId!, c.company_id)}
+                    onClick={() => handleMatch(selectedAgencyId!, c)}
                   >
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm font-medium text-gray-900">{c.name}</p>
                         <p className="text-xs text-gray-500">
                           {[c.email, c.phone_number].filter(Boolean).join(' · ') || 'No contact info'}
+                        </p>
+                        <p className="text-[11px] uppercase tracking-wide text-gray-400">
+                          {c.source === 'shuttle_client' ? 'Shuttle client' : 'Company'}
                         </p>
                       </div>
                       <Check className="h-4 w-4 text-green-600 opacity-0 group-hover:opacity-100 transition-opacity" />

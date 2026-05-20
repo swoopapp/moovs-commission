@@ -1,5 +1,5 @@
 import { config } from '../config/env';
-import { Agency } from '../types/commission';
+import { Agency, AgencyClientType } from '../types/commission';
 
 const API = config.apiBaseUrl;
 
@@ -20,7 +20,20 @@ async function handleVoidResponse(response: Response, context: string): Promise<
 
 // --- Input type (omit auto-generated fields) ---
 
-export type CreateAgencyInput = Omit<Agency, 'id' | 'created_at' | 'updated_at' | 'portal_token'>;
+export interface AgencyClientLinkInput {
+  client_key: string;
+  client_type: AgencyClientType;
+  client_id: string;
+  display_name_snapshot?: string | null;
+  is_primary?: boolean;
+}
+
+export type CreateAgencyInput = Omit<Agency, 'id' | 'created_at' | 'updated_at' | 'portal_token' | 'client_links'> & {
+  client_links?: AgencyClientLinkInput[];
+};
+export type UpdateAgencyInput = Partial<Omit<Agency, 'client_links'>> & {
+  client_links?: AgencyClientLinkInput[];
+};
 
 // --- Lookups ---
 
@@ -63,6 +76,12 @@ export async function fetchLinkedCompanyIds(operatorId: string): Promise<Set<str
   return new Set(rows.map((r) => r.moovs_company_id));
 }
 
+export async function fetchLinkedClientKeys(operatorId: string): Promise<Set<string>> {
+  const res = await fetch(`${API}/agencies/linked-clients/${encodeURIComponent(operatorId)}`);
+  const rows = await handleResponse<Array<{ client_key: string }>>(res, 'fetchLinkedClientKeys');
+  return new Set(rows.map((r) => r.client_key).filter(Boolean));
+}
+
 export async function fetchAgencyById(id: string): Promise<Agency | null> {
   const res = await fetch(`${API}/agencies/${encodeURIComponent(id)}`);
   const rows = await handleResponse<Agency[]>(res, 'fetchAgencyById');
@@ -88,7 +107,7 @@ export async function createAgency(data: CreateAgencyInput): Promise<Agency> {
   return rows[0];
 }
 
-export async function updateAgency(id: string, updates: Partial<Agency>): Promise<Agency> {
+export async function updateAgency(id: string, updates: UpdateAgencyInput): Promise<Agency> {
   const res = await fetch(`${API}/agencies/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
