@@ -57,15 +57,21 @@ export function DashboardView({ onRegisterExport }: DashboardViewProps) {
   // Load KPI stats (only agencies with attributions — lightweight)
   const loadStats = useCallback(async () => {
     try {
-      // Only fetch agencies that have attributions for KPI computation
-      // For now use a reasonable page to get stats — this will be fast since
-      // most agencies have 0 attributions
-      const dashStats = await fetchDashboardStats(operator.operatorId, []);
+      const matchedAgencies = await fetchAgenciesPaginated(operator.operatorId, {
+        limit: 250,
+        offset: 0,
+        matchedOnly: true,
+      });
+      const dashStats = await fetchDashboardStats(
+        operator.operatorId,
+        operator.moovsOperatorId,
+        matchedAgencies.agencies,
+      );
       setStats(dashStats);
     } catch (err) {
       console.error('Failed to load stats:', err);
     }
-  }, [operator.operatorId]);
+  }, [operator.operatorId, operator.moovsOperatorId]);
 
   // Load paginated agencies for table
   const loadAgencies = useCallback(async () => {
