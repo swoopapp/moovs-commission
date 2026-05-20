@@ -215,6 +215,8 @@ function formatTrip(row: any) {
   const promoCode = parseFloat(row['Promo Code Amt']) || 0;
   const total = baseRate + tax + gratuity - discount + other + other2 + other3 + meetGreet + tolls + fwdSeat + rearSeat + boosterSeat + promoCode;
 
+  const clientKeys = Array.isArray(row['Client Keys']) ? Array.from(new Set(row['Client Keys'].filter(Boolean))) : [];
+
   return {
     'Trip ID': row['Trip ID'],
     'Order Number': row['Order Number'] || '',
@@ -239,12 +241,13 @@ function formatTrip(row: any) {
     'Total Amount ($)': total,
     'Status Slug': row['Status Slug'] || '',
     'Source': 'trip',
-    'Client Keys': Array.isArray(row['Client Keys']) ? row['Client Keys'] : [],
+    'Client Keys': clientKeys,
   };
 }
 
 function formatShuttle(row: any) {
   const baseRate = parseFloat(row['Base Rate']) || 0;
+  const clientKeys = Array.isArray(row['Client Keys']) ? Array.from(new Set(row['Client Keys'].filter(Boolean))) : [];
 
   return {
     'Trip ID': row['Trip ID'],
@@ -270,7 +273,7 @@ function formatShuttle(row: any) {
     'Total Amount ($)': baseRate,
     'Status Slug': row['Status Slug'] || '',
     'Source': 'shuttle',
-    'Client Keys': Array.isArray(row['Client Keys']) ? row['Client Keys'] : [],
+    'Client Keys': clientKeys,
     'Passenger Count': row['Passenger Count'] || 1,
     'Shuttle Client Name': row['Shuttle Client Name'] || null,
   };

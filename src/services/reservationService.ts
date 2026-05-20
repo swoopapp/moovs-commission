@@ -68,9 +68,9 @@ function text(value: unknown): string | null {
 
 function textArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
-  return value
+  return Array.from(new Set(value
     .map((item) => text(item))
-    .filter((item): item is string => Boolean(item));
+    .filter((item): item is string => Boolean(item))));
 }
 
 function liveId(operatorId: string, moovsTripId: string): string {
