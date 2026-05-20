@@ -3,9 +3,10 @@ import { Agency, Agent, Reservation, ReservationAttribution, Payout } from '../.
 import { useOperator } from '../../contexts/OperatorContext';
 import { fetchAgencyById } from '../../services/agencyService';
 import { fetchAgents } from '../../services/agentService';
-import { fetchReservations } from '../../services/reservationService';
+import { fetchCurrentReservations, fetchReservationsByIds } from '../../services/reservationService';
 import { fetchAttributionsByAgency } from '../../services/attributionService';
 import { fetchPayoutsByAgency } from '../../services/payoutService';
+import { mergeAgencyAttributions } from '../../services/commissionTripService';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
 import { AgencyHeader } from './AgencyHeader';
 import { ReservationsTab } from './ReservationsTab';
@@ -44,16 +45,28 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
       setAgency(agencyData);
 
       // Load remaining data in parallel
-      const [agentsData, reservationsData, attributionsData, payoutsData] = await Promise.all([
+      const oneYearAgo = new Date();
+      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+      const dateFrom = oneYearAgo.toISOString().slice(0, 10);
+      const dateTo = new Date().toISOString().slice(0, 10);
+
+      const [agentsData, currentReservationsData, attributionsData, payoutsData] = await Promise.all([
         fetchAgents(agencyId),
-        fetchReservations(operator.operatorId),
+        fetchCurrentReservations(operator.operatorId, operator.moovsOperatorId, { dateFrom, dateTo }),
         fetchAttributionsByAgency(agencyId),
         fetchPayoutsByAgency(agencyId),
       ]);
 
+      const currentReservationIds = new Set(currentReservationsData.map((reservation) => reservation.id));
+      const missingAttributedReservationIds = attributionsData
+        .map((attribution) => attribution.reservation_id)
+        .filter((id) => !currentReservationIds.has(id));
+      const historicalReservations = await fetchReservationsByIds(missingAttributedReservationIds);
+      const reservationsData = [...currentReservationsData, ...historicalReservations];
+
       setAgents(agentsData);
       setReservations(reservationsData);
-      setAttributions(attributionsData);
+      setAttributions(mergeAgencyAttributions(agencyData, reservationsData, attributionsData));
       setPayouts(payoutsData);
     } catch (err) {
       console.error('Failed to load agency detail:', err);
@@ -61,7 +74,7 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
     } finally {
       setLoading(false);
     }
-  }, [agencyId, operator.operatorId]);
+  }, [agencyId, operator.operatorId, operator.moovsOperatorId]);
 
   useEffect(() => {
     loadData();
@@ -163,6 +176,8 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
         open={payoutWizardOpen}
         onOpenChange={setPayoutWizardOpen}
         operatorId={operator.operatorId}
+        moovsOperatorId={operator.moovsOperatorId}
+        agency={agency}
         agencyId={agencyId}
         onPayoutCreated={loadData}
       />

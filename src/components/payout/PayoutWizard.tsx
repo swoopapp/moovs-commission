@@ -10,13 +10,17 @@ import { DateRangeStep, TripWithCommission } from './DateRangeStep';
 import { TripSelectionStep } from './TripSelectionStep';
 import { PaymentDetailsStep } from './PaymentDetailsStep';
 import { createPayout, createPayoutReservations } from '../../services/payoutService';
+import { createAttributions } from '../../services/attributionService';
+import { upsertReservations } from '../../services/reservationService';
 import { toast } from 'sonner';
-import type { PayoutMethod, PayoutStatus } from '../../types/commission';
+import type { Agency, PayoutMethod, PayoutStatus } from '../../types/commission';
 
 interface PayoutWizardProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   operatorId: string;
+  moovsOperatorId: string;
+  agency: Agency;
   agencyId: string;
   onPayoutCreated: () => void;
 }
@@ -31,6 +35,8 @@ export function PayoutWizard({
   open,
   onOpenChange,
   operatorId,
+  moovsOperatorId,
+  agency,
   agencyId,
   onPayoutCreated,
 }: PayoutWizardProps) {
@@ -91,6 +97,25 @@ export function PayoutWizard({
 
   async function handleSave(status: PayoutStatus) {
     try {
+      const persistedReservations = await upsertReservations(selectedTrips.map((t) => t.reservation));
+      const persistedByTripId = new Map(persistedReservations.map((reservation) => [reservation.moovs_trip_id, reservation]));
+
+      const persistedAttributions = await createAttributions(
+        selectedTrips.map((trip) => {
+          const reservation = persistedByTripId.get(trip.reservation.moovs_trip_id);
+          if (!reservation) throw new Error(`Failed to snapshot trip ${trip.reservation.moovs_trip_id}`);
+          return {
+            reservation_id: reservation.id,
+            agency_id: trip.attribution.agency_id,
+            agent_id: trip.attribution.agent_id,
+            commission_rate: trip.attribution.commission_rate,
+            commission_type: trip.attribution.commission_type,
+            commission_base: trip.attribution.commission_base,
+            commission_amount: trip.attribution.commission_amount,
+          };
+        }),
+      );
+
       const payout = await createPayout({
         operator_id: operatorId,
         agency_id: agencyId,
@@ -111,7 +136,7 @@ export function PayoutWizard({
       // Create junction rows
       await createPayoutReservations(
         payout.id,
-        selectedTrips.map((t) => t.reservation.id),
+        persistedAttributions.map((attribution) => attribution.reservation_id),
       );
 
       toast.success(
@@ -164,6 +189,8 @@ export function PayoutWizard({
         {step === 1 && (
           <DateRangeStep
             operatorId={operatorId}
+            moovsOperatorId={moovsOperatorId}
+            agency={agency}
             agencyId={agencyId}
             dateFrom={dateFrom}
             dateTo={dateTo}

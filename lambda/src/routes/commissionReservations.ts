@@ -3,6 +3,24 @@ import { appQuery } from '../appDb.js';
 
 const app = new Hono();
 
+const RESERVATION_FIELDS = [
+  'operator_id',
+  'moovs_trip_id',
+  'moovs_company_id',
+  'order_number',
+  'confirmation_number',
+  'pickup_date',
+  'pickup_location',
+  'dropoff_location',
+  'passenger_name',
+  'vehicle_type',
+  'trip_type',
+  'base_rate_amount',
+  'total_amount',
+  'total_with_gratuity',
+  'trip_status',
+];
+
 // GET /commission-reservations — ?operator_id required, ?date_from, ?date_to
 app.get('/commission-reservations', async (c) => {
   try {
@@ -33,6 +51,44 @@ app.get('/commission-reservations', async (c) => {
   } catch (err: any) {
     console.error('Error fetching commission reservations:', err);
     return c.json({ error: 'Internal Server Error' }, 500);
+  }
+});
+
+// POST /commission-reservations/upsert — snapshot live Moovs reservations into the app DB.
+// Accepts a single reservation object or an array. Used when creating attribution/payout state.
+app.post('/commission-reservations/upsert', async (c) => {
+  try {
+    const body = await c.req.json();
+    const items = Array.isArray(body) ? body : [body];
+    if (items.length === 0) return c.json([]);
+
+    const rows: any[] = [];
+    for (const item of items) {
+      if (!item.operator_id || !item.moovs_trip_id) {
+        return c.json({ error: 'Missing operator_id or moovs_trip_id' }, 400);
+      }
+
+      const values = RESERVATION_FIELDS.map((field) => item[field] ?? null);
+      const placeholders = RESERVATION_FIELDS.map((_, i) => `$${i + 1}`).join(', ');
+      const updates = RESERVATION_FIELDS
+        .filter((field) => !['operator_id', 'moovs_trip_id'].includes(field))
+        .map((field) => `${field} = EXCLUDED.${field}`);
+
+      const r = await appQuery(
+        `INSERT INTO commission_reservations (${RESERVATION_FIELDS.join(', ')})
+         VALUES (${placeholders})
+         ON CONFLICT (operator_id, moovs_trip_id)
+         DO UPDATE SET ${updates.join(', ')}, synced_at = now()
+         RETURNING *`,
+        values,
+      );
+      rows.push(r.rows[0]);
+    }
+
+    return c.json(rows, 201);
+  } catch (err: any) {
+    console.error('Error upserting commission reservations:', err);
+    return c.json({ error: err.message || 'Internal Server Error' }, 500);
   }
 });
 

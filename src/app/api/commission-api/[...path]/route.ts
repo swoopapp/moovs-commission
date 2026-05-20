@@ -68,6 +68,19 @@ async function authorizeProxyRequest(path: string, request: Request, adminOnly: 
     if (operatorId !== session.operatorId) return Response.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  if (path === 'commission-reservations/upsert' && request.method === 'POST') {
+    const body = await request.clone().json().catch(() => null);
+    const items = Array.isArray(body) ? body : [body];
+    if (!items.length || items.some((item) => item?.operator_id !== session.operatorId)) {
+      return Response.json({ error: 'Forbidden' }, { status: 403 });
+    }
+  }
+
+  if (path === 'fetch-reservations' && request.method === 'POST') {
+    const body = await request.clone().json().catch(() => null);
+    if (body?.operator_id !== session.moovsOperatorId) return Response.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   if (path === 'payouts' && request.method === 'GET') {
     const operatorId = url.searchParams.get('operator_id');
     if (operatorId && operatorId !== session.operatorId) return Response.json({ error: 'Forbidden' }, { status: 403 });

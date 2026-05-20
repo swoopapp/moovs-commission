@@ -4,10 +4,11 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Separator } from '../ui/separator';
-import { Reservation, ReservationAttribution } from '../../types/commission';
+import { Agency, Reservation, ReservationAttribution } from '../../types/commission';
 import { fetchAttributionsByAgency } from '../../services/attributionService';
-import { fetchReservations } from '../../services/reservationService';
+import { fetchCurrentReservations } from '../../services/reservationService';
 import { fetchAllPayoutReservations } from '../../services/payoutService';
+import { mergeAgencyAttributions } from '../../services/commissionTripService';
 
 export interface TripWithCommission {
   reservation: Reservation;
@@ -16,6 +17,8 @@ export interface TripWithCommission {
 
 interface DateRangeStepProps {
   operatorId: string;
+  moovsOperatorId: string;
+  agency: Agency;
   agencyId: string;
   dateFrom: string;
   dateTo: string;
@@ -32,6 +35,8 @@ function formatCurrency(amount: number): string {
 
 export function DateRangeStep({
   operatorId,
+  moovsOperatorId,
+  agency,
   agencyId,
   dateFrom,
   dateTo,
@@ -54,7 +59,7 @@ export function DateRangeStep({
       // Fetch attributions, reservations, and already-paid reservation IDs in parallel
       const [attributions, reservations, payoutReservations] = await Promise.all([
         fetchAttributionsByAgency(agencyId),
-        fetchReservations(operatorId, { dateFrom, dateTo }),
+        fetchCurrentReservations(operatorId, moovsOperatorId, { dateFrom, dateTo }),
         fetchAllPayoutReservations(agencyId),
       ]);
 
@@ -62,7 +67,8 @@ export function DateRangeStep({
       const paidResIds = new Set(payoutReservations.map((pr) => pr.reservation_id));
 
       // Build a map of reservation_id -> attribution for this agency
-      const attrByResId = new Map(attributions.map((a) => [a.reservation_id, a]));
+      const mergedAttributions = mergeAgencyAttributions(agency, reservations, attributions);
+      const attrByResId = new Map(mergedAttributions.map((a) => [a.reservation_id, a]));
 
       // Filter: reservations that have an attribution for this agency AND are not in a payout
       const result: TripWithCommission[] = [];

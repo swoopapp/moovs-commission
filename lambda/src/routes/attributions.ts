@@ -47,6 +47,14 @@ app.post('/attributions', async (c) => {
       const r = await appQuery(
         `INSERT INTO reservation_attributions (reservation_id, agency_id, agent_id, commission_rate, commission_type, commission_base, commission_amount)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (reservation_id)
+         DO UPDATE SET
+           agency_id = EXCLUDED.agency_id,
+           agent_id = EXCLUDED.agent_id,
+           commission_rate = EXCLUDED.commission_rate,
+           commission_type = EXCLUDED.commission_type,
+           commission_base = EXCLUDED.commission_base,
+           commission_amount = EXCLUDED.commission_amount
          RETURNING *`,
         [item.reservation_id, item.agency_id, item.agent_id, item.commission_rate, item.commission_type, item.commission_base, item.commission_amount],
       );
