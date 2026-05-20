@@ -63,6 +63,11 @@ async function authorizeProxyRequest(path: string, request: Request, adminOnly: 
     if (operatorId !== session.operatorId) return Response.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  if (path.startsWith('agencies/linked-clients/')) {
+    const operatorId = path.split('/')[2];
+    if (operatorId !== session.operatorId) return Response.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   if (path === 'commission-reservations') {
     const operatorId = url.searchParams.get('operator_id');
     if (operatorId !== session.operatorId) return Response.json({ error: 'Forbidden' }, { status: 403 });
