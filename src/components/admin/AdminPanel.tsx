@@ -11,7 +11,6 @@ import {
   revokeOperatorPortalToken,
 } from '../../services/commissionOperatorService';
 import { lookupMoovsOperator, MoovsOperatorDetails } from '../../services/moovsOperatorService';
-import { uploadLogo } from '../../services/storageService';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import {
@@ -88,7 +87,6 @@ function AdminDashboard() {
   const [form, setForm] = useState<OperatorFormData>(emptyForm);
   const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [saving, setSaving] = useState(false);
-  const [logoFile, setLogoFile] = useState<File | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [tokenActionId, setTokenActionId] = useState<string | null>(null);
 
@@ -124,7 +122,6 @@ function AdminDashboard() {
       contact_email: op.contact_email || '',
       contact_phone: op.contact_phone || '',
     });
-    setLogoFile(null);
     setMoovsDetails(null);
     setLookupError(null);
     setFormErrors({});
@@ -134,7 +131,6 @@ function AdminDashboard() {
   const handleNew = () => {
     setEditingId(null);
     setForm(emptyForm);
-    setLogoFile(null);
     setMoovsDetails(null);
     setLookupError(null);
     setFormErrors({});
@@ -145,7 +141,6 @@ function AdminDashboard() {
     setShowForm(false);
     setEditingId(null);
     setForm(emptyForm);
-    setLogoFile(null);
     setMoovsDetails(null);
     setLookupError(null);
     setFormErrors({});
@@ -173,6 +168,7 @@ function AdminDashboard() {
         ...prev,
         display_name: prev.display_name || details.name,
         slug: prev.slug || details.nameSlug || details.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+        logo_url: details.logoUrl || prev.logo_url,
       }));
     } catch (err) {
       setLookupError(err instanceof Error ? err.message : 'Lookup failed');
@@ -188,18 +184,12 @@ function AdminDashboard() {
 
     setSaving(true);
     try {
-      let logoUrl = form.logo_url;
-      if (logoFile) {
-        logoUrl = await uploadLogo(logoFile);
-      }
-
       const data = {
         moovs_operator_id: form.moovs_operator_id.trim(),
         slug: form.slug.toLowerCase().replace(/[^a-z0-9-]/g, ''),
         display_name: form.display_name.trim(),
         primary_color: form.primary_color || null,
         secondary_color: form.secondary_color || null,
-        logo_url: logoUrl || null,
         contact_email: form.contact_email || null,
         contact_phone: form.contact_phone || null,
       };
@@ -484,22 +474,22 @@ function AdminDashboard() {
               <div className="sm:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Logo</label>
                 <div className="flex items-center gap-4">
-                  {(logoFile || form.logo_url) && (
-                    <img
-                      src={logoFile ? URL.createObjectURL(logoFile) : form.logo_url}
-                      alt="Logo preview"
-                      className="h-10 w-auto"
-                    />
+                  {form.logo_url ? (
+                    <div className="h-12 w-16 bg-slate-800 rounded-lg flex items-center justify-center overflow-hidden p-1">
+                      <img
+                        src={form.logo_url}
+                        alt="Logo preview"
+                        className="h-10 w-auto object-contain"
+                      />
+                    </div>
+                  ) : (
+                    <div className="h-12 w-16 bg-gray-100 border border-dashed border-gray-300 rounded-lg flex items-center justify-center text-xs text-gray-400">
+                      None
+                    </div>
                   )}
-                  <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
-                    {logoFile ? logoFile.name : (form.logo_url ? 'Change Logo' : 'Upload Logo')}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={e => setLogoFile(e.target.files?.[0] || null)}
-                      className="sr-only"
-                    />
-                  </label>
+                  <p className="text-xs text-gray-500 leading-relaxed">
+                    Pulled automatically from the Moovs operator profile (<code>operator.company_logo_url</code>). To change it, update the company logo in Moovs.
+                  </p>
                 </div>
               </div>
             </div>

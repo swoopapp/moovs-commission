@@ -36,7 +36,7 @@ export async function fetchAllOperators(): Promise<CommissionOperator[]> {
 
 export async function createOperator(
   data: Pick<CommissionOperator, 'moovs_operator_id' | 'slug' | 'display_name'> &
-    Partial<Pick<CommissionOperator, 'logo_url' | 'primary_color' | 'secondary_color' | 'contact_email' | 'contact_phone' | 'status'>>,
+    Partial<Pick<CommissionOperator, 'primary_color' | 'secondary_color' | 'contact_email' | 'contact_phone' | 'status'>>,
 ): Promise<CommissionOperator> {
   const res = await fetch(`${API}/commission-operators`, {
     method: 'POST',
@@ -50,7 +50,7 @@ export async function createOperator(
 
 export async function updateOperator(
   id: string,
-  updates: Partial<Pick<CommissionOperator, 'display_name' | 'logo_url' | 'primary_color' | 'secondary_color' | 'auth_password' | 'slug' | 'contact_email' | 'contact_phone' | 'status'>>,
+  updates: Partial<Pick<CommissionOperator, 'display_name' | 'primary_color' | 'secondary_color' | 'auth_password' | 'slug' | 'contact_email' | 'contact_phone' | 'status'>>,
 ): Promise<CommissionOperator> {
   const res = await fetch(`${API}/commission-operators/${encodeURIComponent(id)}`, {
     method: 'PATCH',

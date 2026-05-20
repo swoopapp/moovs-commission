@@ -1,9 +1,15 @@
 import { Hono } from 'hono';
 import crypto from 'crypto';
 import { appQuery } from '../appDb.js';
+import { query as moovsQuery } from '../db.js';
 import { hasAdminSecret } from '../config.js';
 
 const app = new Hono();
+
+type CommissionOperatorRow = Record<string, any> & {
+  moovs_operator_id?: string | null;
+  logo_url?: string | null;
+};
 
 function requireAdmin(c: any) {
   return hasAdminSecret(c.req.header('x-admin-secret'));
@@ -17,6 +23,37 @@ function hashPortalToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
+async function fetchMoovsLogos(moovsOperatorIds: string[]): Promise<Map<string, string | null>> {
+  const ids = Array.from(new Set(moovsOperatorIds.filter(Boolean)));
+  if (ids.length === 0) return new Map();
+
+  const placeholders = ids.map((_, i) => `$${i + 1}`).join(',');
+  const r = await moovsQuery(
+    `SELECT operator_id, company_logo_url FROM operator WHERE operator_id IN (${placeholders})`,
+    ids,
+  );
+
+  const logos = new Map<string, string | null>();
+  for (const row of r.rows) {
+    logos.set(row.operator_id, row.company_logo_url || null);
+  }
+  return logos;
+}
+
+// logo_url is sourced from Moovs operator.company_logo_url on reads.
+// The commission_operators.logo_url column is kept only for legacy compatibility.
+async function withMoovsLogos<T extends CommissionOperatorRow>(rows: T[]): Promise<T[]> {
+  if (rows.length === 0) return rows;
+
+  const ids = rows.map((row) => row.moovs_operator_id).filter((id): id is string => Boolean(id));
+  const logos = await fetchMoovsLogos(ids);
+
+  return rows.map((row) => ({
+    ...row,
+    logo_url: row.moovs_operator_id ? logos.get(row.moovs_operator_id) ?? null : null,
+  }));
+}
+
 // GET /commission-operators — list all, or ?slug=X for single lookup
 app.get('/commission-operators', async (c) => {
   try {
@@ -24,10 +61,10 @@ app.get('/commission-operators', async (c) => {
     if (!slug && !requireAdmin(c)) return c.json({ error: 'Unauthorized' }, 401);
     if (slug) {
       const r = await appQuery('SELECT * FROM commission_operators WHERE slug = $1 LIMIT 1', [slug]);
-      return c.json(r.rows);
+      return c.json(await withMoovsLogos(r.rows));
     }
     const r = await appQuery('SELECT * FROM commission_operators ORDER BY created_at DESC');
-    return c.json(r.rows);
+    return c.json(await withMoovsLogos(r.rows));
   } catch (err: any) {
     console.error('Error fetching commission operators:', err);
     return c.json({ error: 'Internal Server Error' }, 500);
@@ -40,7 +77,8 @@ app.get('/commission-operators/:id', async (c) => {
     if (!requireAdmin(c)) return c.json({ error: 'Unauthorized' }, 401);
     const r = await appQuery('SELECT * FROM commission_operators WHERE id = $1', [c.req.param('id')]);
     if (r.rows.length === 0) return c.json({ error: 'Not found' }, 404);
-    return c.json(r.rows[0]);
+    const [row] = await withMoovsLogos(r.rows);
+    return c.json(row);
   } catch (err: any) {
     console.error('Error fetching commission operator:', err);
     return c.json({ error: 'Internal Server Error' }, 500);
@@ -71,7 +109,8 @@ app.post('/commission-operators/portal-token/verify', async (c) => {
       [r.rows[0].id],
     );
 
-    return c.json(r.rows[0]);
+    const [row] = await withMoovsLogos(r.rows);
+    return c.json(row);
   } catch (err: any) {
     console.error('Error verifying commission operator portal token:', err);
     return c.json({ error: 'Internal Server Error' }, 500);
@@ -98,7 +137,8 @@ app.post('/commission-operators/:id/portal-token', async (c) => {
       [hashPortalToken(token), body?.expires_at || null, id],
     );
     if (r.rows.length === 0) return c.json({ error: 'Not found' }, 404);
-    return c.json({ ...r.rows[0], portal_token: token });
+    const [row] = await withMoovsLogos(r.rows);
+    return c.json({ ...row, portal_token: token });
   } catch (err: any) {
     console.error('Error generating commission operator portal token:', err);
     return c.json({ error: err.message || 'Internal Server Error' }, 500);
@@ -132,14 +172,14 @@ app.post('/commission-operators', async (c) => {
   try {
     if (!requireAdmin(c)) return c.json({ error: 'Unauthorized' }, 401);
     const body = await c.req.json();
-    const { moovs_operator_id, slug, display_name, auth_password, logo_url, primary_color, secondary_color, contact_email, contact_phone, status } = body;
+    const { moovs_operator_id, slug, display_name, auth_password, primary_color, secondary_color, contact_email, contact_phone, status } = body;
     const r = await appQuery(
       `INSERT INTO commission_operators (moovs_operator_id, slug, display_name, auth_password, logo_url, primary_color, secondary_color, contact_email, contact_phone, status)
        VALUES ($1, $2, $3, COALESCE($4, encode(gen_random_bytes(32), 'hex')), $5, $6, $7, $8, $9, COALESCE($10, 'active'))
        RETURNING *`,
-      [moovs_operator_id, slug, display_name, auth_password, logo_url, primary_color, secondary_color, contact_email, contact_phone, status],
+      [moovs_operator_id, slug, display_name, auth_password, null, primary_color, secondary_color, contact_email, contact_phone, status],
     );
-    return c.json(r.rows, 201);
+    return c.json(await withMoovsLogos(r.rows), 201);
   } catch (err: any) {
     console.error('Error creating commission operator:', err);
     return c.json({ error: err.message || 'Internal Server Error' }, 500);
@@ -152,7 +192,8 @@ app.patch('/commission-operators/:id', async (c) => {
     if (!requireAdmin(c)) return c.json({ error: 'Unauthorized' }, 401);
     const id = c.req.param('id');
     const body = await c.req.json();
-    const allowedFields = ['display_name', 'slug', 'auth_password', 'logo_url', 'primary_color', 'secondary_color', 'contact_email', 'contact_phone', 'status'];
+    // logo_url is intentionally excluded — it is pulled from Moovs operator.company_logo_url.
+    const allowedFields = ['display_name', 'slug', 'auth_password', 'primary_color', 'secondary_color', 'contact_email', 'contact_phone', 'status'];
     const sets: string[] = [];
     const vals: any[] = [];
     let idx = 1;
@@ -165,13 +206,14 @@ app.patch('/commission-operators/:id', async (c) => {
     }
     if (sets.length === 0) return c.json({ error: 'No fields to update' }, 400);
 
+    sets.push('updated_at = now()');
     vals.push(id);
     const r = await appQuery(
       `UPDATE commission_operators SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`,
       vals,
     );
     if (r.rows.length === 0) return c.json({ error: 'Not found' }, 404);
-    return c.json(r.rows);
+    return c.json(await withMoovsLogos(r.rows));
   } catch (err: any) {
     console.error('Error updating commission operator:', err);
     return c.json({ error: err.message || 'Internal Server Error' }, 500);

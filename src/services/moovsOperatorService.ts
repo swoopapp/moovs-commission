@@ -11,6 +11,7 @@ export interface MoovsOperatorDetails {
   customDomain: string | null;
   plan: string | null;
   planName: string | null;
+  logoUrl: string | null;
   status: string;
   isActive: boolean;
   vehiclesTotal: number;
@@ -45,6 +46,7 @@ export async function lookupMoovsOperator(
       customDomain: op.custom_domain || null,
       plan: op.plan || null,
       planName: op.lago_plan_name || op.display_plan || null,
+      logoUrl: op.logo_url || op.company_logo_url || null,
       status: op.status || 'unknown',
       isActive: op.is_active ?? false,
       vehiclesTotal: op.vehicles_total || 0,
