@@ -59,7 +59,11 @@ export function DateRangeStep({
       // Fetch attributions, reservations, and already-paid reservation IDs in parallel
       const [attributions, reservations, payoutReservations] = await Promise.all([
         fetchAttributionsByAgency(agencyId),
-        fetchCurrentReservations(operatorId, moovsOperatorId, { dateFrom, dateTo }),
+        fetchCurrentReservations(operatorId, moovsOperatorId, {
+          dateFrom,
+          dateTo,
+          companyId: agency.moovs_company_id ?? undefined,
+        }),
         fetchAllPayoutReservations(agencyId),
       ]);
 

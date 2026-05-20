@@ -17,11 +17,17 @@ import {
   SelectItem,
   SelectValue,
 } from '../ui/select';
+import { Button } from '../ui/button';
 
 interface ReservationsTabProps {
   reservations: Reservation[];
   attributions: ReservationAttribution[];
   agents: Agent[];
+  loading?: boolean;
+  hasMore?: boolean;
+  loadedDateFrom?: string;
+  loadedDateTo?: string;
+  onLoadMore?: () => void;
 }
 
 function formatCurrency(amount: number): string {
@@ -50,11 +56,20 @@ interface JoinedReservation {
   agentName: string | null;
 }
 
-export function ReservationsTab({ reservations, attributions, agents }: ReservationsTabProps) {
+export function ReservationsTab({
+  reservations,
+  attributions,
+  agents,
+  loading = false,
+  hasMore = false,
+  loadedDateFrom,
+  loadedDateTo,
+  onLoadMore,
+}: ReservationsTabProps) {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [agentFilter, setAgentFilter] = useState<string>('all');
-  const [dateFrom, setDateFrom] = useState<string>('');
-  const [dateTo, setDateTo] = useState<string>('');
+  const [dateFrom, setDateFrom] = useState<string>(loadedDateFrom ?? '');
+  const [dateTo, setDateTo] = useState<string>(loadedDateTo ?? '');
 
   const agentMap = useMemo(() => {
     const m = new Map<string, Agent>();
@@ -95,7 +110,7 @@ export function ReservationsTab({ reservations, attributions, agents }: Reservat
     return joined.filter((j) => {
       const matchesStatus = statusFilter === 'all' || j.reservation.trip_status?.toLowerCase() === statusFilter.toLowerCase();
       const matchesAgent = agentFilter === 'all' || j.attribution.agent_id === agentFilter;
-      const pickupDate = j.reservation.pickup_date;
+      const pickupDate = j.reservation.pickup_date?.slice(0, 10);
       const matchesFrom = !dateFrom || (pickupDate && pickupDate >= dateFrom);
       const matchesTo = !dateTo || (pickupDate && pickupDate <= dateTo);
       return matchesStatus && matchesAgent && matchesFrom && matchesTo;
@@ -117,7 +132,15 @@ export function ReservationsTab({ reservations, attributions, agents }: Reservat
     <div className="space-y-3">
       {/* Filters */}
       <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-500 font-medium">{filtered.length} reservations</p>
+        <div>
+          <p className="text-sm text-gray-500 font-medium">
+            {filtered.length} reservations
+            {loading ? ' · loading…' : ''}
+          </p>
+          {loadedDateFrom && loadedDateTo && (
+            <p className="text-xs text-gray-400">Loaded {formatDate(loadedDateFrom)} – {formatDate(loadedDateTo)}</p>
+          )}
+        </div>
         <div className="flex items-center gap-3">
         <div className="flex items-center gap-1.5">
           <label className="text-sm text-gray-500">From</label>
@@ -163,7 +186,7 @@ export function ReservationsTab({ reservations, attributions, agents }: Reservat
       </div>
 
       {/* Table */}
-      {filtered.length === 0 ? (
+      {filtered.length === 0 && !loading ? (
         <div className="px-6 py-12 text-center text-gray-500 bg-white rounded-lg border border-gray-200">
           No reservations found.
         </div>
@@ -203,8 +226,23 @@ export function ReservationsTab({ reservations, attributions, agents }: Reservat
                   </TableCell>
                 </TableRow>
               ))}
+              {loading && (
+                <TableRow>
+                  <TableCell colSpan={9} className="py-8 text-center text-sm text-gray-500">
+                    Loading reservations…
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
+        </div>
+      )}
+
+      {hasMore && onLoadMore && (
+        <div className="flex justify-center pt-2">
+          <Button variant="outline" onClick={onLoadMore} disabled={loading}>
+            {loading ? 'Loading…' : 'Load more trips'}
+          </Button>
         </div>
       )}
     </div>

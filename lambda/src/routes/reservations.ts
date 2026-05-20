@@ -3,11 +3,11 @@ import { query } from '../db.js';
 
 const app = new Hono();
 
-// POST /fetch-reservations { operator_id, date_from?, date_to? }
+// POST /fetch-reservations { operator_id, date_from?, date_to?, company_id?, limit?, offset? }
 // Returns BOTH regular trips and shuttle bookings in a unified format
 app.post('/fetch-reservations', async (c) => {
   try {
-    const { operator_id, date_from, date_to } = await c.req.json();
+    const { operator_id, date_from, date_to, company_id, limit, offset } = await c.req.json();
 
     if (!operator_id) {
       return c.json({ error: 'Missing operator_id' }, 400);
@@ -16,6 +16,8 @@ app.post('/fetch-reservations', async (c) => {
     const params: any[] = [operator_id];
     let tripDateFilter = '';
     let shuttleDateFilter = '';
+    let tripCompanyFilter = '';
+    let shuttleCompanyFilter = '';
 
     if (date_from) {
       params.push(date_from);
@@ -27,6 +29,18 @@ app.post('/fetch-reservations', async (c) => {
       tripDateFilter += ` AND pickup.date_time <= ($${params.length}::date + INTERVAL '1 day')`;
       shuttleDateFilter += ` AND sb.travel_date <= $${params.length}::date`;
     }
+    if (company_id) {
+      params.push(company_id);
+      tripCompanyFilter += ` AND req.company_id::text = $${params.length}`;
+      shuttleCompanyFilter += ` AND COALESCE(sc.company_id::text, sp.company_id::text) = $${params.length}`;
+    }
+
+    const parsedLimit = Number.parseInt(String(limit ?? ''), 10);
+    const safeLimit = Number.isFinite(parsedLimit) && parsedLimit > 0
+      ? Math.min(parsedLimit, 250)
+      : null;
+    const parsedOffset = Number.parseInt(String(offset ?? 0), 10);
+    const safeOffset = Number.isFinite(parsedOffset) && parsedOffset > 0 ? parsedOffset : 0;
 
     // Query 1: Regular trips (request/trip/route)
     const tripsResult = await query(
@@ -70,7 +84,7 @@ app.post('/fetch-reservations', async (c) => {
       ) dropoff ON true
       LEFT JOIN vehicle v ON r.vehicle_id = v.vehicle_id
       LEFT JOIN vehicle fv ON fr.vehicle_id = fv.vehicle_id
-      WHERE req.operator_id = $1${tripDateFilter}
+      WHERE req.operator_id = $1${tripDateFilter}${tripCompanyFilter}
       ORDER BY pickup.date_time ASC NULLS LAST`,
       params
     );
@@ -111,7 +125,7 @@ app.post('/fetch-reservations', async (c) => {
       LEFT JOIN shuttle_passenger sp ON sb.shuttle_passenger_id = sp.shuttle_passenger_id
       LEFT JOIN shuttle_payment pay ON pay.booking_id = sb.booking_id
       WHERE sb.operator_id = $1
-        AND sb.cancelled_at IS NULL${shuttleDateFilter}
+        AND sb.cancelled_at IS NULL${shuttleDateFilter}${shuttleCompanyFilter}
       ORDER BY COALESCE(sb.scheduled_pickup_time, sb.travel_date::timestamptz) ASC NULLS LAST`,
       params
     );
@@ -127,13 +141,22 @@ app.post('/fetch-reservations', async (c) => {
       return dateA < dateB ? -1 : dateA > dateB ? 1 : 0;
     });
 
+    const total = reservations.length;
+    const pagedReservations = safeLimit === null
+      ? reservations
+      : reservations.slice(safeOffset, safeOffset + safeLimit);
+
     return c.json({
       success: true,
-      reservations,
+      reservations: pagedReservations,
+      total,
+      limit: safeLimit,
+      offset: safeOffset,
       counts: {
         trips: tripReservations.length,
         shuttle_bookings: shuttleReservations.length,
-        total: reservations.length,
+        total,
+        returned: pagedReservations.length,
       },
     });
   } catch (err: any) {

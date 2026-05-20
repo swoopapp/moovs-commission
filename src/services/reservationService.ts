@@ -18,6 +18,9 @@ interface FetchReservationsOptions {
   agencyId?: string;
   dateFrom?: string;
   dateTo?: string;
+  companyId?: string;
+  limit?: number;
+  offset?: number;
 }
 
 export async function fetchReservations(
@@ -31,6 +34,15 @@ export async function fetchReservations(
   }
   if (options?.dateTo) {
     url += `&date_to=${encodeURIComponent(options.dateTo)}`;
+  }
+  if (options?.companyId) {
+    url += `&company_id=${encodeURIComponent(options.companyId)}`;
+  }
+  if (options?.limit) {
+    url += `&limit=${encodeURIComponent(String(options.limit))}`;
+  }
+  if (options?.offset) {
+    url += `&offset=${encodeURIComponent(String(options.offset))}`;
   }
 
   const res = await fetch(url);
@@ -99,6 +111,9 @@ export async function fetchLiveReservations(
       operator_id: moovsOperatorId,
       date_from: options?.dateFrom,
       date_to: options?.dateTo,
+      company_id: options?.companyId,
+      limit: options?.limit,
+      offset: options?.offset,
     }),
   });
   const data = await handleResponse<{ reservations?: RawMoovsReservation[] }>(res, 'fetchLiveReservations');
@@ -116,12 +131,21 @@ export async function fetchCurrentReservations(
   moovsOperatorId: string,
   options?: FetchReservationsOptions,
 ): Promise<Reservation[]> {
+  const persistedOptions = options
+    ? {
+        agencyId: options.agencyId,
+        dateFrom: options.dateFrom,
+        dateTo: options.dateTo,
+        companyId: options.companyId,
+      }
+    : undefined;
+
   const [liveRows, persistedRows] = await Promise.all([
     fetchLiveReservations(localOperatorId, moovsOperatorId, options).catch((err) => {
       console.warn('Live Moovs reservation fetch failed; falling back to persisted snapshots', err);
       return [] as Reservation[];
     }),
-    fetchReservations(localOperatorId, options),
+    fetchReservations(localOperatorId, persistedOptions),
   ]);
 
   const persistedByTripId = new Map(persistedRows.map((row) => [row.moovs_trip_id, row]));
@@ -130,9 +154,12 @@ export async function fetchCurrentReservations(
     return persisted ? { ...live, id: persisted.id, synced_at: persisted.synced_at } : live;
   });
 
-  const liveTripIds = new Set(liveRows.map((row) => row.moovs_trip_id));
-  for (const persisted of persistedRows) {
-    if (!liveTripIds.has(persisted.moovs_trip_id)) merged.push(persisted);
+  const isPagedLiveFetch = Boolean(options?.limit || options?.offset);
+  if (!isPagedLiveFetch || liveRows.length === 0) {
+    const liveTripIds = new Set(liveRows.map((row) => row.moovs_trip_id));
+    for (const persisted of persistedRows) {
+      if (!liveTripIds.has(persisted.moovs_trip_id)) merged.push(persisted);
+    }
   }
 
   return merged.sort((a, b) => (b.pickup_date || '').localeCompare(a.pickup_date || ''));

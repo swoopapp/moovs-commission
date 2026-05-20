@@ -21,7 +21,7 @@ const RESERVATION_FIELDS = [
   'trip_status',
 ];
 
-// GET /commission-reservations — ?operator_id required, ?date_from, ?date_to
+// GET /commission-reservations — ?operator_id required, ?date_from, ?date_to, ?company_id, ?limit, ?offset
 app.get('/commission-reservations', async (c) => {
   try {
     const operatorId = c.req.query('operator_id');
@@ -29,6 +29,9 @@ app.get('/commission-reservations', async (c) => {
 
     const dateFrom = c.req.query('date_from');
     const dateTo = c.req.query('date_to');
+    const companyId = c.req.query('company_id');
+    const limitParam = c.req.query('limit');
+    const offsetParam = c.req.query('offset');
 
     const conditions = ['operator_id = $1'];
     const params: any[] = [operatorId];
@@ -42,9 +45,26 @@ app.get('/commission-reservations', async (c) => {
       conditions.push(`pickup_date <= $${idx++}`);
       params.push(dateTo);
     }
+    if (companyId) {
+      conditions.push(`moovs_company_id = $${idx++}`);
+      params.push(companyId);
+    }
+
+    const parsedLimit = Number.parseInt(limitParam ?? '', 10);
+    const safeLimit = Number.isFinite(parsedLimit) && parsedLimit > 0
+      ? Math.min(parsedLimit, 250)
+      : null;
+    const parsedOffset = Number.parseInt(offsetParam ?? '0', 10);
+    const safeOffset = Number.isFinite(parsedOffset) && parsedOffset > 0 ? parsedOffset : 0;
+
+    let paginationSql = '';
+    if (safeLimit !== null) {
+      paginationSql = ` LIMIT $${idx++} OFFSET $${idx++}`;
+      params.push(safeLimit, safeOffset);
+    }
 
     const r = await appQuery(
-      `SELECT * FROM commission_reservations WHERE ${conditions.join(' AND ')} ORDER BY pickup_date DESC`,
+      `SELECT * FROM commission_reservations WHERE ${conditions.join(' AND ')} ORDER BY pickup_date DESC${paginationSql}`,
       params,
     );
     return c.json(r.rows);

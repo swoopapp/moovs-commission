@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Agency, Agent, Reservation, ReservationAttribution, Payout } from '../../types/commission';
 import { useOperator } from '../../contexts/OperatorContext';
 import { fetchAgencyById } from '../../services/agencyService';
 import { fetchAgents } from '../../services/agentService';
-import { fetchCurrentReservations, fetchReservationsByIds } from '../../services/reservationService';
+import { fetchCurrentReservations, fetchReservations } from '../../services/reservationService';
 import { fetchAttributionsByAgency } from '../../services/attributionService';
 import { fetchPayoutsByAgency } from '../../services/payoutService';
 import { mergeAgencyAttributions } from '../../services/commissionTripService';
@@ -20,14 +20,41 @@ interface AgencyDetailViewProps {
   agencyId: string;
 }
 
+const RESERVATION_PAGE_SIZE = 50;
+const INITIAL_LOOKBACK_DAYS = 90;
+
+function formatIsoDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function defaultReservationWindow() {
+  const dateTo = new Date();
+  const dateFrom = new Date(dateTo);
+  dateFrom.setDate(dateFrom.getDate() - INITIAL_LOOKBACK_DAYS);
+  return {
+    dateFrom: formatIsoDate(dateFrom),
+    dateTo: formatIsoDate(dateTo),
+  };
+}
+
+function mergeReservationRows(rows: Reservation[]): Reservation[] {
+  const byId = new Map<string, Reservation>();
+  for (const row of rows) byId.set(row.id, row);
+  return Array.from(byId.values()).sort((a, b) => (b.pickup_date || '').localeCompare(a.pickup_date || ''));
+}
+
 export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
   const operator = useOperator();
   const [agency, setAgency] = useState<Agency | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [attributions, setAttributions] = useState<ReservationAttribution[]>([]);
+  const [persistedAttributions, setPersistedAttributions] = useState<ReservationAttribution[]>([]);
   const [payouts, setPayouts] = useState<Payout[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reservationsLoading, setReservationsLoading] = useState(false);
+  const [reservationsHasMore, setReservationsHasMore] = useState(false);
+  const [reservationOffset, setReservationOffset] = useState(0);
+  const [reservationWindow] = useState(defaultReservationWindow);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('reservations');
   const [payoutWizardOpen, setPayoutWizardOpen] = useState(false);
@@ -43,30 +70,19 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
         return;
       }
       setAgency(agencyData);
+      setReservations([]);
+      setReservationOffset(0);
+      setReservationsHasMore(false);
 
-      // Load remaining data in parallel
-      const oneYearAgo = new Date();
-      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-      const dateFrom = oneYearAgo.toISOString().slice(0, 10);
-      const dateTo = new Date().toISOString().slice(0, 10);
-
-      const [agentsData, currentReservationsData, attributionsData, payoutsData] = await Promise.all([
+      // Load the core agency page first; trips are loaded separately in a bounded, paged request.
+      const [agentsData, attributionsData, payoutsData] = await Promise.all([
         fetchAgents(agencyId),
-        fetchCurrentReservations(operator.operatorId, operator.moovsOperatorId, { dateFrom, dateTo }),
         fetchAttributionsByAgency(agencyId),
         fetchPayoutsByAgency(agencyId),
       ]);
 
-      const currentReservationIds = new Set(currentReservationsData.map((reservation) => reservation.id));
-      const missingAttributedReservationIds = attributionsData
-        .map((attribution) => attribution.reservation_id)
-        .filter((id) => !currentReservationIds.has(id));
-      const historicalReservations = await fetchReservationsByIds(missingAttributedReservationIds);
-      const reservationsData = [...currentReservationsData, ...historicalReservations];
-
       setAgents(agentsData);
-      setReservations(reservationsData);
-      setAttributions(mergeAgencyAttributions(agencyData, reservationsData, attributionsData));
+      setPersistedAttributions(attributionsData);
       setPayouts(payoutsData);
     } catch (err) {
       console.error('Failed to load agency detail:', err);
@@ -79,6 +95,78 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    if (!agency) return;
+
+    let cancelled = false;
+    const currentAgency = agency;
+
+    async function loadInitialReservations() {
+      try {
+        setReservationsLoading(true);
+        const options = {
+          dateFrom: reservationWindow.dateFrom,
+          dateTo: reservationWindow.dateTo,
+          companyId: currentAgency.moovs_company_id ?? undefined,
+          limit: RESERVATION_PAGE_SIZE,
+          offset: 0,
+        };
+        const rows = currentAgency.moovs_company_id
+          ? await fetchCurrentReservations(operator.operatorId, operator.moovsOperatorId, options)
+          : await fetchReservations(operator.operatorId, options);
+
+        if (cancelled) return;
+        setReservations(mergeReservationRows(rows));
+        setReservationOffset(rows.length);
+        setReservationsHasMore(rows.length >= RESERVATION_PAGE_SIZE);
+      } catch (err) {
+        console.error('Failed to load agency reservations:', err);
+        if (!cancelled) toast.error('Failed to load reservations');
+      } finally {
+        if (!cancelled) setReservationsLoading(false);
+      }
+    }
+
+    loadInitialReservations();
+    return () => {
+      cancelled = true;
+    };
+  }, [agency, operator.operatorId, operator.moovsOperatorId, reservationWindow.dateFrom, reservationWindow.dateTo]);
+
+  const attributions = useMemo(() => {
+    if (!agency) return [];
+    const reservationIds = new Set(reservations.map((reservation) => reservation.id));
+    return mergeAgencyAttributions(agency, reservations, persistedAttributions)
+      .filter((attribution) => reservationIds.has(attribution.reservation_id));
+  }, [agency, reservations, persistedAttributions]);
+
+  async function handleLoadMoreReservations() {
+    if (!agency || reservationsLoading) return;
+
+    try {
+      setReservationsLoading(true);
+      const options = {
+        dateFrom: reservationWindow.dateFrom,
+        dateTo: reservationWindow.dateTo,
+        companyId: agency.moovs_company_id ?? undefined,
+        limit: RESERVATION_PAGE_SIZE,
+        offset: reservationOffset,
+      };
+      const rows = agency.moovs_company_id
+        ? await fetchCurrentReservations(operator.operatorId, operator.moovsOperatorId, options)
+        : await fetchReservations(operator.operatorId, options);
+
+      setReservations((current) => mergeReservationRows([...current, ...rows]));
+      setReservationOffset((current) => current + rows.length);
+      setReservationsHasMore(rows.length >= RESERVATION_PAGE_SIZE);
+    } catch (err) {
+      console.error('Failed to load more reservations:', err);
+      toast.error('Failed to load more reservations');
+    } finally {
+      setReservationsLoading(false);
+    }
+  }
 
   // Compute mini-KPI stats
   const stats = {
@@ -142,6 +230,11 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
             reservations={reservations}
             attributions={attributions}
             agents={agents}
+            loading={reservationsLoading}
+            hasMore={reservationsHasMore}
+            loadedDateFrom={reservationWindow.dateFrom}
+            loadedDateTo={reservationWindow.dateTo}
+            onLoadMore={handleLoadMoreReservations}
           />
         </TabsContent>
 
