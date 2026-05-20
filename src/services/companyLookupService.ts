@@ -13,26 +13,53 @@ export interface MoovsCompany {
   description: string | null;
   created_at: string | null;
   updated_at: string | null;
+  source?: 'company' | 'shuttle_client';
 }
 
 interface FetchCompaniesResponse {
   success: boolean;
   operator_id: string;
   count: number;
+  total?: number;
+  limit?: number;
+  offset?: number;
   companies: MoovsCompany[];
+}
+
+export interface FetchMoovsCompaniesOptions {
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface FetchMoovsCompaniesResult {
+  companies: MoovsCompany[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 /**
  * Fetch all Moovs companies for an operator via the fetch-companies edge function.
  * Uses the Moovs operator UUID (not the commission_operators.id).
  */
-export async function fetchMoovsCompanies(moovsOperatorId: string): Promise<MoovsCompany[]> {
+export async function fetchMoovsCompanies(
+  moovsOperatorId: string,
+  options: FetchMoovsCompaniesOptions = {},
+): Promise<FetchMoovsCompaniesResult> {
+  const limit = options.limit ?? 25;
+  const offset = options.offset ?? 0;
   const res = await fetch(EDGE_FUNCTION_URLS.fetchCompanies, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ operator_id: moovsOperatorId }),
+    body: JSON.stringify({
+      operator_id: moovsOperatorId,
+      search: options.search?.trim() || undefined,
+      limit,
+      offset,
+    }),
   });
 
   if (!res.ok) {
@@ -41,5 +68,14 @@ export async function fetchMoovsCompanies(moovsOperatorId: string): Promise<Moov
   }
 
   const data: FetchCompaniesResponse = await res.json();
-  return data.companies || [];
+  const companies = (data.companies || []).map((company) => ({
+    ...company,
+    name: company.name || 'Unnamed company',
+  }));
+  return {
+    companies,
+    total: data.total ?? data.count ?? 0,
+    limit: data.limit ?? limit,
+    offset: data.offset ?? offset,
+  };
 }

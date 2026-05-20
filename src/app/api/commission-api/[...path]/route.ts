@@ -81,6 +81,11 @@ async function authorizeProxyRequest(path: string, request: Request, adminOnly: 
     if (body?.operator_id !== session.moovsOperatorId) return Response.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  if (path === 'fetch-companies' && request.method === 'POST') {
+    const body = await request.clone().json().catch(() => null);
+    if (body?.operator_id !== session.moovsOperatorId) return Response.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   if (path === 'payouts' && request.method === 'GET') {
     const operatorId = url.searchParams.get('operator_id');
     if (operatorId && operatorId !== session.operatorId) return Response.json({ error: 'Forbidden' }, { status: 403 });

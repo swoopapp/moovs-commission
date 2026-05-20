@@ -53,12 +53,12 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
     let cancelled = false;
     setCompaniesLoading(true);
     Promise.all([
-      fetchMoovsCompanies(operator.moovsOperatorId),
+      fetchMoovsCompanies(operator.moovsOperatorId, { limit: 100, offset: 0 }),
       fetchLinkedCompanyIds(operator.operatorId),
     ])
-      .then(([companyList, linkedIds]) => {
+      .then(([companyResult, linkedIds]) => {
         if (!cancelled) {
-          setCompanies(companyList);
+          setCompanies(companyResult.companies);
           setLinkedCompanyIds(linkedIds);
         }
       })

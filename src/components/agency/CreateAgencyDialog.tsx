@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useOperator } from '../../contexts/OperatorContext';
 import { createAgency, CreateAgencyInput } from '../../services/agencyService';
 import { fetchMoovsCompanies, MoovsCompany } from '../../services/companyLookupService';
@@ -77,12 +77,16 @@ export function CreateAgencyDialog({ open, onOpenChange, onCreated }: CreateAgen
 
   // Company lookup
   const [companies, setCompanies] = useState<MoovsCompany[]>([]);
+  const [companiesTotal, setCompaniesTotal] = useState(0);
   const [companiesLoading, setCompaniesLoading] = useState(false);
+  const [companiesLoadingMore, setCompaniesLoadingMore] = useState(false);
   const [companiesFailed, setCompaniesFailed] = useState(false);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('none');
+  const [selectedCompany, setSelectedCompany] = useState<MoovsCompany | null>(null);
   const [companySearch, setCompanySearch] = useState('');
+  const companiesPageSize = 25;
 
-  // Fetch companies when dialog opens
+  // Fetch a small first page when the dialog opens/search changes. Do not load every company.
   useEffect(() => {
     if (!open) return;
     if (!operator.moovsOperatorId) {
@@ -90,36 +94,62 @@ export function CreateAgencyDialog({ open, onOpenChange, onCreated }: CreateAgen
       return;
     }
     let cancelled = false;
+    const timer = window.setTimeout(() => {
     setCompaniesLoading(true);
     setCompaniesFailed(false);
-    fetchMoovsCompanies(operator.moovsOperatorId)
+      fetchMoovsCompanies(operator.moovsOperatorId, {
+        search: companySearch,
+        limit: companiesPageSize,
+        offset: 0,
+      })
       .then((result) => {
-        if (!cancelled) setCompanies(result);
+        if (!cancelled) {
+          setCompanies(result.companies);
+          setCompaniesTotal(result.total);
+        }
       })
       .catch((err) => {
         console.error('Failed to fetch Moovs companies:', err);
-        if (!cancelled) setCompaniesFailed(true);
+        if (!cancelled) {
+          setCompanies([]);
+          setCompaniesTotal(0);
+          setCompaniesFailed(true);
+        }
       })
       .finally(() => {
         if (!cancelled) setCompaniesLoading(false);
       });
-    return () => { cancelled = true; };
-  }, [open, operator.moovsOperatorId]);
+    }, companySearch ? 250 : 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [open, operator.moovsOperatorId, companySearch]);
 
-  const filteredCompanies = useMemo(() => {
-    if (!companySearch.trim()) return companies;
-    const q = companySearch.toLowerCase();
-    return companies.filter(
-      (c) =>
-        c.name.toLowerCase().includes(q) ||
-        (c.email && c.email.toLowerCase().includes(q))
-    );
-  }, [companies, companySearch]);
+  async function loadMoreCompanies() {
+    if (companiesLoadingMore || companies.length >= companiesTotal) return;
+    try {
+      setCompaniesLoadingMore(true);
+      const result = await fetchMoovsCompanies(operator.moovsOperatorId, {
+        search: companySearch,
+        limit: companiesPageSize,
+        offset: companies.length,
+      });
+      setCompanies((prev) => [...prev, ...result.companies]);
+      setCompaniesTotal(result.total);
+    } catch (err) {
+      console.error('Failed to load more Moovs companies:', err);
+      toast.error('Failed to load more companies');
+    } finally {
+      setCompaniesLoadingMore(false);
+    }
+  }
 
   function handleCompanySelect(companyId: string) {
     setSelectedCompanyId(companyId);
     if (companyId === 'none') {
       // Clear auto-filled fields for manual entry
+      setSelectedCompany(null);
       setMoovsCompanyId('');
       setName('');
       setContactEmail('');
@@ -128,6 +158,7 @@ export function CreateAgencyDialog({ open, onOpenChange, onCreated }: CreateAgen
     }
     const company = companies.find((c) => c.company_id === companyId);
     if (!company) return;
+    setSelectedCompany(company);
     setMoovsCompanyId(company.company_id);
     setName(company.name);
     setContactEmail(company.email || '');
@@ -165,7 +196,10 @@ export function CreateAgencyDialog({ open, onOpenChange, onCreated }: CreateAgen
     setContractEnd('');
     setNotes('');
     setSelectedCompanyId('none');
+    setSelectedCompany(null);
     setCompanySearch('');
+    setCompanies([]);
+    setCompaniesTotal(0);
   }
 
   async function handleCreate() {
@@ -253,19 +287,59 @@ export function CreateAgencyDialog({ open, onOpenChange, onCreated }: CreateAgen
                       onChange={(e) => setCompanySearch(e.target.value)}
                       className="bg-white"
                     />
-                    <Select value={selectedCompanyId} onValueChange={handleCompanySelect}>
-                      <SelectTrigger className="bg-white">
-                        <SelectValue placeholder="Select a company..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">None — manual entry</SelectItem>
-                        {filteredCompanies.map((c) => (
-                          <SelectItem key={c.company_id} value={c.company_id}>
-                            {c.name}{c.email ? ` (${c.email})` : ''}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="rounded-md border border-gray-200 bg-white overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => handleCompanySelect('none')}
+                        className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${
+                          selectedCompanyId === 'none' ? 'bg-blue-50 text-blue-700 font-medium' : ''
+                        }`}
+                      >
+                        None — manual entry
+                      </button>
+                      <div className="max-h-56 overflow-y-auto border-t border-gray-100">
+                        {companiesLoading ? (
+                          <div className="flex items-center gap-2 px-3 py-3 text-sm text-gray-500">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Searching companies...
+                          </div>
+                        ) : companies.length === 0 ? (
+                          <div className="px-3 py-3 text-sm text-gray-500">
+                            No matching companies. Use manual entry or try another search.
+                          </div>
+                        ) : (
+                          companies.map((c) => (
+                            <button
+                              key={`${c.company_id}-${c.source ?? 'company'}`}
+                              type="button"
+                              onClick={() => handleCompanySelect(c.company_id)}
+                              className={`block w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${
+                                selectedCompanyId === c.company_id ? 'bg-blue-50 text-blue-700 font-medium' : ''
+                              }`}
+                            >
+                              <span className="block truncate">
+                                {c.name}{c.email ? ` (${c.email})` : ''}
+                              </span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                      {companies.length < companiesTotal && (
+                        <button
+                          type="button"
+                          onClick={loadMoreCompanies}
+                          disabled={companiesLoadingMore}
+                          className="w-full border-t border-gray-100 px-3 py-2 text-sm text-blue-700 hover:bg-blue-50 disabled:opacity-60"
+                        >
+                          {companiesLoadingMore ? 'Loading more...' : `Load more (${companies.length} of ${companiesTotal})`}
+                        </button>
+                      )}
+                    </div>
+                    {selectedCompany && (
+                      <p className="text-xs text-blue-600">
+                        Selected: {selectedCompany.name}{selectedCompany.email ? ` (${selectedCompany.email})` : ''}
+                      </p>
+                    )}
                     {selectedCompanyId !== 'none' && (
                       <p className="text-xs text-blue-600">
                         Fields auto-filled from Moovs. You can override any value below.

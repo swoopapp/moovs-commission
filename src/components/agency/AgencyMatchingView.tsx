@@ -36,8 +36,8 @@ export function AgencyMatchingView() {
   // Load companies once
   useEffect(() => {
     if (!operator.moovsOperatorId) return;
-    fetchMoovsCompanies(operator.moovsOperatorId)
-      .then(setCompanies)
+    fetchMoovsCompanies(operator.moovsOperatorId, { limit: 100, offset: 0 })
+      .then((result) => setCompanies(result.companies))
       .catch((err) => console.error('Failed to fetch companies:', err));
   }, [operator.moovsOperatorId]);
 
