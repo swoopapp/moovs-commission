@@ -73,7 +73,7 @@ app.post('/fetch-reservations', async (c) => {
         req.company_id as "Company ID",
         t.contact_id as "Booking Contact ID",
         COALESCE(
-          NULLIF(CONCAT_WS(' ', tc.first_name, tc.last_name), ''),
+          NULLIF(CONCAT_WS(' ', NULLIF(BTRIM(tc.first_name), ''), NULLIF(BTRIM(tc.last_name), '')), ''),
           NULLIF(tc.email, '')
         ) as "Booking Contact Full Name",
         tc.email as "Booking Contact Email",
@@ -83,8 +83,8 @@ app.post('/fetch-reservations', async (c) => {
         dropoff.location as "Dropoff Address",
         COALESCE(
           NULLIF(t.temporary_passenger->>'name', ''),
-          NULLIF(CONCAT_WS(' ', pc.first_name, pc.last_name), ''),
-          NULLIF(CONCAT_WS(' ', tc.first_name, tc.last_name), ''),
+          NULLIF(CONCAT_WS(' ', NULLIF(BTRIM(pc.first_name), ''), NULLIF(BTRIM(pc.last_name), '')), ''),
+          NULLIF(CONCAT_WS(' ', NULLIF(BTRIM(tc.first_name), ''), NULLIF(BTRIM(tc.last_name), '')), ''),
           NULLIF(tc.email, '')
         ) as "Passenger Contact Full Name",
         COALESCE(fv.name, v.name, '') as "Vehicle Name",
