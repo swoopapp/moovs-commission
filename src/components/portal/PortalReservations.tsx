@@ -43,6 +43,15 @@ interface JoinedRow {
   agentName: string | null;
 }
 
+function agentOrBookingContact(row: JoinedRow): string {
+  return (
+    row.agentName ||
+    row.reservation.booking_contact_name ||
+    row.reservation.booking_contact_email ||
+    '--'
+  );
+}
+
 export function PortalReservations({ reservations, attributions, agents, view }: PortalReservationsProps) {
   const agentMap = useMemo(() => {
     const m = new Map<string, Agent>();
@@ -91,7 +100,7 @@ export function PortalReservations({ reservations, attributions, agents, view }:
               <TableRow>
                 <TableHead>Date</TableHead>
                 <TableHead>Passenger</TableHead>
-                {view === 'gm' && <TableHead>Agent</TableHead>}
+                {view === 'gm' && <TableHead>Agent / Booking Contact</TableHead>}
                 <TableHead>Trip Type</TableHead>
                 <TableHead>Route</TableHead>
                 <TableHead className="text-right">Revenue</TableHead>
@@ -104,7 +113,7 @@ export function PortalReservations({ reservations, attributions, agents, view }:
                 <TableRow key={row.attribution.id}>
                   <TableCell className="whitespace-nowrap">{formatDate(row.reservation.pickup_date)}</TableCell>
                   <TableCell>{row.reservation.passenger_name || '--'}</TableCell>
-                  {view === 'gm' && <TableCell>{row.agentName || '--'}</TableCell>}
+                  {view === 'gm' && <TableCell>{agentOrBookingContact(row)}</TableCell>}
                   <TableCell>{row.reservation.trip_type || '--'}</TableCell>
                   <TableCell className="max-w-[200px] truncate">{formatRoute(row.reservation)}</TableCell>
                   <TableCell className="text-right">{formatCurrency(row.reservation.total_amount)}</TableCell>

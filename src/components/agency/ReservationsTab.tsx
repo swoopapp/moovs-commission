@@ -58,6 +58,15 @@ interface JoinedReservation {
   agentName: string | null;
 }
 
+function agentOrBookingContact(row: JoinedReservation): string {
+  return (
+    row.agentName ||
+    row.reservation.booking_contact_name ||
+    row.reservation.booking_contact_email ||
+    '--'
+  );
+}
+
 export function ReservationsTab({
   reservations,
   attributions,
@@ -213,7 +222,7 @@ export function ReservationsTab({
                 <TableHead>Order #</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Passenger</TableHead>
-                <TableHead>Agent</TableHead>
+                <TableHead>Agent / Booking Contact</TableHead>
                 <TableHead>Trip Type</TableHead>
                 <TableHead>Route</TableHead>
                 <TableHead className="text-right">Revenue</TableHead>
@@ -229,7 +238,7 @@ export function ReservationsTab({
                   </TableCell>
                   <TableCell>{formatDate(j.reservation.pickup_date)}</TableCell>
                   <TableCell>{j.reservation.passenger_name || '--'}</TableCell>
-                  <TableCell>{j.agentName || '--'}</TableCell>
+                  <TableCell>{agentOrBookingContact(j)}</TableCell>
                   <TableCell>{j.reservation.trip_type || '--'}</TableCell>
                   <TableCell className="max-w-[200px] truncate">{formatRoute(j.reservation)}</TableCell>
                   <TableCell className="text-right">{formatCurrency(j.reservation.total_amount)}</TableCell>

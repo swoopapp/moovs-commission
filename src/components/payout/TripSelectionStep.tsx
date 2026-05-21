@@ -43,6 +43,18 @@ function formatDate(dateStr: string | null): string {
   return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+function bookingContactLabel(trip: TripWithCommission, agentMap: Map<string, Agent>): string {
+  if (trip.attribution.agent_id) {
+    const agentName = agentMap.get(trip.attribution.agent_id)?.name;
+    if (agentName) return agentName;
+  }
+  return (
+    trip.reservation.booking_contact_name ||
+    trip.reservation.booking_contact_email ||
+    '--'
+  );
+}
+
 export function TripSelectionStep({
   trips,
   agents,
@@ -129,7 +141,7 @@ export function TripSelectionStep({
                 </TableHead>
                 <TableHead>Order #</TableHead>
                 <TableHead>Date</TableHead>
-                <TableHead>Agent</TableHead>
+                <TableHead>Agent / Booking Contact</TableHead>
                 <TableHead>Passenger</TableHead>
                 <TableHead className="text-right">Revenue</TableHead>
                 <TableHead className="text-right">Commission</TableHead>
@@ -151,7 +163,7 @@ export function TripSelectionStep({
                     {formatDate(t.reservation.pickup_date)}
                   </TableCell>
                   <TableCell className="text-sm">
-                    {t.attribution.agent_id ? agentMap.get(t.attribution.agent_id)?.name ?? '--' : '--'}
+                    {bookingContactLabel(t, agentMap)}
                   </TableCell>
                   <TableCell className="text-sm">
                     {t.reservation.passenger_name || '--'}
