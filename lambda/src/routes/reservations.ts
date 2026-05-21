@@ -71,12 +71,12 @@ app.post('/fetch-reservations', async (c) => {
         req.order_number as "Order Number",
         req.order_number as "Confirmation Number",
         req.company_id as "Company ID",
-        t.contact_id as "Booking Contact ID",
+        bc.contact_id as "Booking Contact ID",
         COALESCE(
-          NULLIF(CONCAT_WS(' ', NULLIF(BTRIM(tc.first_name), ''), NULLIF(BTRIM(tc.last_name), '')), ''),
-          NULLIF(tc.email, '')
+          NULLIF(CONCAT_WS(' ', NULLIF(BTRIM(bc.first_name), ''), NULLIF(BTRIM(bc.last_name), '')), ''),
+          NULLIF(bc.email, '')
         ) as "Booking Contact Full Name",
-        tc.email as "Booking Contact Email",
+        bc.email as "Booking Contact Email",
         pickup.date_time as "Pickup Date Time",
         dropoff.date_time as "Dropoff Time Local",
         pickup.location as "Pickup Address",
@@ -85,7 +85,8 @@ app.post('/fetch-reservations', async (c) => {
           NULLIF(t.temporary_passenger->>'name', ''),
           NULLIF(CONCAT_WS(' ', NULLIF(BTRIM(pc.first_name), ''), NULLIF(BTRIM(pc.last_name), '')), ''),
           NULLIF(CONCAT_WS(' ', NULLIF(BTRIM(tc.first_name), ''), NULLIF(BTRIM(tc.last_name), '')), ''),
-          NULLIF(tc.email, '')
+          NULLIF(CONCAT_WS(' ', NULLIF(BTRIM(bc.first_name), ''), NULLIF(BTRIM(bc.last_name), '')), ''),
+          NULLIF(bc.email, '')
         ) as "Passenger Contact Full Name",
         COALESCE(fv.name, v.name, '') as "Vehicle Name",
         req.type as "Trip Type",
@@ -112,6 +113,10 @@ app.post('/fetch-reservations', async (c) => {
       JOIN trip t ON t.request_id = req.request_id AND t.removed_at IS NULL
       LEFT JOIN route r ON r.trip_id = t.trip_id AND r.removed_at IS NULL
       LEFT JOIN farmed_route fr ON fr.route_id = r.route_id AND fr.cancelled_at IS NULL
+      LEFT JOIN LATERAL (
+        SELECT ct.contact_id FROM contact_team ct WHERE ct.team_id = req.team_id LIMIT 1
+      ) booking_team ON true
+      LEFT JOIN contact bc ON booking_team.contact_id = bc.contact_id
       LEFT JOIN contact tc ON t.contact_id = tc.contact_id
       LEFT JOIN LATERAL (
         SELECT s.location, s.date_time, s.contact_id as passenger_contact_id FROM stop s WHERE s.trip_id = t.trip_id ORDER BY s.stop_index ASC LIMIT 1
