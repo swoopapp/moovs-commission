@@ -1,6 +1,7 @@
-import { Agency, ReservationAttribution } from '../types/commission';
+import { Agency, Agent, ReservationAttribution } from '../types/commission';
 import { fetchAttributionsByAgency } from './attributionService';
 import { mergeAgencyAttributions, primaryAgencyClientKey } from './commissionTripService';
+import { fetchAgentsByOperator } from './agentService';
 import { fetchPayoutsByOperator } from './payoutService';
 import { fetchCurrentReservations } from './reservationService';
 
@@ -11,6 +12,14 @@ export interface AgencyTableRow {
   earned: number;
   paid: number;
   outstanding: number;
+}
+
+export interface AgentTableRow {
+  agency: Agency;
+  agent: Agent;
+  bookings: number;
+  revenue: number;
+  earned: number;
 }
 
 export interface MonthlyTrend {
@@ -30,6 +39,7 @@ export interface DashboardStats {
   activeAgencies: number;
   pendingPayouts: number;
   agencyRows: AgencyTableRow[];
+  agentRows: AgentTableRow[];
   monthlyTrend: MonthlyTrend[];
   agencyMonthlyTrend: AgencyMonthlyTrend[];
   topAgencyNames: string[];
@@ -47,32 +57,45 @@ export async function fetchDashboardStats(
   // Fetch attribution snapshots, live client-key reservations, and payouts in parallel.
   // Dashboard numbers should reflect the same auto-match logic as agency detail/payout flows,
   // including Shuttle client overrides (`shuttle_client:<uuid>`).
-  const [allAttributionsByAgency, payouts] = await Promise.all([
-    Promise.all(
-      agencies.map(async (agency) => {
-        const clientKey = primaryAgencyClientKey(agency);
-        const [persistedAttributions, reservations] = await Promise.all([
-          fetchAttributionsByAgency(agency.id),
-          clientKey
-            ? fetchCurrentReservations(operatorId, moovsOperatorId, {
-                dateFrom,
-                dateTo,
-                clientKey,
-                companyId: agency.moovs_company_id ?? undefined,
-                limit: 250,
-                offset: 0,
-              }).catch((err) => {
-                console.warn(`Dashboard live reservation fetch failed for agency ${agency.id}`, err);
-                return [];
-              })
-            : Promise.resolve([]),
-        ]);
-        const attributions = mergeAgencyAttributions(agency, reservations, persistedAttributions);
-        return { agencyId: agency.id, attributions, reservations };
-      }),
-    ),
+  const agencyIds = agencies.map((agency) => agency.id);
+  const [agents, payouts] = await Promise.all([
+    fetchAgentsByOperator(operatorId, agencyIds),
     fetchPayoutsByOperator(operatorId),
   ]);
+  const agentsByAgency = new Map<string, Agent[]>();
+  for (const agent of agents) {
+    if (!agentsByAgency.has(agent.agency_id)) agentsByAgency.set(agent.agency_id, []);
+    agentsByAgency.get(agent.agency_id)!.push(agent);
+  }
+
+  const allAttributionsByAgency = await Promise.all(
+    agencies.map(async (agency) => {
+      const clientKey = primaryAgencyClientKey(agency);
+      const [persistedAttributions, reservations] = await Promise.all([
+        fetchAttributionsByAgency(agency.id),
+        clientKey
+          ? fetchCurrentReservations(operatorId, moovsOperatorId, {
+              dateFrom,
+              dateTo,
+              clientKey,
+              companyId: agency.moovs_company_id ?? undefined,
+              limit: 250,
+              offset: 0,
+            }).catch((err) => {
+              console.warn(`Dashboard live reservation fetch failed for agency ${agency.id}`, err);
+              return [];
+            })
+          : Promise.resolve([]),
+      ]);
+      const attributions = mergeAgencyAttributions(
+        agency,
+        reservations,
+        persistedAttributions,
+        agentsByAgency.get(agency.id) ?? [],
+      );
+      return { agencyId: agency.id, attributions, reservations };
+    }),
+  );
 
   // Build reservation lookup for revenue
   const reservationMap = new Map(
@@ -119,6 +142,24 @@ export async function fetchDashboardStats(
 
     return { agency, bookings, revenue, earned, paid, outstanding };
   });
+
+  const agencyMap = new Map(agencies.map((agency) => [agency.id, agency]));
+  const agentRows: AgentTableRow[] = agents
+    .filter((agent) => agent.status === 'active')
+    .map((agent) => {
+      const agency = agencyMap.get(agent.agency_id);
+      const entry = allAttributionsByAgency.find((a) => a.agencyId === agent.agency_id);
+      const attributions = (entry?.attributions ?? []).filter((attr) => attr.agent_id === agent.id);
+      let revenue = 0;
+      let earned = 0;
+      for (const attr of attributions) {
+        const res = reservationMap.get(attr.reservation_id);
+        if (res) revenue += res.total_amount;
+        earned += attr.commission_amount;
+      }
+      return agency ? { agency, agent, bookings: attributions.length, revenue, earned } : null;
+    })
+    .filter((row): row is AgentTableRow => Boolean(row));
 
   const totalOwed = agencyRows.reduce((sum, r) => sum + r.outstanding, 0);
   const activeAgencies = agencies.filter((a) => a.status === 'active').length;
@@ -228,6 +269,7 @@ export async function fetchDashboardStats(
     activeAgencies,
     pendingPayouts,
     agencyRows,
+    agentRows,
     monthlyTrend,
     agencyMonthlyTrend,
     topAgencyNames,

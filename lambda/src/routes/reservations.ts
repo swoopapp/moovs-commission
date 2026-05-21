@@ -71,11 +71,18 @@ app.post('/fetch-reservations', async (c) => {
         req.order_number as "Order Number",
         req.order_number as "Confirmation Number",
         req.company_id as "Company ID",
+        t.contact_id as "Booking Contact ID",
+        CONCAT(COALESCE(tc.first_name, ''), ' ', COALESCE(tc.last_name, '')) as "Booking Contact Full Name",
+        tc.email as "Booking Contact Email",
         pickup.date_time as "Pickup Date Time",
         dropoff.date_time as "Dropoff Time Local",
         pickup.location as "Pickup Address",
         dropoff.location as "Dropoff Address",
-        CONCAT(COALESCE(tc.first_name, ''), ' ', COALESCE(tc.last_name, '')) as "Passenger Contact Full Name",
+        COALESCE(
+          t.temporary_passenger->>'name',
+          NULLIF(CONCAT(COALESCE(pc.first_name, ''), ' ', COALESCE(pc.last_name, '')), ' '),
+          NULLIF(CONCAT(COALESCE(tc.first_name, ''), ' ', COALESCE(tc.last_name, '')), ' ')
+        ) as "Passenger Contact Full Name",
         COALESCE(fv.name, v.name, '') as "Vehicle Name",
         req.type as "Trip Type",
         COALESCE(NULLIF(fr.base_rate_amt, 0), r.base_rate_amt, 0) / 100.0 as "Base Rate",
@@ -103,13 +110,14 @@ app.post('/fetch-reservations', async (c) => {
       LEFT JOIN farmed_route fr ON fr.route_id = r.route_id AND fr.cancelled_at IS NULL
       LEFT JOIN contact tc ON t.contact_id = tc.contact_id
       LEFT JOIN LATERAL (
-        SELECT s.location, s.date_time FROM stop s WHERE s.trip_id = t.trip_id ORDER BY s.stop_index ASC LIMIT 1
+        SELECT s.location, s.date_time, s.passenger_contact_id FROM stop s WHERE s.trip_id = t.trip_id ORDER BY s.stop_index ASC LIMIT 1
       ) pickup ON true
       LEFT JOIN LATERAL (
         SELECT s.location, s.date_time FROM stop s WHERE s.trip_id = t.trip_id ORDER BY s.stop_index DESC LIMIT 1
       ) dropoff ON true
       LEFT JOIN vehicle v ON r.vehicle_id = v.vehicle_id
       LEFT JOIN vehicle fv ON fr.vehicle_id = fv.vehicle_id
+      LEFT JOIN contact pc ON pickup.passenger_contact_id = pc.contact_id
       WHERE req.operator_id = $1${tripDateFilter}${tripCompanyFilter}${tripClientFilter}
       ORDER BY pickup.date_time ASC NULLS LAST`,
       params
@@ -122,6 +130,9 @@ app.post('/fetch-reservations', async (c) => {
         sb.external_reservation_id as "Order Number",
         sb.external_reservation_id as "Confirmation Number",
         COALESCE(sc.company_id, sp.company_id, rd.company_id) as "Company ID",
+        NULL::uuid as "Booking Contact ID",
+        NULL::text as "Booking Contact Full Name",
+        NULL::text as "Booking Contact Email",
         COALESCE(sb.scheduled_pickup_time, sb.travel_date::timestamptz) as "Pickup Date Time",
         sb.scheduled_dropoff_time as "Dropoff Time Local",
         sb.pickup_location as "Pickup Address",
@@ -222,6 +233,9 @@ function formatTrip(row: any) {
     'Order Number': row['Order Number'] || '',
     'Confirmation Number': row['Confirmation Number'] || '',
     'Company ID': row['Company ID'] || null,
+    'Booking Contact ID': row['Booking Contact ID'] || null,
+    'Booking Contact Full Name': (row['Booking Contact Full Name'] || '').trim() || null,
+    'Booking Contact Email': row['Booking Contact Email'] || null,
     'Pickup Date Time': row['Pickup Date Time'] || '',
     'Dropoff Time Local': row['Dropoff Time Local'] || '',
     'Pickup Address': row['Pickup Address'] || '',
@@ -254,6 +268,9 @@ function formatShuttle(row: any) {
     'Order Number': row['Order Number'] || '',
     'Confirmation Number': row['Confirmation Number'] || '',
     'Company ID': row['Company ID'] || null,
+    'Booking Contact ID': row['Booking Contact ID'] || null,
+    'Booking Contact Full Name': row['Booking Contact Full Name'] || null,
+    'Booking Contact Email': row['Booking Contact Email'] || null,
     'Pickup Date Time': row['Pickup Date Time'] || '',
     'Dropoff Time Local': row['Dropoff Time Local'] || '',
     'Pickup Address': row['Pickup Address'] || '',

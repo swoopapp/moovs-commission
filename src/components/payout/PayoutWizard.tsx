@@ -13,7 +13,7 @@ import { createPayout, createPayoutReservations } from '../../services/payoutSer
 import { createAttributions } from '../../services/attributionService';
 import { upsertReservations } from '../../services/reservationService';
 import { toast } from 'sonner';
-import type { Agency, PayoutMethod, PayoutStatus } from '../../types/commission';
+import type { Agency, Agent, PayoutMethod, PayoutStatus } from '../../types/commission';
 
 interface PayoutWizardProps {
   open: boolean;
@@ -21,6 +21,7 @@ interface PayoutWizardProps {
   operatorId: string;
   moovsOperatorId: string;
   agency: Agency;
+  agents: Agent[];
   agencyId: string;
   onPayoutCreated: () => void;
 }
@@ -37,6 +38,7 @@ export function PayoutWizard({
   operatorId,
   moovsOperatorId,
   agency,
+  agents,
   agencyId,
   onPayoutCreated,
 }: PayoutWizardProps) {
@@ -155,7 +157,7 @@ export function PayoutWizard({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent style={{ maxWidth: '40rem' }}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto" style={{ maxWidth: '40rem' }}>
         <DialogHeader>
           <DialogTitle>Create Payout</DialogTitle>
           <DialogDescription>
@@ -191,6 +193,7 @@ export function PayoutWizard({
             operatorId={operatorId}
             moovsOperatorId={moovsOperatorId}
             agency={agency}
+            agents={agents}
             agencyId={agencyId}
             dateFrom={dateFrom}
             dateTo={dateTo}
@@ -205,6 +208,7 @@ export function PayoutWizard({
         {step === 2 && (
           <TripSelectionStep
             trips={trips}
+            agents={agents}
             selectedIds={selectedIds}
             onSelectedIdsChange={setSelectedIds}
             adjustments={adjustments}

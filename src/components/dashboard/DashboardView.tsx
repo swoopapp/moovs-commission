@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useOperator } from '../../contexts/OperatorContext';
 import { fetchAgenciesPaginated } from '../../services/agencyService';
-import { fetchDashboardStats, DashboardStats, AgencyTableRow } from '../../services/dashboardService';
+import { fetchDashboardStats, DashboardStats, AgencyTableRow, AgentTableRow } from '../../services/dashboardService';
 import { Agency } from '../../types/commission';
 import { KPICards } from './KPICards';
 import { AgencyTable } from './AgencyTable';
@@ -12,13 +12,21 @@ interface DashboardViewProps {
   onRegisterExport?: (fn: () => void) => void;
 }
 
-function exportAgenciesToCsv(rows: AgencyTableRow[]) {
-  const headers = ['Agency', 'Contact', 'Type', 'Rate', 'Bookings', 'Revenue', 'Earned', 'Paid', 'Outstanding', 'Status'];
+function exportAgenciesToCsv(rows: AgencyTableRow[], agentRows: AgentTableRow[]) {
+  const headers = ['Row Type', 'Agency', 'Agent', 'Contact', 'Type', 'Rate', 'Bookings', 'Revenue', 'Earned', 'Paid', 'Outstanding', 'Status'];
   const csvRows = [headers.join(',')];
+  const agentsByAgency = new Map<string, AgentTableRow[]>();
+  for (const agentRow of agentRows) {
+    if (!agentsByAgency.has(agentRow.agency.id)) agentsByAgency.set(agentRow.agency.id, []);
+    agentsByAgency.get(agentRow.agency.id)!.push(agentRow);
+  }
+
   for (const row of rows) {
     const rate = row.agency.commission_type === 'flat' ? `$${row.agency.commission_rate}` : `${row.agency.commission_rate}%`;
     csvRows.push([
+      'Agency',
       `"${row.agency.name.replace(/"/g, '""')}"`,
+      '',
       `"${(row.agency.contact_name ?? '').replace(/"/g, '""')}"`,
       row.agency.type,
       rate,
@@ -29,6 +37,23 @@ function exportAgenciesToCsv(rows: AgencyTableRow[]) {
       row.outstanding.toFixed(2),
       row.agency.status,
     ].join(','));
+
+    for (const agentRow of agentsByAgency.get(row.agency.id) ?? []) {
+      csvRows.push([
+        'Agent',
+        `"${row.agency.name.replace(/"/g, '""')}"`,
+        `"${agentRow.agent.name.replace(/"/g, '""')}"`,
+        `"${(agentRow.agent.email ?? '').replace(/"/g, '""')}"`,
+        '',
+        '',
+        agentRow.bookings,
+        agentRow.revenue.toFixed(2),
+        agentRow.earned.toFixed(2),
+        '',
+        '',
+        agentRow.agent.status,
+      ].join(','));
+    }
   }
   const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
@@ -99,7 +124,7 @@ export function DashboardView({ onRegisterExport }: DashboardViewProps) {
   // Register export function with parent
   useEffect(() => {
     if (onRegisterExport && stats) {
-      onRegisterExport(() => exportAgenciesToCsv(stats.agencyRows));
+      onRegisterExport(() => exportAgenciesToCsv(stats.agencyRows, stats.agentRows));
     }
   }, [onRegisterExport, stats]);
 

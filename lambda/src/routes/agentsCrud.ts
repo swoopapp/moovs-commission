@@ -47,12 +47,12 @@ app.get('/agents/by-token/:token', async (c) => {
 app.post('/agents', async (c) => {
   try {
     const body = await c.req.json();
-    const { agency_id, name, email, phone, role, department, status } = body;
+    const { agency_id, moovs_contact_id, name, email, phone, role, department, status } = body;
     const r = await appQuery(
-      `INSERT INTO agents (agency_id, name, email, phone, role, department, status)
-       VALUES ($1, $2, $3, $4, COALESCE($5, 'agent'), $6, COALESCE($7, 'active'))
+      `INSERT INTO agents (agency_id, moovs_contact_id, name, email, phone, role, department, status)
+       VALUES ($1, $2, $3, $4, $5, COALESCE($6, 'agent'), $7, COALESCE($8, 'active'))
        RETURNING *`,
-      [agency_id, name, email, phone, role, department, status],
+      [agency_id, moovs_contact_id, name, email, phone, role, department, status],
     );
     return c.json(r.rows, 201);
   } catch (err: any) {
@@ -66,7 +66,7 @@ app.patch('/agents/:id', async (c) => {
   try {
     const id = c.req.param('id');
     const body = await c.req.json();
-    const allowedFields = ['name', 'email', 'phone', 'role', 'department', 'status'];
+    const allowedFields = ['moovs_contact_id', 'name', 'email', 'phone', 'role', 'department', 'status'];
     const sets: string[] = [];
     const vals: any[] = [];
     let idx = 1;

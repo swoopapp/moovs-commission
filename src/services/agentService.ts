@@ -30,6 +30,7 @@ export async function fetchAgents(agencyId: string): Promise<Agent[]> {
 }
 
 export async function fetchAgentsByOperator(_operatorId: string, agencyIds: string[]): Promise<Agent[]> {
+  if (agencyIds.length === 0) return [];
   const ids = agencyIds.map(encodeURIComponent).join(',');
   const res = await fetch(`${API}/agents?agency_ids=${ids}`);
   return handleResponse<Agent[]>(res, 'fetchAgentsByOperator');
@@ -70,4 +71,8 @@ export async function deleteAgent(id: string): Promise<void> {
     method: 'DELETE',
   });
   return handleVoidResponse(res, 'deleteAgent');
+}
+
+export async function deactivateAgent(id: string): Promise<Agent> {
+  return updateAgent(id, { status: 'inactive' });
 }

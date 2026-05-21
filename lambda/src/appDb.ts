@@ -173,6 +173,8 @@ export async function ensureCommissionTables(): Promise<void> {
   await appQuery(`CREATE INDEX IF NOT EXISTS idx_agents_agency ON agents(agency_id)`);
   await appQuery(`CREATE INDEX IF NOT EXISTS idx_agents_portal_token ON agents(portal_token)`);
   await appQuery(`ALTER TABLE agents ALTER COLUMN portal_token SET DEFAULT encode(gen_random_bytes(32), 'hex')`);
+  await appQuery(`ALTER TABLE agents ADD COLUMN IF NOT EXISTS moovs_contact_id TEXT`);
+  await appQuery(`CREATE INDEX IF NOT EXISTS idx_agents_moovs_contact ON agents(moovs_contact_id)`);
 
   // 3. Commission Reservations
   await appQuery(`
@@ -187,6 +189,9 @@ export async function ensureCommissionTables(): Promise<void> {
       pickup_location TEXT,
       dropoff_location TEXT,
       passenger_name TEXT,
+      booking_contact_id TEXT,
+      booking_contact_name TEXT,
+      booking_contact_email TEXT,
       vehicle_type TEXT,
       trip_type TEXT,
       base_rate_amount NUMERIC DEFAULT 0,
@@ -199,6 +204,9 @@ export async function ensureCommissionTables(): Promise<void> {
     )
   `);
   await appQuery(`ALTER TABLE commission_reservations ADD COLUMN IF NOT EXISTS client_keys TEXT[] NOT NULL DEFAULT '{}'`);
+  await appQuery(`ALTER TABLE commission_reservations ADD COLUMN IF NOT EXISTS booking_contact_id TEXT`);
+  await appQuery(`ALTER TABLE commission_reservations ADD COLUMN IF NOT EXISTS booking_contact_name TEXT`);
+  await appQuery(`ALTER TABLE commission_reservations ADD COLUMN IF NOT EXISTS booking_contact_email TEXT`);
   await appQuery(`
     UPDATE commission_reservations
     SET client_keys = ARRAY['company:' || moovs_company_id]
@@ -208,6 +216,7 @@ export async function ensureCommissionTables(): Promise<void> {
   await appQuery(`CREATE INDEX IF NOT EXISTS idx_reservations_operator ON commission_reservations(operator_id)`);
   await appQuery(`CREATE INDEX IF NOT EXISTS idx_reservations_company ON commission_reservations(moovs_company_id)`);
   await appQuery(`CREATE INDEX IF NOT EXISTS idx_reservations_client_keys ON commission_reservations USING GIN(client_keys)`);
+  await appQuery(`CREATE INDEX IF NOT EXISTS idx_reservations_booking_contact ON commission_reservations(booking_contact_id)`);
   await appQuery(`CREATE INDEX IF NOT EXISTS idx_reservations_pickup ON commission_reservations(pickup_date)`);
   await appQuery(`CREATE INDEX IF NOT EXISTS idx_reservations_order ON commission_reservations(order_number)`);
 

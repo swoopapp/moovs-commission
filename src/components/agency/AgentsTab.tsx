@@ -4,8 +4,10 @@ import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Avatar, AvatarFallback } from '../ui/avatar';
-import { Plus, Mail, Phone, BookOpen, TrendingUp, DollarSign } from 'lucide-react';
+import { Plus, Mail, Phone, BookOpen, TrendingUp, DollarSign, Copy, Trash2 } from 'lucide-react';
 import { AddAgentDialog } from './AddAgentDialog';
+import { deactivateAgent } from '../../services/agentService';
+import { toast } from 'sonner';
 
 interface AgentsTabProps {
   agents: Agent[];
@@ -38,6 +40,7 @@ interface AgentStats {
 
 export function AgentsTab({ agents, attributions, reservations, agencyId, agency, onAgentCreated, onFilterByAgent }: AgentsTabProps) {
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const activeAgents = useMemo(() => agents.filter((agent) => agent.status === 'active'), [agents]);
 
   const reservationMap = useMemo(() => {
     const m = new Map<string, Reservation>();
@@ -47,7 +50,7 @@ export function AgentsTab({ agents, attributions, reservations, agencyId, agency
 
   const agentStats = useMemo(() => {
     const stats = new Map<string, AgentStats>();
-    agents.forEach((a) => stats.set(a.id, { bookings: 0, revenue: 0, commission: 0 }));
+    activeAgents.forEach((a) => stats.set(a.id, { bookings: 0, revenue: 0, commission: 0 }));
 
     attributions.forEach((attr) => {
       if (!attr.agent_id) return;
@@ -60,7 +63,30 @@ export function AgentsTab({ agents, attributions, reservations, agencyId, agency
     });
 
     return stats;
-  }, [agents, attributions, reservationMap]);
+  }, [activeAgents, attributions, reservationMap]);
+
+  function portalUrl(agent: Agent): string {
+    return `${window.location.origin}/portal/${agent.portal_token}`;
+  }
+
+  async function handleCopyPortalLink(agent: Agent) {
+    await navigator.clipboard.writeText(portalUrl(agent));
+    toast.success(`Portal link copied for ${agent.name}`);
+  }
+
+  async function handleRemoveAgent(agent: Agent) {
+    const confirmed = window.confirm(`Remove ${agent.name} from this agency? Existing history will be preserved.`);
+    if (!confirmed) return;
+
+    try {
+      await deactivateAgent(agent.id);
+      toast.success(`${agent.name} removed`);
+      onAgentCreated();
+    } catch (err) {
+      console.error('Failed to remove agent:', err);
+      toast.error('Failed to remove agent');
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -71,13 +97,13 @@ export function AgentsTab({ agents, attributions, reservations, agencyId, agency
         </Button>
       </div>
 
-      {agents.length === 0 ? (
+      {activeAgents.length === 0 ? (
         <div className="px-6 py-12 text-center text-gray-500 bg-white rounded-lg border border-gray-200">
           No agents yet. Add your first agent to start tracking individual performance.
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {agents.map((agent) => {
+          {activeAgents.map((agent) => {
             const stats = agentStats.get(agent.id) || { bookings: 0, revenue: 0, commission: 0 };
             return (
               <Card
@@ -147,6 +173,35 @@ export function AgentsTab({ agents, attributions, reservations, agencyId, agency
                       <p className="text-sm font-semibold text-green-600">{formatCurrency(stats.commission)}</p>
                       <p className="text-xs text-gray-500">Commission</p>
                     </div>
+                  </div>
+
+                  <div className="border-t pt-3 flex items-center justify-end gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleCopyPortalLink(agent);
+                      }}
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                      Copy link
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1.5 text-red-600 hover:text-red-700"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleRemoveAgent(agent);
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Remove
+                    </Button>
                   </div>
                 </CardContent>
               </Card>

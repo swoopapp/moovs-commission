@@ -152,6 +152,7 @@ export function AddAgentDialog({ open, onOpenChange, agencyId, agency, onCreated
       setCreating(true);
       const data: CreateAgentInput = {
         agency_id: agencyId,
+        moovs_contact_id: selectedContactId,
         name: name.trim(),
         email: email.trim() || null,
         phone: phone.trim() || null,
@@ -178,7 +179,7 @@ export function AddAgentDialog({ open, onOpenChange, agencyId, agency, onCreated
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) resetForm(); onOpenChange(v); }}>
-      <DialogContent className="sm:max-w-[420px]">
+      <DialogContent className="sm:max-w-[420px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add Agent</DialogTitle>
         </DialogHeader>

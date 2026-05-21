@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Reservation, ReservationAttribution, Agent } from '../../types/commission';
 import {
   Table,
@@ -27,6 +27,8 @@ interface ReservationsTabProps {
   hasMore?: boolean;
   loadedDateFrom?: string;
   loadedDateTo?: string;
+  agentFilter?: string;
+  onAgentFilterChange?: (agentId: string) => void;
   onLoadMore?: () => void;
 }
 
@@ -64,12 +66,25 @@ export function ReservationsTab({
   hasMore = false,
   loadedDateFrom,
   loadedDateTo,
+  agentFilter: controlledAgentFilter,
+  onAgentFilterChange,
   onLoadMore,
 }: ReservationsTabProps) {
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [agentFilter, setAgentFilter] = useState<string>('all');
+  const [internalAgentFilter, setInternalAgentFilter] = useState<string>('all');
   const [dateFrom, setDateFrom] = useState<string>(loadedDateFrom ?? '');
   const [dateTo, setDateTo] = useState<string>(loadedDateTo ?? '');
+  const agentFilter = controlledAgentFilter ?? internalAgentFilter;
+
+  useEffect(() => {
+    setDateFrom(loadedDateFrom ?? '');
+    setDateTo(loadedDateTo ?? '');
+  }, [loadedDateFrom, loadedDateTo]);
+
+  function handleAgentFilterChange(value: string) {
+    setInternalAgentFilter(value);
+    onAgentFilterChange?.(value);
+  }
 
   const agentMap = useMemo(() => {
     const m = new Map<string, Agent>();
@@ -171,13 +186,13 @@ export function ReservationsTab({
             ))}
           </SelectContent>
         </Select>
-        <Select value={agentFilter} onValueChange={setAgentFilter}>
+        <Select value={agentFilter} onValueChange={handleAgentFilterChange}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="All Agents" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Agents</SelectItem>
-            {agents.map((a) => (
+            {agents.filter((a) => a.status === 'active').map((a) => (
               <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
             ))}
           </SelectContent>

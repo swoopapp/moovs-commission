@@ -57,6 +57,7 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
   const [reservationWindow] = useState(defaultReservationWindow);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('reservations');
+  const [reservationAgentFilter, setReservationAgentFilter] = useState('all');
   const [payoutWizardOpen, setPayoutWizardOpen] = useState(false);
 
   const loadData = useCallback(async () => {
@@ -139,9 +140,9 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
   const attributions = useMemo(() => {
     if (!agency) return [];
     const reservationIds = new Set(reservations.map((reservation) => reservation.id));
-    return mergeAgencyAttributions(agency, reservations, persistedAttributions)
+    return mergeAgencyAttributions(agency, reservations, persistedAttributions, agents)
       .filter((attribution) => reservationIds.has(attribution.reservation_id));
-  }, [agency, reservations, persistedAttributions]);
+  }, [agency, reservations, persistedAttributions, agents]);
 
   async function handleLoadMoreReservations() {
     if (!agency || reservationsLoading) return;
@@ -191,9 +192,8 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
 
   function handleFilterByAgent(agentId: string) {
     setActiveTab('reservations');
-    // Small delay so the tab switches first, then the ReservationsTab can pick up the filter
-    // We achieve this by navigating to the reservations tab — the user can then use the agent dropdown
-    toast.info(`Showing reservations for ${agents.find((a) => a.id === agentId)?.name || 'agent'}`);
+    setReservationAgentFilter(agentId);
+    toast.info(`Filtered reservations for ${agents.find((a) => a.id === agentId)?.name || 'agent'}`);
   }
 
   function handleCreatePayout() {
@@ -238,6 +238,8 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
             hasMore={reservationsHasMore}
             loadedDateFrom={reservationWindow.dateFrom}
             loadedDateTo={reservationWindow.dateTo}
+            agentFilter={reservationAgentFilter}
+            onAgentFilterChange={setReservationAgentFilter}
             onLoadMore={handleLoadMoreReservations}
           />
         </TabsContent>
@@ -275,6 +277,7 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
         operatorId={operator.operatorId}
         moovsOperatorId={operator.moovsOperatorId}
         agency={agency}
+        agents={agents}
         agencyId={agencyId}
         onPayoutCreated={loadData}
       />

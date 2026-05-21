@@ -54,6 +54,7 @@ export interface Agency {
 export interface Agent {
   id: string;
   agency_id: string;
+  moovs_contact_id: string | null;
   name: string;
   email: string | null;
   phone: string | null;
@@ -75,6 +76,9 @@ export interface Reservation {
   pickup_location: string | null;
   dropoff_location: string | null;
   passenger_name: string | null;
+  booking_contact_id: string | null;
+  booking_contact_name: string | null;
+  booking_contact_email: string | null;
   vehicle_type: string | null;
   trip_type: string | null;
   base_rate_amount: number;

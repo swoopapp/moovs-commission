@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -13,10 +13,19 @@ import {
   TableRow,
   TableCell,
 } from '../ui/table';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../ui/select';
 import type { TripWithCommission } from './DateRangeStep';
+import type { Agent } from '../../types/commission';
 
 interface TripSelectionStepProps {
   trips: TripWithCommission[];
+  agents: Agent[];
   selectedIds: Set<string>;
   onSelectedIdsChange: (ids: Set<string>) => void;
   adjustments: number;
@@ -36,6 +45,7 @@ function formatDate(dateStr: string | null): string {
 
 export function TripSelectionStep({
   trips,
+  agents,
   selectedIds,
   onSelectedIdsChange,
   adjustments,
@@ -44,16 +54,27 @@ export function TripSelectionStep({
   onNext,
 }: TripSelectionStepProps) {
   const [adjustmentInput, setAdjustmentInput] = useState(adjustments === 0 ? '' : String(adjustments));
+  const [agentFilter, setAgentFilter] = useState('all');
 
-  const allSelected = trips.length > 0 && selectedIds.size === trips.length;
-  const someSelected = selectedIds.size > 0 && selectedIds.size < trips.length;
+  const agentMap = useMemo(() => new Map(agents.map((agent) => [agent.id, agent])), [agents]);
+  const visibleTrips = useMemo(() => {
+    if (agentFilter === 'all') return trips;
+    if (agentFilter === 'unassigned') return trips.filter((trip) => !trip.attribution.agent_id);
+    return trips.filter((trip) => trip.attribution.agent_id === agentFilter);
+  }, [trips, agentFilter]);
+
+  const visibleSelectedCount = visibleTrips.filter((t) => selectedIds.has(t.reservation.id)).length;
+  const allSelected = visibleTrips.length > 0 && visibleSelectedCount === visibleTrips.length;
+  const someSelected = visibleSelectedCount > 0 && visibleSelectedCount < visibleTrips.length;
 
   function toggleAll() {
+    const next = new Set(selectedIds);
     if (allSelected) {
-      onSelectedIdsChange(new Set());
+      visibleTrips.forEach((trip) => next.delete(trip.reservation.id));
     } else {
-      onSelectedIdsChange(new Set(trips.map((t) => t.reservation.id)));
+      visibleTrips.forEach((trip) => next.add(trip.reservation.id));
     }
+    onSelectedIdsChange(next);
   }
 
   function toggleOne(id: string) {
@@ -80,6 +101,21 @@ export function TripSelectionStep({
   return (
     <div className="space-y-4">
       {/* Scrollable trip table */}
+      <div className="flex justify-end">
+        <Select value={agentFilter} onValueChange={setAgentFilter}>
+          <SelectTrigger className="w-[220px]">
+            <SelectValue placeholder="All Agents" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Agents</SelectItem>
+            <SelectItem value="unassigned">Unassigned</SelectItem>
+            {agents.filter((agent) => agent.status === 'active').map((agent) => (
+              <SelectItem key={agent.id} value={agent.id}>{agent.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       <div className="border rounded-lg overflow-hidden">
         <div className="max-h-64 overflow-y-auto">
           <Table>
@@ -93,13 +129,14 @@ export function TripSelectionStep({
                 </TableHead>
                 <TableHead>Order #</TableHead>
                 <TableHead>Date</TableHead>
+                <TableHead>Agent</TableHead>
                 <TableHead>Passenger</TableHead>
                 <TableHead className="text-right">Revenue</TableHead>
                 <TableHead className="text-right">Commission</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {trips.map((t) => (
+              {visibleTrips.map((t) => (
                 <TableRow key={t.reservation.id}>
                   <TableCell>
                     <Checkbox
@@ -112,6 +149,9 @@ export function TripSelectionStep({
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-sm">
                     {formatDate(t.reservation.pickup_date)}
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {t.attribution.agent_id ? agentMap.get(t.attribution.agent_id)?.name ?? '--' : '--'}
                   </TableCell>
                   <TableCell className="text-sm">
                     {t.reservation.passenger_name || '--'}

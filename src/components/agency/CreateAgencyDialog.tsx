@@ -267,7 +267,7 @@ export function CreateAgencyDialog({ open, onOpenChange, onCreated }: CreateAgen
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) resetForm(); onOpenChange(v); }}>
-      <DialogContent className="sm:max-w-[540px]">
+      <DialogContent className="sm:max-w-[540px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create Agency — Step {step} of 2</DialogTitle>
         </DialogHeader>
