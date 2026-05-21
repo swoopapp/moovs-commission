@@ -3,6 +3,7 @@ import { Button } from '../ui/button';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { useOperator } from '../../contexts/OperatorContext';
 import { Link2, ShieldCheck } from 'lucide-react';
+import { PoweredByMoovs } from '../layout/PoweredByMoovs';
 
 interface LoginPageProps {
   error?: string | null;
@@ -12,7 +13,7 @@ export function LoginPage({ error }: LoginPageProps) {
   const operator = useOperator();
 
   return (
-    <div className="min-h-screen bg-white flex flex-col items-center justify-center px-4">
+    <div className="min-h-screen bg-white flex flex-col items-center justify-center px-4 pb-16">
       <div className="w-full max-w-sm space-y-8">
         {/* Logo */}
         <div className="flex flex-col items-center space-y-4">
@@ -51,11 +52,7 @@ export function LoginPage({ error }: LoginPageProps) {
         </div>
       </div>
 
-      <div className="fixed bottom-4 left-0 right-0 text-center">
-        <p className="text-xs text-gray-400">
-          Powered by Moovs
-        </p>
-      </div>
+      <PoweredByMoovs />
     </div>
   );
 }

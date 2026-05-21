@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { fetchAllOperators } from '../services/commissionOperatorService';
 import { CommissionOperator } from '../types/commissionOperator';
 import moovsLogo from '../assets/moovs-logo.png';
+import { PoweredByMoovs } from './layout/PoweredByMoovs';
 
 export function NotFoundPage() {
   const [operators, setOperators] = useState<CommissionOperator[]>([]);
@@ -14,7 +15,7 @@ export function NotFoundPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4">
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4 pb-16">
       <div className="text-center space-y-6 max-w-md">
         <img
           src={typeof moovsLogo === 'string' ? moovsLogo : moovsLogo.src}
@@ -51,11 +52,7 @@ export function NotFoundPage() {
           </div>
         )}
       </div>
-      <div className="fixed bottom-4 left-0 right-0 text-center">
-        <p className="text-xs text-gray-400">
-          Powered by Moovs
-        </p>
-      </div>
+      <PoweredByMoovs />
     </div>
   );
 }

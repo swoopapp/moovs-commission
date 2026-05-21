@@ -5,6 +5,7 @@ import { DashboardView } from './components/dashboard/DashboardView';
 import { AgencyDetailView } from './components/agency/AgencyDetailView';
 import { AgencyMatchingView } from './components/agency/AgencyMatchingView';
 import { Toaster } from './components/ui/sonner';
+import { PoweredByMoovs } from './components/layout/PoweredByMoovs';
 
 function App() {
   const [route, setRoute] = useState(window.location.hash || '#/');
@@ -25,7 +26,7 @@ function App() {
 
   return (
     <AuthGate>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gray-50 pb-16">
         <AppHeader onExportClick={handleExport} />
         <main className="max-w-7xl mx-auto px-6 py-6">
           {isMatching ? (
@@ -39,9 +40,7 @@ function App() {
           )}
         </main>
         <Toaster />
-        <footer className="text-center py-6">
-          <p className="text-xs text-gray-400">Powered by Moovs</p>
-        </footer>
+        <PoweredByMoovs />
       </div>
     </AuthGate>
   );

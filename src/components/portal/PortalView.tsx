@@ -5,6 +5,7 @@ import { PortalKPIs } from './PortalKPIs';
 import { PortalReservations } from './PortalReservations';
 import { PortalStatements } from './PortalStatements';
 import moovsLogo from '../../assets/moovs-logo.png';
+import { PoweredByMoovs } from '../layout/PoweredByMoovs';
 
 interface PortalViewProps {
   token: string;
@@ -47,7 +48,7 @@ export function PortalView({ token }: PortalViewProps) {
 
   if (error || !data) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4">
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4 pb-16">
         <div className="text-center space-y-4 max-w-sm">
           <img src={typeof moovsLogo === 'string' ? moovsLogo : moovsLogo.src} alt="Moovs" className="h-10 w-auto mx-auto" />
           <h1 className="text-xl font-semibold text-gray-900">Link Not Found</h1>
@@ -55,9 +56,7 @@ export function PortalView({ token }: PortalViewProps) {
             This portal link is invalid or has expired. Please contact your operator for an updated link.
           </p>
         </div>
-        <div className="fixed bottom-4 left-0 right-0 text-center">
-          <p className="text-xs text-gray-400">Powered by Moovs</p>
-        </div>
+        <PoweredByMoovs />
       </div>
     );
   }
