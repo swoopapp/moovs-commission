@@ -72,16 +72,20 @@ app.post('/fetch-reservations', async (c) => {
         req.order_number as "Confirmation Number",
         req.company_id as "Company ID",
         t.contact_id as "Booking Contact ID",
-        CONCAT(COALESCE(tc.first_name, ''), ' ', COALESCE(tc.last_name, '')) as "Booking Contact Full Name",
+        COALESCE(
+          NULLIF(CONCAT_WS(' ', tc.first_name, tc.last_name), ''),
+          NULLIF(tc.email, '')
+        ) as "Booking Contact Full Name",
         tc.email as "Booking Contact Email",
         pickup.date_time as "Pickup Date Time",
         dropoff.date_time as "Dropoff Time Local",
         pickup.location as "Pickup Address",
         dropoff.location as "Dropoff Address",
         COALESCE(
-          t.temporary_passenger->>'name',
-          NULLIF(CONCAT(COALESCE(pc.first_name, ''), ' ', COALESCE(pc.last_name, '')), ' '),
-          NULLIF(CONCAT(COALESCE(tc.first_name, ''), ' ', COALESCE(tc.last_name, '')), ' ')
+          NULLIF(t.temporary_passenger->>'name', ''),
+          NULLIF(CONCAT_WS(' ', pc.first_name, pc.last_name), ''),
+          NULLIF(CONCAT_WS(' ', tc.first_name, tc.last_name), ''),
+          NULLIF(tc.email, '')
         ) as "Passenger Contact Full Name",
         COALESCE(fv.name, v.name, '') as "Vehicle Name",
         req.type as "Trip Type",
@@ -110,7 +114,7 @@ app.post('/fetch-reservations', async (c) => {
       LEFT JOIN farmed_route fr ON fr.route_id = r.route_id AND fr.cancelled_at IS NULL
       LEFT JOIN contact tc ON t.contact_id = tc.contact_id
       LEFT JOIN LATERAL (
-        SELECT s.location, s.date_time, s.passenger_contact_id FROM stop s WHERE s.trip_id = t.trip_id ORDER BY s.stop_index ASC LIMIT 1
+        SELECT s.location, s.date_time, s.contact_id as passenger_contact_id FROM stop s WHERE s.trip_id = t.trip_id ORDER BY s.stop_index ASC LIMIT 1
       ) pickup ON true
       LEFT JOIN LATERAL (
         SELECT s.location, s.date_time FROM stop s WHERE s.trip_id = t.trip_id ORDER BY s.stop_index DESC LIMIT 1
