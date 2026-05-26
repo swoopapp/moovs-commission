@@ -1,7 +1,7 @@
 import { getCommissionApiBase, getDashboardSecret, getAdminSecret } from '@/lib/admin-auth';
 
 export function sanitizeOperator<T extends Record<string, unknown>>(operator: T): Omit<T, 'auth_password'> & { auth_password_set: boolean } {
-  const { auth_password, portal_token_hash, ...rest } = operator;
+  const { auth_password, portal_token_hash, portal_token_ciphertext, ...rest } = operator;
   return {
     ...rest,
     auth_password_set: typeof auth_password === 'string' && auth_password.length > 0,

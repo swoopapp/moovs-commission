@@ -67,6 +67,7 @@ export async function ensureCommissionTables(): Promise<void> {
       display_name TEXT NOT NULL,
       auth_password TEXT NOT NULL,
       portal_token_hash TEXT,
+      portal_token_ciphertext TEXT,
       portal_token_enabled BOOLEAN NOT NULL DEFAULT false,
       portal_token_created_at TIMESTAMPTZ,
       portal_token_last_used_at TIMESTAMPTZ,
@@ -83,6 +84,7 @@ export async function ensureCommissionTables(): Promise<void> {
   `);
   await appQuery(`ALTER TABLE commission_operators ALTER COLUMN auth_password SET DEFAULT encode(gen_random_bytes(32), 'hex')`);
   await appQuery(`ALTER TABLE commission_operators ADD COLUMN IF NOT EXISTS portal_token_hash TEXT`);
+  await appQuery(`ALTER TABLE commission_operators ADD COLUMN IF NOT EXISTS portal_token_ciphertext TEXT`);
   await appQuery(`ALTER TABLE commission_operators ADD COLUMN IF NOT EXISTS portal_token_enabled BOOLEAN NOT NULL DEFAULT false`);
   await appQuery(`ALTER TABLE commission_operators ADD COLUMN IF NOT EXISTS portal_token_created_at TIMESTAMPTZ`);
   await appQuery(`ALTER TABLE commission_operators ADD COLUMN IF NOT EXISTS portal_token_last_used_at TIMESTAMPTZ`);

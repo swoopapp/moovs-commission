@@ -8,6 +8,7 @@ import {
   updateOperator,
   deleteOperator,
   generateOperatorPortalToken,
+  copyOperatorPortalToken,
   revokeOperatorPortalToken,
 } from '../../services/commissionOperatorService';
 import { lookupMoovsOperator, MoovsOperatorDetails } from '../../services/moovsOperatorService';
@@ -16,7 +17,7 @@ import { Input } from '../ui/input';
 import {
   Plus, Pencil, Trash2, ExternalLink, X, Search, Loader2,
   CheckCircle2, AlertCircle, Truck, Users, Calendar, Activity,
-  Link2, Ban,
+  Link2, Ban, Copy, RefreshCw,
 } from 'lucide-react';
 import moovsLogo from '../../assets/moovs-logo.png';
 import { PoweredByMoovs } from '../layout/PoweredByMoovs';
@@ -219,7 +220,40 @@ function AdminDashboard() {
     }
   };
 
-  const handleGeneratePortalLink = async (op: CommissionOperator) => {
+  const operatorPortalUrl = (op: CommissionOperator, token: string) => {
+    const url = new URL(`/${op.slug}`, window.location.origin);
+    url.searchParams.set('commission_token', token);
+    return url.toString();
+  };
+
+  const handleCopyPortalLink = async (op: CommissionOperator) => {
+    setTokenActionId(op.id);
+    setError(null);
+    setNotice(null);
+    try {
+      const current = await copyOperatorPortalToken(op.id);
+      if (!current.portal_token) throw new Error('Token was not returned');
+
+      await navigator.clipboard.writeText(operatorPortalUrl(op, current.portal_token));
+      setNotice(`Secure portal link copied for ${op.display_name}.`);
+      await loadOperators();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to copy portal link');
+    } finally {
+      setTokenActionId(null);
+    }
+  };
+
+  const handleGeneratePortalLink = async (op: CommissionOperator, replaceExisting = false) => {
+    if (op.portal_token_enabled || replaceExisting) {
+      const shouldRotate = confirm(
+        `A secure portal link is already enabled for ${op.display_name}.\n\n` +
+          `Replacing it will revoke any previously copied link.\n\n` +
+          `Replace and copy a new secure link?`,
+      );
+      if (!shouldRotate) return;
+    }
+
     setTokenActionId(op.id);
     setError(null);
     setNotice(null);
@@ -227,10 +261,12 @@ function AdminDashboard() {
       const updated = await generateOperatorPortalToken(op.id);
       if (!updated.portal_token) throw new Error('Token was not returned');
 
-      const url = new URL(`/${op.slug}`, window.location.origin);
-      url.searchParams.set('commission_token', updated.portal_token);
-      await navigator.clipboard.writeText(url.toString());
-      setNotice(`Secure portal link copied for ${op.display_name}.`);
+      await navigator.clipboard.writeText(operatorPortalUrl(op, updated.portal_token));
+      setNotice(
+        op.portal_token_enabled || replaceExisting
+          ? `Replacement secure portal link copied for ${op.display_name}. Previous links were revoked.`
+          : `Secure portal link copied for ${op.display_name}.`,
+      );
       await loadOperators();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate portal link');
@@ -542,8 +578,8 @@ function AdminDashboard() {
                       {op.portal_token_enabled && (
                         <>
                           <span className="text-gray-300">&middot;</span>
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">
-                            secure link enabled
+                          <span className={`text-xs px-1.5 py-0.5 rounded ${op.portal_token_copyable ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+                            {op.portal_token_copyable ? 'secure link enabled' : 'legacy link — replace to copy'}
                           </span>
                         </>
                       )}
@@ -551,14 +587,38 @@ function AdminDashboard() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    onClick={() => handleGeneratePortalLink(op)}
-                    disabled={tokenActionId === op.id}
-                    className="p-2.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 disabled:opacity-50"
-                    title="Generate and copy secure portal link"
-                  >
-                    {tokenActionId === op.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
-                  </button>
+                  {op.portal_token_enabled ? (
+                    <>
+                      <button
+                        onClick={() => handleCopyPortalLink(op)}
+                        disabled={tokenActionId === op.id || !op.portal_token_copyable}
+                        className="p-2.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 disabled:opacity-50"
+                        title={op.portal_token_copyable ? 'Copy secure portal link' : 'Existing link cannot be copied. Replace it once to enable future copying.'}
+                        aria-label={op.portal_token_copyable ? 'Copy secure portal link' : 'Existing link cannot be copied. Replace it once to enable future copying.'}
+                      >
+                        {tokenActionId === op.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Copy className="w-4 h-4" />}
+                      </button>
+                      <button
+                        onClick={() => handleGeneratePortalLink(op, true)}
+                        disabled={tokenActionId === op.id}
+                        className="p-2.5 text-gray-400 hover:text-amber-600 rounded-lg hover:bg-amber-50 disabled:opacity-50"
+                        title="Replace secure portal link and copy new link"
+                        aria-label="Replace secure portal link and copy new link"
+                      >
+                        {tokenActionId === op.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => handleGeneratePortalLink(op)}
+                      disabled={tokenActionId === op.id}
+                      className="p-2.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 disabled:opacity-50"
+                      title="Generate and copy secure portal link"
+                      aria-label="Generate and copy secure portal link"
+                    >
+                      {tokenActionId === op.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+                    </button>
+                  )}
                   {op.portal_token_enabled && (
                     <button
                       onClick={() => handleRevokePortalLink(op)}

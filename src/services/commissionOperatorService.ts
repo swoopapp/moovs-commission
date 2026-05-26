@@ -78,6 +78,11 @@ export async function generateOperatorPortalToken(id: string): Promise<Commissio
   return handleResponse<CommissionOperator>(res, 'generateOperatorPortalToken');
 }
 
+export async function copyOperatorPortalToken(id: string): Promise<CommissionOperator> {
+  const res = await fetch(`${API}/commission-operators/${encodeURIComponent(id)}/portal-token`);
+  return handleResponse<CommissionOperator>(res, 'copyOperatorPortalToken');
+}
+
 export async function revokeOperatorPortalToken(id: string): Promise<void> {
   const res = await fetch(`${API}/commission-operators/${encodeURIComponent(id)}/portal-token`, {
     method: 'DELETE',

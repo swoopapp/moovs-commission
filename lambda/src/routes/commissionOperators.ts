@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import crypto from 'crypto';
 import { appQuery } from '../appDb.js';
 import { query as moovsQuery } from '../db.js';
-import { hasAdminSecret } from '../config.js';
+import { getAdminSecret, hasAdminSecret } from '../config.js';
 
 const app = new Hono();
 
@@ -21,6 +21,51 @@ function generatePortalToken(): string {
 
 function hashPortalToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function portalTokenEncryptionKey(): Buffer {
+  const secret = process.env.OPERATOR_PORTAL_TOKEN_ENCRYPTION_SECRET || getAdminSecret();
+  if (!secret) {
+    throw new Error('Portal token encryption is not configured');
+  }
+  return crypto.createHash('sha256').update(secret).digest();
+}
+
+function encryptPortalToken(token: string): string {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', portalTokenEncryptionKey(), iv);
+  const ciphertext = Buffer.concat([cipher.update(token, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return ['v1', iv.toString('base64url'), tag.toString('base64url'), ciphertext.toString('base64url')].join(':');
+}
+
+function decryptPortalToken(encrypted: string): string {
+  const [version, ivText, tagText, ciphertextText] = encrypted.split(':');
+  if (version !== 'v1' || !ivText || !tagText || !ciphertextText) {
+    throw new Error('Unsupported portal token ciphertext');
+  }
+  const decipher = crypto.createDecipheriv(
+    'aes-256-gcm',
+    portalTokenEncryptionKey(),
+    Buffer.from(ivText, 'base64url'),
+  );
+  decipher.setAuthTag(Buffer.from(tagText, 'base64url'));
+  return Buffer.concat([
+    decipher.update(Buffer.from(ciphertextText, 'base64url')),
+    decipher.final(),
+  ]).toString('utf8');
+}
+
+function safeOperator(row: Record<string, any>) {
+  const { portal_token_hash, portal_token_ciphertext, ...rest } = row;
+  return {
+    ...rest,
+    portal_token_copyable: Boolean(portal_token_ciphertext),
+  };
+}
+
+function safeOperators(rows: Array<Record<string, any>>) {
+  return rows.map(safeOperator);
 }
 
 async function fetchMoovsLogos(moovsOperatorIds: string[]): Promise<Map<string, string | null>> {
@@ -61,10 +106,10 @@ app.get('/commission-operators', async (c) => {
     if (!slug && !requireAdmin(c)) return c.json({ error: 'Unauthorized' }, 401);
     if (slug) {
       const r = await appQuery('SELECT * FROM commission_operators WHERE slug = $1 LIMIT 1', [slug]);
-      return c.json(await withMoovsLogos(r.rows));
+      return c.json(safeOperators(await withMoovsLogos(r.rows)));
     }
     const r = await appQuery('SELECT * FROM commission_operators ORDER BY created_at DESC');
-    return c.json(await withMoovsLogos(r.rows));
+    return c.json(safeOperators(await withMoovsLogos(r.rows)));
   } catch (err: any) {
     console.error('Error fetching commission operators:', err);
     return c.json({ error: 'Internal Server Error' }, 500);
@@ -78,7 +123,7 @@ app.get('/commission-operators/:id', async (c) => {
     const r = await appQuery('SELECT * FROM commission_operators WHERE id = $1', [c.req.param('id')]);
     if (r.rows.length === 0) return c.json({ error: 'Not found' }, 404);
     const [row] = await withMoovsLogos(r.rows);
-    return c.json(row);
+    return c.json(safeOperator(row));
   } catch (err: any) {
     console.error('Error fetching commission operator:', err);
     return c.json({ error: 'Internal Server Error' }, 500);
@@ -110,10 +155,45 @@ app.post('/commission-operators/portal-token/verify', async (c) => {
     );
 
     const [row] = await withMoovsLogos(r.rows);
-    return c.json(row);
+    return c.json(safeOperator(row));
   } catch (err: any) {
     console.error('Error verifying commission operator portal token:', err);
     return c.json({ error: 'Internal Server Error' }, 500);
+  }
+});
+
+// GET /commission-operators/:id/portal-token
+// Admin-only copy endpoint. The list/read endpoints never expose the recoverable token.
+app.get('/commission-operators/:id/portal-token', async (c) => {
+  try {
+    if (!requireAdmin(c)) return c.json({ error: 'Unauthorized' }, 401);
+    const r = await appQuery(
+      `SELECT * FROM commission_operators WHERE id = $1 LIMIT 1`,
+      [c.req.param('id')],
+    );
+    if (r.rows.length === 0) return c.json({ error: 'Not found' }, 404);
+
+    const row = r.rows[0];
+    if (!row.portal_token_enabled || !row.portal_token_hash) {
+      return c.json({ error: 'Secure portal link is not enabled' }, 404);
+    }
+    if (!row.portal_token_ciphertext) {
+      return c.json(
+        { error: 'This secure portal link was created before copy support and cannot be recovered. Replace it once to enable future copying.' },
+        409,
+      );
+    }
+
+    const token = decryptPortalToken(row.portal_token_ciphertext);
+    if (hashPortalToken(token) !== row.portal_token_hash) {
+      return c.json({ error: 'Stored secure portal link failed integrity check' }, 409);
+    }
+
+    const [withLogo] = await withMoovsLogos([row]);
+    return c.json({ ...safeOperator(withLogo), portal_token: token });
+  } catch (err: any) {
+    console.error('Error copying commission operator portal token:', err);
+    return c.json({ error: err.message || 'Internal Server Error' }, 500);
   }
 });
 
@@ -124,21 +204,23 @@ app.post('/commission-operators/:id/portal-token', async (c) => {
     const id = c.req.param('id');
     const body = await c.req.json().catch(() => ({}));
     const token = generatePortalToken();
+    const encryptedToken = encryptPortalToken(token);
     const r = await appQuery(
       `UPDATE commission_operators
        SET portal_token_hash = $1,
+           portal_token_ciphertext = $2,
            portal_token_enabled = true,
-           portal_token_expires_at = $2,
+           portal_token_expires_at = $3,
            portal_token_created_at = now(),
            portal_token_last_used_at = NULL,
            updated_at = now()
-       WHERE id = $3
+       WHERE id = $4
        RETURNING *`,
-      [hashPortalToken(token), body?.expires_at || null, id],
+      [hashPortalToken(token), encryptedToken, body?.expires_at || null, id],
     );
     if (r.rows.length === 0) return c.json({ error: 'Not found' }, 404);
     const [row] = await withMoovsLogos(r.rows);
-    return c.json({ ...row, portal_token: token });
+    return c.json({ ...safeOperator(row), portal_token: token });
   } catch (err: any) {
     console.error('Error generating commission operator portal token:', err);
     return c.json({ error: err.message || 'Internal Server Error' }, 500);
@@ -152,6 +234,7 @@ app.delete('/commission-operators/:id/portal-token', async (c) => {
     const r = await appQuery(
       `UPDATE commission_operators
        SET portal_token_hash = NULL,
+           portal_token_ciphertext = NULL,
            portal_token_enabled = false,
            portal_token_expires_at = NULL,
            portal_token_last_used_at = NULL,
@@ -179,7 +262,7 @@ app.post('/commission-operators', async (c) => {
        RETURNING *`,
       [moovs_operator_id, slug, display_name, auth_password, null, primary_color, secondary_color, contact_email, contact_phone, status],
     );
-    return c.json(await withMoovsLogos(r.rows), 201);
+    return c.json(safeOperators(await withMoovsLogos(r.rows)), 201);
   } catch (err: any) {
     console.error('Error creating commission operator:', err);
     return c.json({ error: err.message || 'Internal Server Error' }, 500);
@@ -213,7 +296,7 @@ app.patch('/commission-operators/:id', async (c) => {
       vals,
     );
     if (r.rows.length === 0) return c.json({ error: 'Not found' }, 404);
-    return c.json(await withMoovsLogos(r.rows));
+    return c.json(safeOperators(await withMoovsLogos(r.rows)));
   } catch (err: any) {
     console.error('Error updating commission operator:', err);
     return c.json({ error: err.message || 'Internal Server Error' }, 500);
