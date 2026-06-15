@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { ReservationAttribution, Reservation, Payout } from '../../types/commission';
+import { ReservationAttribution, Reservation, Payout, PriceMode } from '../../types/commission';
+import { netAmount } from '../../lib/commission-calc';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import {
   Table,
@@ -19,6 +20,7 @@ interface PortalStatementsProps {
   payouts: Payout[];
   agencyName: string;
   paymentTerms: string | null;
+  priceMode?: PriceMode;
 }
 
 function formatCurrency(amount: number): string {
@@ -45,7 +47,7 @@ function exportCSV(reservations: Reservation[], attributions: ReservationAttribu
   reservations.forEach((r) => reservationMap.set(r.id, r));
 
   const csvRows = [
-    ['Date', 'Passenger', 'Trip Type', 'Pickup', 'Dropoff', 'Revenue', 'Commission', 'Status'].join(','),
+    ['Date', 'Passenger', 'Trip Type', 'Pickup', 'Dropoff', 'Gross', 'Commission', 'Net', 'Status'].join(','),
   ];
 
   for (const attr of attributions) {
@@ -59,6 +61,7 @@ function exportCSV(reservations: Reservation[], attributions: ReservationAttribu
       `"${(r.dropoff_location || '').replace(/"/g, '""')}"`,
       r.total_amount.toFixed(2),
       attr.commission_amount.toFixed(2),
+      netAmount(r, attr.commission_amount).toFixed(2),
       r.trip_status || '',
     ];
     csvRows.push(row.join(','));
@@ -80,11 +83,18 @@ export function PortalStatements({
   payouts,
   agencyName,
   paymentTerms,
+  priceMode = 'gross',
 }: PortalStatementsProps) {
   const totalCommission = useMemo(
     () => attributions.reduce((sum, a) => sum + a.commission_amount, 0),
     [attributions],
   );
+
+  const totalGross = useMemo(
+    () => reservations.reduce((sum, r) => sum + r.total_amount, 0),
+    [reservations],
+  );
+  const totalNet = Math.round((totalGross - totalCommission) * 100) / 100;
 
   const totalPaid = useMemo(
     () =>
@@ -115,6 +125,20 @@ export function PortalStatements({
             {paymentTerms && (
               <p className="text-sm text-gray-500">Payment Terms: {paymentTerms}</p>
             )}
+            <div className="grid grid-cols-3 gap-2 text-sm pt-1">
+              <div className={priceMode === 'gross' ? 'font-semibold' : ''}>
+                <p className="text-gray-500">Gross</p>
+                <p className="text-gray-900">{formatCurrency(totalGross)}</p>
+              </div>
+              <div>
+                <p className="text-gray-500">Commission</p>
+                <p className="text-gray-900">{formatCurrency(totalCommission)}</p>
+              </div>
+              <div className={priceMode === 'net' ? 'font-semibold' : ''}>
+                <p className="text-gray-500">Net</p>
+                <p className="text-gray-900">{formatCurrency(totalNet)}</p>
+              </div>
+            </div>
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"

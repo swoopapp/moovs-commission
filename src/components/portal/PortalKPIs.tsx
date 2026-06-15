@@ -1,20 +1,22 @@
-import { ReservationAttribution, Reservation } from '../../types/commission';
+import { ReservationAttribution, Reservation, PriceMode } from '../../types/commission';
 import { Card, CardContent } from '../ui/card';
-import { CalendarCheck, DollarSign, Banknote } from 'lucide-react';
+import { CalendarCheck, DollarSign, Banknote, Wallet } from 'lucide-react';
 
 interface PortalKPIsProps {
   reservations: Reservation[];
   attributions: ReservationAttribution[];
+  priceMode?: PriceMode;
 }
 
 function formatCurrency(amount: number): string {
   return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-export function PortalKPIs({ reservations, attributions }: PortalKPIsProps) {
+export function PortalKPIs({ reservations, attributions, priceMode = 'gross' }: PortalKPIsProps) {
   const totalBookings = attributions.length;
   const totalRevenue = reservations.reduce((sum, r) => sum + r.total_amount, 0);
   const totalCommission = attributions.reduce((sum, a) => sum + a.commission_amount, 0);
+  const totalNet = Math.round((totalRevenue - totalCommission) * 100) / 100;
 
   const kpis = [
     {
@@ -23,13 +25,15 @@ export function PortalKPIs({ reservations, attributions }: PortalKPIsProps) {
       icon: CalendarCheck,
       color: 'text-blue-600',
       bgColor: 'bg-blue-50',
+      primary: false,
     },
     {
-      label: 'Revenue Generated',
+      label: 'Gross Revenue',
       value: formatCurrency(totalRevenue),
       icon: DollarSign,
       color: 'text-green-600',
       bgColor: 'bg-green-50',
+      primary: priceMode === 'gross',
     },
     {
       label: 'Commission Earned',
@@ -37,15 +41,24 @@ export function PortalKPIs({ reservations, attributions }: PortalKPIsProps) {
       icon: Banknote,
       color: 'text-amber-600',
       bgColor: 'bg-amber-50',
+      primary: false,
+    },
+    {
+      label: 'Net',
+      value: formatCurrency(totalNet),
+      icon: Wallet,
+      color: 'text-indigo-600',
+      bgColor: 'bg-indigo-50',
+      primary: priceMode === 'net',
     },
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       {kpis.map((kpi) => {
         const Icon = kpi.icon;
         return (
-          <Card key={kpi.label} className="py-4">
+          <Card key={kpi.label} className={`py-4${kpi.primary ? ' ring-2 ring-gray-900/10' : ''}`}>
             <CardContent className="flex items-center gap-4">
               <div className={`${kpi.bgColor} p-2.5 rounded-lg`}>
                 <Icon className={`h-5 w-5 ${kpi.color}`} />

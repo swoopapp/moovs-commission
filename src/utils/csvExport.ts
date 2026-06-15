@@ -45,12 +45,14 @@ export function exportPayoutCSV(
     'Pickup',
     'Dropoff',
     'Vehicle',
-    'Trip Total',
+    'Gross',
     'Commission',
+    'Net',
   ];
 
   const rows = attributions.map(attr => {
     const res = reservations.find(r => r.id === attr.reservation_id);
+    const gross = res?.total_amount ?? 0;
     return [
       res?.order_number ?? '',
       res?.confirmation_number ?? '',
@@ -59,8 +61,9 @@ export function exportPayoutCSV(
       res?.pickup_location ?? '',
       res?.dropoff_location ?? '',
       res?.vehicle_type ?? '',
-      formatCurrency(res?.total_amount ?? 0),
+      formatCurrency(gross),
       formatCurrency(attr.commission_amount),
+      formatCurrency(gross - attr.commission_amount),
     ];
   });
 
@@ -89,15 +92,17 @@ export function exportCommissionStatement(
     'Vehicle',
     'Trip Type',
     'Base Rate',
-    'Total Amount',
+    'Gross',
     'Commission Rate',
     'Commission Type',
     'Commission Amount',
+    'Net',
     'Attributed At',
   ];
 
   const rows = attributions.map(attr => {
     const res = reservations.find(r => r.id === attr.reservation_id);
+    const gross = res?.total_amount ?? 0;
     const rateDisplay =
       attr.commission_type === 'flat'
         ? `$${attr.commission_rate}`
@@ -113,10 +118,11 @@ export function exportCommissionStatement(
       res?.vehicle_type ?? '',
       res?.trip_type ?? '',
       formatCurrency(res?.base_rate_amount ?? 0),
-      formatCurrency(res?.total_amount ?? 0),
+      formatCurrency(gross),
       rateDisplay,
       attr.commission_type,
       formatCurrency(attr.commission_amount),
+      formatCurrency(gross - attr.commission_amount),
       formatDate(attr.attributed_at),
     ];
   });

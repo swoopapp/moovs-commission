@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useOperator } from '../../contexts/OperatorContext';
 import { createAgency, CreateAgencyInput } from '../../services/agencyService';
 import { fetchMoovsCompanies, MoovsCompany } from '../../services/companyLookupService';
-import { AgencyType, CommissionType, CommissionBase } from '../../types/commission';
+import { AgencyType, CommissionType, CommissionBase, RateMode, PriceMode } from '../../types/commission';
+import { defaultPriceModeForTerms } from '../../lib/commission-calc';
 import {
   Dialog,
   DialogContent,
@@ -173,10 +174,19 @@ export function CreateAgencyDialog({ open, onOpenChange, onCreated }: CreateAgen
   const [commissionRate, setCommissionRate] = useState('10');
   const [commissionType, setCommissionType] = useState<CommissionType>('percent');
   const [commissionBase, setCommissionBase] = useState<CommissionBase>('total_amount');
+  const [rateMode, setRateMode] = useState<RateMode>('standard');
+  const [priceMode, setPriceMode] = useState<PriceMode>('gross');
+  const [priceModeTouched, setPriceModeTouched] = useState(false);
   const [paymentTerms, setPaymentTerms] = useState('Net 30');
   const [contractStart, setContractStart] = useState('');
   const [contractEnd, setContractEnd] = useState('');
   const [notes, setNotes] = useState('');
+
+  // Default the price mode from payment terms (Prepay -> Net, Billable -> Gross) until the user overrides.
+  useEffect(() => {
+    if (priceModeTouched) return;
+    setPriceMode(defaultPriceModeForTerms(paymentTerms));
+  }, [paymentTerms, priceModeTouched]);
 
   function resetForm() {
     setStep(1);
@@ -195,6 +205,9 @@ export function CreateAgencyDialog({ open, onOpenChange, onCreated }: CreateAgen
     setCommissionRate('10');
     setCommissionType('percent');
     setCommissionBase('total_amount');
+    setRateMode('standard');
+    setPriceMode('gross');
+    setPriceModeTouched(false);
     setPaymentTerms('Net 30');
     setContractStart('');
     setContractEnd('');
@@ -235,6 +248,8 @@ export function CreateAgencyDialog({ open, onOpenChange, onCreated }: CreateAgen
         commission_rate: parseFloat(commissionRate) || 0,
         commission_type: commissionType,
         commission_base: commissionBase,
+        rate_mode: rateMode,
+        price_mode: priceMode,
         payment_terms: paymentTerms || null,
         contract_start: contractStart || null,
         contract_end: contractEnd || null,
@@ -461,9 +476,34 @@ export function CreateAgencyDialog({ open, onOpenChange, onCreated }: CreateAgen
               </div>
             </div>
 
+            <div className="space-y-2">
+              <Label>Rate Source</Label>
+              <div className="flex gap-2">
+                <Button
+                  variant={rateMode === 'standard' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setRateMode('standard')}
+                >
+                  Standard (route rates)
+                </Button>
+                <Button
+                  variant={rateMode === 'fixed' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setRateMode('fixed')}
+                >
+                  Fixed rate
+                </Button>
+              </div>
+              <p className="text-xs text-gray-500">
+                {rateMode === 'standard'
+                  ? 'Shuttle bookings use the operator route rate book; the rate below is the fallback.'
+                  : 'Always use the rate below, ignoring route rates (use for non-standard agencies).'}
+              </p>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="rate-input">Rate</Label>
+                <Label htmlFor="rate-input">{rateMode === 'standard' ? 'Fallback Rate' : 'Rate'}</Label>
                 <div className="relative">
                   {commissionType === 'flat' && (
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
@@ -498,20 +538,49 @@ export function CreateAgencyDialog({ open, onOpenChange, onCreated }: CreateAgen
               )}
             </div>
 
-            <div className="space-y-2">
-              <Label>Payment Terms</Label>
-              <Select value={paymentTerms} onValueChange={setPaymentTerms}>
-                <SelectTrigger className="max-w-[250px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Net 15">Net 15</SelectItem>
-                  <SelectItem value="Net 30">Net 30</SelectItem>
-                  <SelectItem value="Net 45">Net 45</SelectItem>
-                  <SelectItem value="Net 60">Net 60</SelectItem>
-                  <SelectItem value="Due on Receipt">Due on Receipt</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Payment Terms</Label>
+                <Select value={paymentTerms} onValueChange={setPaymentTerms}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Billing (Net 30)">Billing (Net 30)</SelectItem>
+                    <SelectItem value="Prepay">Prepay</SelectItem>
+                    <SelectItem value="Prepay; CC on File">Prepay; CC on File</SelectItem>
+                    <SelectItem value="Net 15">Net 15</SelectItem>
+                    <SelectItem value="Net 30">Net 30</SelectItem>
+                    <SelectItem value="Net 45">Net 45</SelectItem>
+                    <SelectItem value="Net 60">Net 60</SelectItem>
+                    <SelectItem value="Due on Receipt">Due on Receipt</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Price Display</Label>
+                <div className="flex gap-2">
+                  <Button
+                    variant={priceMode === 'gross' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => { setPriceMode('gross'); setPriceModeTouched(true); }}
+                  >
+                    Gross
+                  </Button>
+                  <Button
+                    variant={priceMode === 'net' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => { setPriceMode('net'); setPriceModeTouched(true); }}
+                  >
+                    Net
+                  </Button>
+                </div>
+                <p className="text-xs text-gray-500">
+                  {priceMode === 'net' ? 'Headline is net (gross minus commission).' : 'Headline is gross revenue.'}
+                </p>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

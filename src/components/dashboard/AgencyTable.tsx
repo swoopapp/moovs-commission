@@ -55,6 +55,7 @@ const STATUS_BADGE_COLORS: Record<AgencyStatus, string> = {
 };
 
 function formatRate(agency: Agency): string {
+  if (agency.rate_mode === 'standard') return 'Route rates';
   if (agency.commission_type === 'flat') {
     return `$${agency.commission_rate}`;
   }
@@ -173,7 +174,12 @@ export function AgencyTable({
                     {agency.type}
                   </Badge>
                 </TableCell>
-                <TableCell>{formatRate(agency)}</TableCell>
+                <TableCell>
+                  <div className="flex flex-col leading-tight">
+                    <span>{formatRate(agency)}</span>
+                    <span className="text-[11px] uppercase tracking-wide text-gray-400">{agency.price_mode}</span>
+                  </div>
+                </TableCell>
                 <TableCell className="text-sm text-gray-500">
                   {[agency.city, agency.state].filter(Boolean).join(', ') || '—'}
                 </TableCell>

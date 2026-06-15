@@ -1,6 +1,6 @@
 import { useOperator } from '../../contexts/OperatorContext';
 import { Button } from '../ui/button';
-import { Download } from 'lucide-react';
+import { Download, Route } from 'lucide-react';
 
 interface AppHeaderProps {
   onExportClick?: () => void;
@@ -13,7 +13,7 @@ export function AppHeader({ onExportClick }: AppHeaderProps) {
     <header className="bg-white border-b border-gray-200">
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         {/* Left: Logo + Title */}
-        <div className="flex items-center gap-3">
+        <a href="#/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
           {operator.logoUrl ? (
             <img
               src={operator.logoUrl}
@@ -25,10 +25,16 @@ export function AppHeader({ onExportClick }: AppHeaderProps) {
           )}
           <span className="text-gray-300">|</span>
           <h1 className="text-base font-semibold text-gray-900">Commission Tracking</h1>
-        </div>
+        </a>
 
-        {/* Right: Export + Operator name */}
+        {/* Right: Route Rates + Export + Operator name */}
         <div className="flex items-center gap-4">
+          <Button variant="ghost" size="sm" className="gap-2" asChild>
+            <a href="#/route-rates">
+              <Route className="h-4 w-4" />
+              Route Rates
+            </a>
+          </Button>
           <Button variant="outline" size="sm" className="gap-2" onClick={onExportClick}>
             <Download className="h-4 w-4" />
             Export Report

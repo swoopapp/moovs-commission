@@ -92,6 +92,8 @@ export async function ensureCommissionTables(): Promise<void> {
   await appQuery(`CREATE INDEX IF NOT EXISTS idx_commission_operators_slug ON commission_operators(slug)`);
   await appQuery(`CREATE INDEX IF NOT EXISTS idx_commission_operators_moovs_id ON commission_operators(moovs_operator_id)`);
   await appQuery(`CREATE INDEX IF NOT EXISTS idx_commission_operators_portal_token_hash ON commission_operators(portal_token_hash) WHERE portal_token_hash IS NOT NULL`);
+  // White-label per-shuttle-route commission rate config: { default_rate: number|null, routes: { [routeId]: { route_id, name, rate } } }
+  await appQuery(`ALTER TABLE commission_operators ADD COLUMN IF NOT EXISTS route_rate_config JSONB NOT NULL DEFAULT '{"default_rate": null, "routes": {}}'::jsonb`);
 
   // 1. Agencies
   await appQuery(`
@@ -128,6 +130,10 @@ export async function ensureCommissionTables(): Promise<void> {
   await appQuery(`CREATE INDEX IF NOT EXISTS idx_agencies_company ON agencies(moovs_company_id)`);
   await appQuery(`CREATE INDEX IF NOT EXISTS idx_agencies_portal_token ON agencies(portal_token)`);
   await appQuery(`ALTER TABLE agencies ALTER COLUMN portal_token SET DEFAULT encode(gen_random_bytes(32), 'hex')`);
+  // Rate source: 'fixed' (legacy default — use commission_rate) or 'standard' (inherit operator route rates).
+  await appQuery(`ALTER TABLE agencies ADD COLUMN IF NOT EXISTS rate_mode TEXT NOT NULL DEFAULT 'fixed'`);
+  // Price display headline: 'gross' (legacy default) or 'net' (gross minus commission).
+  await appQuery(`ALTER TABLE agencies ADD COLUMN IF NOT EXISTS price_mode TEXT NOT NULL DEFAULT 'gross'`);
 
   // 1a. Agency Client Links — generic whitelabel client identities.
   // Supports standard Moovs companies (`company:<uuid>`) and Shuttle client overrides (`shuttle_client:<uuid>`).
@@ -206,6 +212,9 @@ export async function ensureCommissionTables(): Promise<void> {
     )
   `);
   await appQuery(`ALTER TABLE commission_reservations ADD COLUMN IF NOT EXISTS client_keys TEXT[] NOT NULL DEFAULT '{}'`);
+  await appQuery(`ALTER TABLE commission_reservations ADD COLUMN IF NOT EXISTS source TEXT`);
+  await appQuery(`ALTER TABLE commission_reservations ADD COLUMN IF NOT EXISTS shuttle_route_id TEXT`);
+  await appQuery(`ALTER TABLE commission_reservations ADD COLUMN IF NOT EXISTS shuttle_route_name TEXT`);
   await appQuery(`ALTER TABLE commission_reservations ADD COLUMN IF NOT EXISTS booking_contact_id TEXT`);
   await appQuery(`ALTER TABLE commission_reservations ADD COLUMN IF NOT EXISTS booking_contact_name TEXT`);
   await appQuery(`ALTER TABLE commission_reservations ADD COLUMN IF NOT EXISTS booking_contact_email TEXT`);

@@ -9,6 +9,7 @@ import { fetchAttributionsByAgency } from '../../services/attributionService';
 import { fetchCurrentReservations } from '../../services/reservationService';
 import { fetchAllPayoutReservations } from '../../services/payoutService';
 import { mergeAgencyAttributions, primaryAgencyClientKey } from '../../services/commissionTripService';
+import { useOperator } from '../../contexts/OperatorContext';
 
 export interface TripWithCommission {
   reservation: Reservation;
@@ -48,6 +49,7 @@ export function DateRangeStep({
   onTripsLoaded,
   onNext,
 }: DateRangeStepProps) {
+  const operator = useOperator();
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,7 +76,7 @@ export function DateRangeStep({
       const paidResIds = new Set(payoutReservations.map((pr) => pr.reservation_id));
 
       // Build a map of reservation_id -> attribution for this agency
-      const mergedAttributions = mergeAgencyAttributions(agency, reservations, attributions, agents);
+      const mergedAttributions = mergeAgencyAttributions(agency, reservations, attributions, agents, operator.routeRateConfig);
       const attrByResId = new Map(mergedAttributions.map((a) => [a.reservation_id, a]));
 
       // Filter: reservations that have an attribution for this agency AND are not in a payout

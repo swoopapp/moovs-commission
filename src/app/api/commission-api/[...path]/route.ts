@@ -17,6 +17,8 @@ function isAdminOnlyRequest(path: string, request: Request): boolean {
     return !url.searchParams.has('slug');
   }
 
+  // Operator-managed shuttle route rates: allowed with an operator session (ownership checked below).
+  if (path.startsWith('commission-operators/') && path.endsWith('/route-rates')) return false;
   if (path.startsWith('commission-operators/')) return true;
   if (path === 'upload-logo') return true;
   if (path === 'migrate-data') return true;
@@ -89,6 +91,16 @@ async function authorizeProxyRequest(path: string, request: Request, adminOnly: 
   if (path === 'fetch-companies' && request.method === 'POST') {
     const body = await request.clone().json().catch(() => null);
     if (body?.operator_id !== session.moovsOperatorId) return Response.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  if (path === 'fetch-shuttle-routes' && request.method === 'GET') {
+    const operatorId = url.searchParams.get('operator_id');
+    if (operatorId !== session.moovsOperatorId) return Response.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  if (path.startsWith('commission-operators/') && path.endsWith('/route-rates')) {
+    const operatorId = path.split('/')[1];
+    if (operatorId !== session.operatorId) return Response.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   if (path === 'payouts' && request.method === 'GET') {

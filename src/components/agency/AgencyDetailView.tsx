@@ -140,9 +140,9 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
   const attributions = useMemo(() => {
     if (!agency) return [];
     const reservationIds = new Set(reservations.map((reservation) => reservation.id));
-    return mergeAgencyAttributions(agency, reservations, persistedAttributions, agents)
+    return mergeAgencyAttributions(agency, reservations, persistedAttributions, agents, operator.routeRateConfig)
       .filter((attribution) => reservationIds.has(attribution.reservation_id));
-  }, [agency, reservations, persistedAttributions, agents]);
+  }, [agency, reservations, persistedAttributions, agents, operator.routeRateConfig]);
 
   async function handleLoadMoreReservations() {
     if (!agency || reservationsLoading) return;
@@ -181,6 +181,10 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
       return sum + (res?.total_amount ?? 0);
     }, 0),
     commissionEarned: attributions.reduce((sum, attr) => sum + attr.commission_amount, 0),
+    net: attributions.reduce((sum, attr) => {
+      const res = reservations.find((r) => r.id === attr.reservation_id);
+      return sum + ((res?.total_amount ?? 0) - attr.commission_amount);
+    }, 0),
     outstanding: (() => {
       const totalEarned = attributions.reduce((sum, attr) => sum + attr.commission_amount, 0);
       const totalPaid = payouts
@@ -241,6 +245,7 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
             agentFilter={reservationAgentFilter}
             onAgentFilterChange={setReservationAgentFilter}
             onLoadMore={handleLoadMoreReservations}
+            priceMode={agency.price_mode}
           />
         </TabsContent>
 

@@ -2,6 +2,15 @@ export type AgencyType = 'Hotel' | 'DMC' | 'Travel Agent' | 'OTA' | 'Concierge' 
 export type CommissionType = 'percent' | 'flat';
 export type CommissionBase = 'base_rate' | 'total_amount' | 'total_with_gratuity';
 export type AgencyStatus = 'active' | 'suspended' | 'archived';
+
+// How the agency's commission rate is determined.
+// 'fixed'    — always use the agency's own commission_rate (legacy/default; overrides everything).
+// 'standard' — inherit the operator's per-shuttle-route rate config (falls back to commission_rate).
+export type RateMode = 'fixed' | 'standard';
+
+// What the price columns headline for this agency.
+// 'gross' — full revenue (legacy/default). 'net' — gross minus commission (what prepay agencies pay).
+export type PriceMode = 'gross' | 'net';
 export type AgentRole = 'agent' | 'gm';
 export type PayoutMethod = 'ACH' | 'Wire' | 'Check' | 'Cash' | 'Other';
 export type PayoutStatus = 'draft' | 'pending' | 'paid';
@@ -30,6 +39,8 @@ export interface Agency {
   commission_rate: number;
   commission_type: CommissionType;
   commission_base: CommissionBase;
+  rate_mode: RateMode;
+  price_mode: PriceMode;
   contact_name: string | null;
   contact_email: string | null;
   contact_phone: string | null;
@@ -81,6 +92,11 @@ export interface Reservation {
   booking_contact_email: string | null;
   vehicle_type: string | null;
   trip_type: string | null;
+  // 'trip' | 'shuttle' — origin of the booking. Route-based rates apply to shuttle bookings only.
+  source?: string | null;
+  // Shuttle route identity (only populated for shuttle bookings). Used to match operator route rates.
+  shuttle_route_id?: string | null;
+  shuttle_route_name?: string | null;
   base_rate_amount: number;
   total_amount: number;
   total_with_gratuity: number;

@@ -2,6 +2,9 @@ export const dynamic = 'force-dynamic';
 
 import { readCommissionJson, stripPortalToken } from '@/lib/commission-api';
 import type { Agency, Agent, Reservation, ReservationAttribution } from '@/types/commission';
+import type { RouteRateConfig } from '@/types/commissionOperator';
+import { EMPTY_ROUTE_RATE_CONFIG } from '@/types/commissionOperator';
+import { calculateCommission, resolveCommissionRate } from '@/lib/commission-calc';
 
 type Row = Record<string, any>;
 type RawMoovsReservation = Record<string, unknown>;
@@ -67,6 +70,9 @@ function transformLiveReservation(raw: RawMoovsReservation, operatorId: string):
     booking_contact_email: text(raw['Booking Contact Email']),
     vehicle_type: text(raw['Vehicle Name']),
     trip_type: text(raw['Trip Type']) ?? text(raw['Source']),
+    source: text(raw['Source']),
+    shuttle_route_id: text(raw['Shuttle Route ID']),
+    shuttle_route_name: text(raw['Shuttle Route Name']),
     base_rate_amount: baseRate,
     total_amount: totalAmount,
     total_with_gratuity: Math.round((totalAmount + gratuity) * 100) / 100,
@@ -100,32 +106,23 @@ function findReservationAgent(reservation: Reservation, agents: Agent[] = []): A
   }) ?? null;
 }
 
-function calculateCommission(reservation: Reservation, agency: Agency): number {
-  if (agency.commission_type === 'flat') return agency.commission_rate;
-  const rate = agency.commission_rate / 100;
-  switch (agency.commission_base) {
-    case 'base_rate':
-      return Math.round(reservation.base_rate_amount * rate * 100) / 100;
-    case 'total_amount':
-      return Math.round(reservation.total_amount * rate * 100) / 100;
-    case 'total_with_gratuity':
-      return Math.round(reservation.total_with_gratuity * rate * 100) / 100;
-    default:
-      return Math.round(reservation.total_amount * rate * 100) / 100;
-  }
-}
-
-function syntheticAttribution(reservation: Reservation, agency: Agency, agents: Agent[]): ReservationAttribution {
+function syntheticAttribution(
+  reservation: Reservation,
+  agency: Agency,
+  agents: Agent[],
+  routeConfig: RouteRateConfig,
+): ReservationAttribution {
   const agent = findReservationAgent(reservation, agents);
+  const resolved = resolveCommissionRate(reservation, agency, routeConfig);
   return {
     id: `live:${agency.id}:${reservation.moovs_trip_id}`,
     reservation_id: reservation.id,
     agency_id: agency.id,
     agent_id: agent?.id ?? null,
-    commission_rate: agency.commission_rate,
+    commission_rate: agency.commission_type === 'flat' ? agency.commission_rate : resolved.rate,
     commission_type: agency.commission_type,
     commission_base: agency.commission_base,
-    commission_amount: calculateCommission(reservation, agency),
+    commission_amount: calculateCommission(reservation, agency, routeConfig),
     attributed_at: new Date().toISOString(),
   };
 }
@@ -135,9 +132,17 @@ async function reservationsByIds(ids: string[]): Promise<Reservation[]> {
   return readCommissionJson<Reservation[]>(`/commission-reservations/by-ids?ids=${ids.map(encodeURIComponent).join(',')}`);
 }
 
-async function fetchLivePortalReservations(agency: Agency): Promise<Reservation[]> {
-  const operator = await readCommissionJson<Row>(`/commission-operators/${encodeURIComponent(agency.operator_id)}`, {}, true);
-  if (!operator?.moovs_operator_id) return [];
+function parseRouteConfig(value: unknown): RouteRateConfig {
+  if (!value || typeof value !== 'object') return EMPTY_ROUTE_RATE_CONFIG;
+  const cfg = value as Partial<RouteRateConfig>;
+  return {
+    default_rate: typeof cfg.default_rate === 'number' ? cfg.default_rate : null,
+    routes: cfg.routes && typeof cfg.routes === 'object' ? cfg.routes : {},
+  };
+}
+
+async function fetchLivePortalReservations(agency: Agency, moovsOperatorId: string | null): Promise<Reservation[]> {
+  if (!moovsOperatorId) return [];
 
   const { dateFrom, dateTo } = portalWindow();
   const clientKey = primaryAgencyClientKey(agency);
@@ -146,7 +151,7 @@ async function fetchLivePortalReservations(agency: Agency): Promise<Reservation[
     {
       method: 'POST',
       body: JSON.stringify({
-        operator_id: operator.moovs_operator_id,
+        operator_id: moovsOperatorId,
         date_from: dateFrom,
         date_to: dateTo,
         company_id: agency.moovs_company_id ?? undefined,
@@ -162,10 +167,18 @@ async function fetchLivePortalReservations(agency: Agency): Promise<Reservation[
 }
 
 async function portalRows(agency: Agency, agents: Agent[]) {
+  const operatorRow = await readCommissionJson<Row>(
+    `/commission-operators/${encodeURIComponent(agency.operator_id)}`,
+    {},
+    true,
+  ).catch(() => null);
+  const routeConfig = parseRouteConfig(operatorRow?.route_rate_config);
+  const moovsOperatorId = (operatorRow?.moovs_operator_id as string | undefined) ?? null;
+
   const [persistedAttributions, payouts, liveReservations] = await Promise.all([
     readCommissionJson<ReservationAttribution[]>(`/attributions?agency_id=${encodeURIComponent(agency.id)}`),
     readCommissionJson<Row[]>(`/payouts?agency_id=${encodeURIComponent(agency.id)}`),
-    fetchLivePortalReservations(agency),
+    fetchLivePortalReservations(agency, moovsOperatorId),
   ]);
 
   const persistedReservations = await reservationsByIds(unique(persistedAttributions.map((a) => a.reservation_id)));
@@ -178,7 +191,7 @@ async function portalRows(agency: Agency, agents: Agent[]) {
   });
 
   const attributions: ReservationAttribution[] = reservations.map((reservation) => (
-    persistedAttributionByReservationId.get(reservation.id) ?? syntheticAttribution(reservation, agency, agents)
+    persistedAttributionByReservationId.get(reservation.id) ?? syntheticAttribution(reservation, agency, agents, routeConfig)
   ));
 
   const liveTripIds = new Set(liveReservations.map((row) => row.moovs_trip_id));

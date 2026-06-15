@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useOperator } from '../../contexts/OperatorContext';
-import { Agency, CommissionType, CommissionBase } from '../../types/commission';
+import { Agency, CommissionType, CommissionBase, RateMode, PriceMode } from '../../types/commission';
+import { defaultPriceModeForTerms } from '../../lib/commission-calc';
 import { updateAgency, deleteAgency, fetchLinkedClientKeys } from '../../services/agencyService';
 import { fetchMoovsCompanies, MoovsCompany } from '../../services/companyLookupService';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -34,6 +35,8 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
   const [commissionRate, setCommissionRate] = useState(agency.commission_rate.toString());
   const [commissionType, setCommissionType] = useState<CommissionType>(agency.commission_type);
   const [commissionBase, setCommissionBase] = useState<CommissionBase>(agency.commission_base);
+  const [rateMode, setRateMode] = useState<RateMode>(agency.rate_mode ?? 'fixed');
+  const [priceMode, setPriceMode] = useState<PriceMode>(agency.price_mode ?? 'gross');
   const [paymentTerms, setPaymentTerms] = useState(agency.payment_terms || '');
   const [contractStart, setContractStart] = useState(agency.contract_start || '');
   const [contractEnd, setContractEnd] = useState(agency.contract_end || '');
@@ -138,6 +141,8 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
         commission_rate: parseFloat(commissionRate) || 0,
         commission_type: commissionType,
         commission_base: commissionBase,
+        rate_mode: rateMode,
+        price_mode: priceMode,
         payment_terms: paymentTerms || null,
         contract_start: contractStart || null,
         contract_end: contractEnd || null,
@@ -228,9 +233,35 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
               </div>
             </div>
 
+            {/* Rate source */}
+            <div className="space-y-2">
+              <Label>Rate Source</Label>
+              <div className="flex gap-2">
+                <Button
+                  variant={rateMode === 'standard' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setRateMode('standard')}
+                >
+                  Standard (route rates)
+                </Button>
+                <Button
+                  variant={rateMode === 'fixed' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setRateMode('fixed')}
+                >
+                  Fixed rate
+                </Button>
+              </div>
+              <p className="text-xs text-gray-500">
+                {rateMode === 'standard'
+                  ? 'Shuttle bookings use the operator route rate book; the rate below is the fallback.'
+                  : 'Always use the rate below, ignoring route rates (use for non-standard agencies).'}
+              </p>
+            </div>
+
             {/* Rate input */}
             <div className="space-y-2">
-              <Label htmlFor="commission-rate">Rate</Label>
+              <Label htmlFor="commission-rate">{rateMode === 'standard' ? 'Fallback Rate' : 'Rate'}</Label>
               <div className="relative max-w-[200px]">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">
                   {commissionType === 'flat' ? '$' : ''}
@@ -277,6 +308,43 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
               ) : (
                 <span>This agency earns ${commissionRate || 0} flat per trip as commission.</span>
               )}
+            </div>
+
+            {/* Price display mode */}
+            <div className="space-y-2">
+              <Label>Price Display</Label>
+              <div className="flex gap-2">
+                <Button
+                  variant={priceMode === 'gross' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setPriceMode('gross')}
+                >
+                  Gross
+                </Button>
+                <Button
+                  variant={priceMode === 'net' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setPriceMode('net')}
+                >
+                  Net
+                </Button>
+                {priceMode !== defaultPriceModeForTerms(paymentTerms) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-gray-500"
+                    onClick={() => setPriceMode(defaultPriceModeForTerms(paymentTerms))}
+                  >
+                    Reset to default
+                  </Button>
+                )}
+              </div>
+              <p className="text-xs text-gray-500">
+                {priceMode === 'net'
+                  ? 'Headline figure is net (gross minus commission) — typical for prepay agencies.'
+                  : 'Headline figure is gross revenue — typical for billable agencies.'}
+                {' '}Default for “{paymentTerms || 'these terms'}” is {defaultPriceModeForTerms(paymentTerms)}.
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -364,11 +432,15 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">None</SelectItem>
+                  <SelectItem value="Billing (Net 30)">Billing (Net 30)</SelectItem>
+                  <SelectItem value="Prepay">Prepay</SelectItem>
+                  <SelectItem value="Prepay; CC on File">Prepay; CC on File</SelectItem>
                   <SelectItem value="Net 15">Net 15</SelectItem>
                   <SelectItem value="Net 30">Net 30</SelectItem>
                   <SelectItem value="Net 45">Net 45</SelectItem>
                   <SelectItem value="Net 60">Net 60</SelectItem>
                   <SelectItem value="Due on Receipt">Due on Receipt</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
                 </SelectContent>
               </Select>
             </div>

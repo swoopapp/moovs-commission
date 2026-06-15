@@ -1,6 +1,6 @@
 // src/services/commissionOperatorService.ts
 import { config } from '../config/env';
-import { CommissionOperator } from '../types/commissionOperator';
+import { CommissionOperator, RouteRateConfig } from '../types/commissionOperator';
 
 const API = config.apiBaseUrl;
 
@@ -67,6 +67,21 @@ export async function deleteOperator(id: string): Promise<void> {
     method: 'DELETE',
   });
   return handleVoidResponse(res, 'deleteOperator');
+}
+
+// Operator-managed shuttle route rate config.
+export async function updateOperatorRouteRates(
+  id: string,
+  config_: RouteRateConfig,
+): Promise<CommissionOperator> {
+  const res = await fetch(`${API}/commission-operators/${encodeURIComponent(id)}/route-rates`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config_),
+  });
+  const rows = await handleResponse<CommissionOperator[]>(res, 'updateOperatorRouteRates');
+  if (!rows[0]) throw new Error('updateOperatorRouteRates: no row returned');
+  return rows[0];
 }
 
 export async function generateOperatorPortalToken(id: string): Promise<CommissionOperator> {

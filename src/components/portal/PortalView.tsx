@@ -65,12 +65,13 @@ export function PortalView({ token }: PortalViewProps) {
     <div className="min-h-screen bg-gray-50 pb-16">
       <PortalHeader agency={data.agency} view={data.view} currentAgent={data.currentAgent} />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        <PortalKPIs reservations={data.reservations} attributions={data.attributions} />
+        <PortalKPIs reservations={data.reservations} attributions={data.attributions} priceMode={data.agency.price_mode} />
         <PortalReservations
           reservations={data.reservations}
           attributions={data.attributions}
           agents={data.agents}
           view={data.view}
+          priceMode={data.agency.price_mode}
         />
         <PortalStatements
           reservations={data.reservations}
@@ -78,6 +79,7 @@ export function PortalView({ token }: PortalViewProps) {
           payouts={data.payouts}
           agencyName={data.agency.name}
           paymentTerms={data.agency.payment_terms}
+          priceMode={data.agency.price_mode}
         />
       </main>
     </div>

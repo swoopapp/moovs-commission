@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { Reservation, ReservationAttribution, Agent } from '../../types/commission';
+import { Reservation, ReservationAttribution, Agent, PriceMode } from '../../types/commission';
+import { netAmount } from '../../lib/commission-calc';
 import {
   Table,
   TableHeader,
@@ -15,6 +16,7 @@ interface PortalReservationsProps {
   attributions: ReservationAttribution[];
   agents: Agent[];
   view: 'gm' | 'agent';
+  priceMode?: PriceMode;
 }
 
 function formatCurrency(amount: number): string {
@@ -52,7 +54,7 @@ function agentOrBookingContact(row: JoinedRow): string {
   );
 }
 
-export function PortalReservations({ reservations, attributions, agents, view }: PortalReservationsProps) {
+export function PortalReservations({ reservations, attributions, agents, view, priceMode = 'gross' }: PortalReservationsProps) {
   const agentMap = useMemo(() => {
     const m = new Map<string, Agent>();
     agents.forEach((a) => m.set(a.id, a));
@@ -103,8 +105,9 @@ export function PortalReservations({ reservations, attributions, agents, view }:
                 {view === 'gm' && <TableHead>Agent / Booking Contact</TableHead>}
                 <TableHead>Trip Type</TableHead>
                 <TableHead>Route</TableHead>
-                <TableHead className="text-right">Revenue</TableHead>
+                <TableHead className={`text-right${priceMode === 'gross' ? ' font-semibold text-gray-900' : ''}`}>Gross</TableHead>
                 <TableHead className="text-right">Commission</TableHead>
+                <TableHead className={`text-right${priceMode === 'net' ? ' font-semibold text-gray-900' : ''}`}>Net</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
@@ -116,8 +119,9 @@ export function PortalReservations({ reservations, attributions, agents, view }:
                   {view === 'gm' && <TableCell>{agentOrBookingContact(row)}</TableCell>}
                   <TableCell>{row.reservation.trip_type || '--'}</TableCell>
                   <TableCell className="max-w-[200px] truncate">{formatRoute(row.reservation)}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(row.reservation.total_amount)}</TableCell>
+                  <TableCell className={`text-right${priceMode === 'gross' ? ' font-semibold text-gray-900' : ''}`}>{formatCurrency(row.reservation.total_amount)}</TableCell>
                   <TableCell className="text-right text-green-600 font-semibold">{formatCurrency(row.attribution.commission_amount)}</TableCell>
+                  <TableCell className={`text-right${priceMode === 'net' ? ' font-semibold text-gray-900' : ''}`}>{formatCurrency(netAmount(row.reservation, row.attribution.commission_amount))}</TableCell>
                   <TableCell>
                     <Badge variant="secondary" className={statusBadgeClass(row.reservation.trip_status)}>
                       {row.reservation.trip_status || 'Unknown'}

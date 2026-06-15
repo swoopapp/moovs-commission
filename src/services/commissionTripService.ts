@@ -1,5 +1,7 @@
 import { Agency, Agent, Reservation, ReservationAttribution } from '../types/commission';
+import type { RouteRateConfig } from '../types/commissionOperator';
 import { calculateCommission } from './attributionService';
+import { resolveCommissionRate } from '../lib/commission-calc';
 
 export function agencyClientKeys(agency: Agency): string[] {
   const keys = (agency.client_links ?? [])
@@ -52,17 +54,19 @@ export function buildSyntheticAttribution(
   reservation: Reservation,
   agency: Agency,
   agents: Agent[] = [],
+  routeConfig?: RouteRateConfig | null,
 ): ReservationAttribution {
   const agent = findReservationAgent(reservation, agents);
+  const resolved = resolveCommissionRate(reservation, agency, routeConfig);
   return {
     id: syntheticAttributionId(reservation, agency),
     reservation_id: reservation.id,
     agency_id: agency.id,
     agent_id: agent?.id ?? null,
-    commission_rate: agency.commission_rate,
+    commission_rate: agency.commission_type === 'flat' ? agency.commission_rate : resolved.rate,
     commission_type: agency.commission_type,
     commission_base: agency.commission_base,
-    commission_amount: calculateCommission(reservation, agency),
+    commission_amount: calculateCommission(reservation, agency, routeConfig),
     attributed_at: new Date().toISOString(),
   };
 }
@@ -72,6 +76,7 @@ export function mergeAgencyAttributions(
   reservations: Reservation[],
   persistedAttributions: ReservationAttribution[],
   agents: Agent[] = [],
+  routeConfig?: RouteRateConfig | null,
 ): ReservationAttribution[] {
   const byReservationId = new Map(persistedAttributions.map((attr) => [attr.reservation_id, attr]));
   const merged: ReservationAttribution[] = [...persistedAttributions];
@@ -86,7 +91,7 @@ export function mergeAgencyAttributions(
     if (!reservationClientKeys(reservation).some((key) => agencyKeySet.has(key))) continue;
     if (seenReservationIds.has(reservation.id)) continue;
 
-    merged.push(buildSyntheticAttribution(reservation, agency, agents));
+    merged.push(buildSyntheticAttribution(reservation, agency, agents, routeConfig));
     seenReservationIds.add(reservation.id);
   }
 

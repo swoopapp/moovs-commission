@@ -143,7 +143,7 @@ export function TripSelectionStep({
                 <TableHead>Date</TableHead>
                 <TableHead>Agent / Booking Contact</TableHead>
                 <TableHead>Passenger</TableHead>
-                <TableHead className="text-right">Revenue</TableHead>
+                <TableHead className="text-right">Gross</TableHead>
                 <TableHead className="text-right">Commission</TableHead>
               </TableRow>
             </TableHeader>

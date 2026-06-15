@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Reservation, ReservationAttribution, Agent } from '../../types/commission';
+import { Reservation, ReservationAttribution, Agent, PriceMode } from '../../types/commission';
+import { netAmount } from '../../lib/commission-calc';
 import {
   Table,
   TableHeader,
@@ -30,6 +31,7 @@ interface ReservationsTabProps {
   agentFilter?: string;
   onAgentFilterChange?: (agentId: string) => void;
   onLoadMore?: () => void;
+  priceMode?: PriceMode;
 }
 
 function formatCurrency(amount: number): string {
@@ -78,6 +80,7 @@ export function ReservationsTab({
   agentFilter: controlledAgentFilter,
   onAgentFilterChange,
   onLoadMore,
+  priceMode = 'gross',
 }: ReservationsTabProps) {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [internalAgentFilter, setInternalAgentFilter] = useState<string>('all');
@@ -225,8 +228,9 @@ export function ReservationsTab({
                 <TableHead>Agent / Booking Contact</TableHead>
                 <TableHead>Trip Type</TableHead>
                 <TableHead>Route</TableHead>
-                <TableHead className="text-right">Revenue</TableHead>
+                <TableHead className={`text-right${priceMode === 'gross' ? ' font-semibold text-gray-900' : ''}`}>Gross</TableHead>
                 <TableHead className="text-right">Commission</TableHead>
+                <TableHead className={`text-right${priceMode === 'net' ? ' font-semibold text-gray-900' : ''}`}>Net</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
@@ -241,8 +245,9 @@ export function ReservationsTab({
                   <TableCell>{agentOrBookingContact(j)}</TableCell>
                   <TableCell>{j.reservation.trip_type || '--'}</TableCell>
                   <TableCell className="max-w-[200px] truncate">{formatRoute(j.reservation)}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(j.reservation.total_amount)}</TableCell>
+                  <TableCell className={`text-right${priceMode === 'gross' ? ' font-semibold text-gray-900' : ''}`}>{formatCurrency(j.reservation.total_amount)}</TableCell>
                   <TableCell className="text-right font-semibold text-green-600">{formatCurrency(j.attribution.commission_amount)}</TableCell>
+                  <TableCell className={`text-right${priceMode === 'net' ? ' font-semibold text-gray-900' : ''}`}>{formatCurrency(netAmount(j.reservation, j.attribution.commission_amount))}</TableCell>
                   <TableCell>
                     <Badge variant="secondary" className={statusBadgeClass(j.reservation.trip_status)}>
                       {j.reservation.trip_status || 'Unknown'}
@@ -252,7 +257,7 @@ export function ReservationsTab({
               ))}
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={9} className="py-8 text-center text-sm text-gray-500">
+                  <TableCell colSpan={10} className="py-8 text-center text-sm text-gray-500">
                     Loading reservations…
                   </TableCell>
                 </TableRow>

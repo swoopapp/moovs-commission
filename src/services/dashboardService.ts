@@ -1,4 +1,5 @@
 import { Agency, Agent, ReservationAttribution } from '../types/commission';
+import type { RouteRateConfig } from '../types/commissionOperator';
 import { fetchAttributionsByAgency } from './attributionService';
 import { mergeAgencyAttributions, primaryAgencyClientKey } from './commissionTripService';
 import { fetchAgentsByOperator } from './agentService';
@@ -49,6 +50,7 @@ export async function fetchDashboardStats(
   operatorId: string,
   moovsOperatorId: string,
   agencies: Agency[],
+  routeConfig?: RouteRateConfig | null,
 ): Promise<DashboardStats> {
   const now = new Date();
   const dateFrom = new Date(now.getFullYear(), now.getMonth() - 5, 1).toISOString().slice(0, 10);
@@ -92,6 +94,7 @@ export async function fetchDashboardStats(
         reservations,
         persistedAttributions,
         agentsByAgency.get(agency.id) ?? [],
+        routeConfig,
       );
       return { agencyId: agency.id, attributions, reservations };
     }),

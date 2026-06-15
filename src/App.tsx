@@ -4,6 +4,7 @@ import { AppHeader } from './components/layout/AppHeader';
 import { DashboardView } from './components/dashboard/DashboardView';
 import { AgencyDetailView } from './components/agency/AgencyDetailView';
 import { AgencyMatchingView } from './components/agency/AgencyMatchingView';
+import { RouteRatesView } from './components/routes/RouteRatesView';
 import { Toaster } from './components/ui/sonner';
 import { PoweredByMoovs } from './components/layout/PoweredByMoovs';
 
@@ -23,13 +24,16 @@ function App() {
 
   const agencyMatch = route.match(/^#\/agency\/(.+)$/);
   const isMatching = route === '#/matching';
+  const isRouteRates = route === '#/route-rates';
 
   return (
     <AuthGate>
       <div className="min-h-screen bg-gray-50 pb-16">
         <AppHeader onExportClick={handleExport} />
         <main className="max-w-7xl mx-auto px-6 py-6">
-          {isMatching ? (
+          {isRouteRates ? (
+            <RouteRatesView />
+          ) : isMatching ? (
             <AgencyMatchingView />
           ) : agencyMatch ? (
             <AgencyDetailView agencyId={agencyMatch[1]} />

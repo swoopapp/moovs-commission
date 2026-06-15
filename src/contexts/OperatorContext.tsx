@@ -1,7 +1,28 @@
 // src/contexts/OperatorContext.tsx
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { CommissionOperatorConfig } from '../types/commissionOperator';
+import { CommissionOperator, CommissionOperatorConfig, EMPTY_ROUTE_RATE_CONFIG, RouteRateConfig } from '../types/commissionOperator';
 import { fetchOperatorBySlug } from '../services/commissionOperatorService';
+
+function normalizeRouteRateConfig(value: RouteRateConfig | null | undefined): RouteRateConfig {
+  if (!value || typeof value !== 'object') return EMPTY_ROUTE_RATE_CONFIG;
+  return {
+    default_rate: typeof value.default_rate === 'number' ? value.default_rate : null,
+    routes: value.routes && typeof value.routes === 'object' ? value.routes : {},
+  };
+}
+
+function toOperatorConfig(op: CommissionOperator): CommissionOperatorConfig {
+  return {
+    operatorId: op.id,
+    moovsOperatorId: op.moovs_operator_id,
+    slug: op.slug,
+    displayName: op.display_name,
+    logoUrl: op.logo_url,
+    primaryColor: op.primary_color,
+    secondaryColor: op.secondary_color,
+    routeRateConfig: normalizeRouteRateConfig(op.route_rate_config),
+  };
+}
 
 interface OperatorContextValue {
   operator: CommissionOperatorConfig;
@@ -44,15 +65,7 @@ export function OperatorProvider({ slug, children, onNotFound }: OperatorProvide
         }
 
         if (!cancelled) {
-          setOperator({
-            operatorId: op.id,
-            moovsOperatorId: op.moovs_operator_id,
-            slug: op.slug,
-            displayName: op.display_name,
-            logoUrl: op.logo_url,
-            primaryColor: op.primary_color,
-            secondaryColor: op.secondary_color,
-          });
+          setOperator(toOperatorConfig(op));
         }
       } catch (err) {
         console.error('Failed to load operator:', err);
@@ -69,15 +82,7 @@ export function OperatorProvider({ slug, children, onNotFound }: OperatorProvide
   const refreshOperator = useCallback(async () => {
     const op = await fetchOperatorBySlug(slug);
     if (!op) return;
-    setOperator({
-      operatorId: op.id,
-      moovsOperatorId: op.moovs_operator_id,
-      slug: op.slug,
-      displayName: op.display_name,
-      logoUrl: op.logo_url,
-      primaryColor: op.primary_color,
-      secondaryColor: op.secondary_color,
-    });
+    setOperator(toOperatorConfig(op));
   }, [slug]);
 
   // Apply operator branding colors as CSS custom properties

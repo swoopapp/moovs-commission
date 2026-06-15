@@ -1,5 +1,7 @@
 import { config } from '../config/env';
 import { Agency, Reservation, ReservationAttribution } from '../types/commission';
+import type { RouteRateConfig } from '../types/commissionOperator';
+import { calculateCommission as calcCommission } from '../lib/commission-calc';
 
 const API = config.apiBaseUrl;
 
@@ -63,18 +65,12 @@ export async function createAttributions(
 }
 
 // --- Commission calculation ---
+// Delegates to the shared engine so the browser and the portal API stay in sync.
 
-export function calculateCommission(reservation: Reservation, agency: Agency): number {
-  if (agency.commission_type === 'flat') return agency.commission_rate;
-  const rate = agency.commission_rate / 100;
-  switch (agency.commission_base) {
-    case 'base_rate':
-      return Math.round(reservation.base_rate_amount * rate * 100) / 100;
-    case 'total_amount':
-      return Math.round(reservation.total_amount * rate * 100) / 100;
-    case 'total_with_gratuity':
-      return Math.round(reservation.total_with_gratuity * rate * 100) / 100;
-    default:
-      return Math.round(reservation.total_amount * rate * 100) / 100;
-  }
+export function calculateCommission(
+  reservation: Reservation,
+  agency: Agency,
+  routeConfig?: RouteRateConfig | null,
+): number {
+  return calcCommission(reservation, agency, routeConfig);
 }

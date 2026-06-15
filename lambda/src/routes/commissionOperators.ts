@@ -250,6 +250,41 @@ app.delete('/commission-operators/:id/portal-token', async (c) => {
   }
 });
 
+function normalizeRouteRateConfig(body: any) {
+  const src = body && typeof body === 'object' ? body : {};
+  const defaultRate = typeof src.default_rate === 'number' && Number.isFinite(src.default_rate) ? src.default_rate : null;
+  const routesIn = src.routes && typeof src.routes === 'object' ? src.routes : {};
+  const routes: Record<string, { route_id: string; name: string | null; rate: number }> = {};
+  for (const [key, val] of Object.entries(routesIn)) {
+    const v = val as any;
+    const routeId = String(v?.route_id ?? key);
+    const rate = typeof v?.rate === 'number' && Number.isFinite(v.rate) ? v.rate : null;
+    if (!routeId || rate === null) continue;
+    routes[routeId] = { route_id: routeId, name: typeof v?.name === 'string' ? v.name : null, rate };
+  }
+  return { default_rate: defaultRate, routes };
+}
+
+// PATCH /commission-operators/:id/route-rates
+// Operator-managed shuttle route rate config. Not admin-gated at the lambda layer; the
+// Next proxy enforces operator-session ownership (same model as the open agencies CRUD).
+app.patch('/commission-operators/:id/route-rates', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const body = await c.req.json().catch(() => ({}));
+    const cfg = normalizeRouteRateConfig(body);
+    const r = await appQuery(
+      `UPDATE commission_operators SET route_rate_config = $1::jsonb, updated_at = now() WHERE id = $2 RETURNING *`,
+      [JSON.stringify(cfg), id],
+    );
+    if (r.rows.length === 0) return c.json({ error: 'Not found' }, 404);
+    return c.json(safeOperators(await withMoovsLogos(r.rows)));
+  } catch (err: any) {
+    console.error('Error updating commission operator route rates:', err);
+    return c.json({ error: err.message || 'Internal Server Error' }, 500);
+  }
+});
+
 // POST /commission-operators
 app.post('/commission-operators', async (c) => {
   try {

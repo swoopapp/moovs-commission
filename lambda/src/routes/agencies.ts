@@ -120,7 +120,7 @@ app.get('/agencies', async (c) => {
     const where = conditions.join(' AND ');
     const allowedSelectFields = new Set([
       'id', 'operator_id', 'moovs_company_id', 'name', 'type', 'commission_rate',
-      'commission_type', 'commission_base', 'contact_name', 'contact_email',
+      'commission_type', 'commission_base', 'rate_mode', 'price_mode', 'contact_name', 'contact_email',
       'contact_phone', 'address', 'city', 'state', 'zip_code', 'country',
       'market_segment', 'payment_terms', 'contract_start', 'contract_end',
       'status', 'portal_token', 'notes', 'last_synced_at', 'created_at', 'updated_at',
@@ -236,7 +236,7 @@ app.post('/agencies', async (c) => {
     const body = await c.req.json();
     const fields = [
       'operator_id', 'moovs_company_id', 'name', 'type', 'commission_rate', 'commission_type',
-      'commission_base', 'contact_name', 'contact_email', 'contact_phone', 'address', 'city',
+      'commission_base', 'rate_mode', 'price_mode', 'contact_name', 'contact_email', 'contact_phone', 'address', 'city',
       'state', 'zip_code', 'country', 'market_segment', 'payment_terms', 'contract_start',
       'contract_end', 'status', 'notes', 'last_synced_at',
     ];
@@ -267,6 +267,7 @@ app.patch('/agencies/:id', async (c) => {
     const body = await c.req.json();
     const allowedFields = [
       'moovs_company_id', 'name', 'type', 'commission_rate', 'commission_type', 'commission_base',
+      'rate_mode', 'price_mode',
       'contact_name', 'contact_email', 'contact_phone', 'address', 'city', 'state', 'zip_code',
       'country', 'market_segment', 'payment_terms', 'contract_start', 'contract_end', 'status',
       'notes', 'last_synced_at',

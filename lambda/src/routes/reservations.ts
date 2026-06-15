@@ -166,6 +166,8 @@ app.post('/fetch-reservations', async (c) => {
         'shuttle' as "Source",
         sb.passenger_count as "Passenger Count",
         sc.name as "Shuttle Client Name",
+        rd.route_definition_id as "Shuttle Route ID",
+        rd.name as "Shuttle Route Name",
         ARRAY_REMOVE(ARRAY[
           CASE WHEN sb.shuttle_client_id IS NOT NULL THEN 'shuttle_client:' || sb.shuttle_client_id::text END,
           CASE WHEN sc.company_id IS NOT NULL THEN 'company:' || sc.company_id::text END,
@@ -215,6 +217,34 @@ app.post('/fetch-reservations', async (c) => {
     });
   } catch (err: any) {
     console.error('Error fetching reservations:', err);
+    return c.json({ error: 'Internal Server Error' }, 500);
+  }
+});
+
+// GET /fetch-shuttle-routes?operator_id=UUID — list an operator's shuttle routes (read-only)
+app.get('/fetch-shuttle-routes', async (c) => {
+  try {
+    const operatorId = c.req.query('operator_id');
+    if (!operatorId) return c.json({ error: 'Missing operator_id' }, 400);
+
+    const r = await query(
+      `SELECT DISTINCT ON (route_definition_id) route_definition_id, name
+       FROM shuttle_route_definition
+       WHERE operator_id = $1
+       ORDER BY route_definition_id, name ASC`,
+      [operatorId],
+    );
+
+    const routes = r.rows
+      .map((row: any) => ({
+        route_id: String(row.route_definition_id),
+        name: row.name || 'Unnamed route',
+      }))
+      .sort((a: any, b: any) => a.name.localeCompare(b.name));
+
+    return c.json({ success: true, routes });
+  } catch (err: any) {
+    console.error('Error fetching shuttle routes:', err);
     return c.json({ error: 'Internal Server Error' }, 500);
   }
 });
@@ -302,6 +332,8 @@ function formatShuttle(row: any) {
     'Client Keys': clientKeys,
     'Passenger Count': row['Passenger Count'] || 1,
     'Shuttle Client Name': row['Shuttle Client Name'] || null,
+    'Shuttle Route ID': row['Shuttle Route ID'] ? String(row['Shuttle Route ID']) : null,
+    'Shuttle Route Name': row['Shuttle Route Name'] || null,
   };
 }
 

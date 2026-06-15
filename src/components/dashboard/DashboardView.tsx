@@ -91,6 +91,7 @@ export function DashboardView({ onRegisterExport }: DashboardViewProps) {
         operator.operatorId,
         operator.moovsOperatorId,
         matchedAgencies.agencies,
+        operator.routeRateConfig,
       );
       setStats(dashStats);
     } catch (err) {

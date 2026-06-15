@@ -14,6 +14,7 @@ import {
   TrendingUp,
   Clock,
   Plus,
+  Wallet,
 } from 'lucide-react';
 
 interface AgencyHeaderProps {
@@ -22,6 +23,7 @@ interface AgencyHeaderProps {
     bookings: number;
     revenue: number;
     commissionEarned: number;
+    net: number;
     outstanding: number;
   };
   onCreatePayout?: () => void;
@@ -65,8 +67,9 @@ function formatCommission(agency: Agency): string {
 
 const miniKPIs = [
   { key: 'bookings', label: 'Bookings', icon: BookOpen, color: 'text-blue-600', bgColor: 'bg-blue-50', format: 'count' as const },
-  { key: 'revenue', label: 'Revenue', icon: TrendingUp, color: 'text-green-600', bgColor: 'bg-green-50', format: 'currency' as const },
-  { key: 'commissionEarned', label: 'Commission Earned', icon: DollarSign, color: 'text-purple-600', bgColor: 'bg-purple-50', format: 'currency' as const },
+  { key: 'revenue', label: 'Gross', icon: TrendingUp, color: 'text-green-600', bgColor: 'bg-green-50', format: 'currency' as const },
+  { key: 'commissionEarned', label: 'Commission', icon: DollarSign, color: 'text-purple-600', bgColor: 'bg-purple-50', format: 'currency' as const },
+  { key: 'net', label: 'Net', icon: Wallet, color: 'text-indigo-600', bgColor: 'bg-indigo-50', format: 'currency' as const },
   { key: 'outstanding', label: 'Outstanding', icon: Clock, color: 'text-red-600', bgColor: 'bg-red-50', format: 'currency' as const },
 ] as const;
 
@@ -147,13 +150,16 @@ export function AgencyHeader({ agency, stats, onCreatePayout }: AgencyHeaderProp
       </div>
 
       {/* Mini KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         {miniKPIs.map((kpi) => {
           const Icon = kpi.icon;
           const value = values[kpi.key];
           const display = kpi.format === 'currency' ? formatCurrency(value) : value.toString();
+          const primary =
+            (kpi.key === 'revenue' && agency.price_mode === 'gross') ||
+            (kpi.key === 'net' && agency.price_mode === 'net');
           return (
-            <Card key={kpi.key} className="py-3">
+            <Card key={kpi.key} className={`py-3${primary ? ' ring-2 ring-gray-900/10' : ''}`}>
               <CardContent className="flex items-center gap-3">
                 <div className={`${kpi.bgColor} p-2 rounded-lg`}>
                   <Icon className={`h-4 w-4 ${kpi.color}`} />
