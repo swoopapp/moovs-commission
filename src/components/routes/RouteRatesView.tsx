@@ -187,7 +187,7 @@ export function RouteRatesView() {
                   id="route-filter"
                   value={filter}
                   onChange={(e) => setFilter(e.target.value)}
-                  placeholder="e.g. Oahu, HNL, Airport"
+                  placeholder="e.g. airport, downtown, campus"
                   className="pl-9"
                 />
               </div>
