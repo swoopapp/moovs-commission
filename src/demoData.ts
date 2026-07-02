@@ -39,9 +39,9 @@ export function isDemoPayoutId(id: string): boolean {
 export const demoRouteRateConfig: RouteRateConfig = {
   default_rate: 8,
   routes: {
-    'demo-route-hnl-waikiki': { route_id: 'demo-route-hnl-waikiki', name: 'HNL ↔ Waikiki Hotel Zone', rate: 9 },
-    'demo-route-waikiki-kualoa': { route_id: 'demo-route-waikiki-kualoa', name: 'Waikiki ↔ Kualoa Ranch', rate: 10 },
-    'demo-route-corporate-loop': { route_id: 'demo-route-corporate-loop', name: 'Downtown Corporate Shuttle Loop', rate: 7 },
+    'demo-route-airport-downtown': { route_id: 'demo-route-airport-downtown', name: 'Airport ↔ Downtown Hotel Zone', rate: 9 },
+    'demo-route-downtown-event-campus': { route_id: 'demo-route-downtown-event-campus', name: 'Downtown ↔ Event Campus', rate: 10 },
+    'demo-route-corporate-loop': { route_id: 'demo-route-corporate-loop', name: 'Corporate Campus Shuttle Loop', rate: 7 },
   },
   updated_at: nowIso,
 };
@@ -50,13 +50,13 @@ export const demoOperatorRecord: CommissionOperator = {
   id: DEMO_OPERATOR_ID,
   moovs_operator_id: DEMO_MOOVS_OPERATOR_ID,
   slug: DEMO_SLUG,
-  display_name: 'Summit Demo Transportation',
+  display_name: 'Apex Demo Transportation',
   auth_password_set: false,
   logo_url: null,
   primary_color: '#0f766e',
   secondary_color: '#ccfbf1',
   contact_email: 'demo@moovsapp.com',
-  contact_phone: '(808) 555-0199',
+  contact_phone: '(312) 555-0199',
   status: 'active',
   route_rate_config: demoRouteRateConfig,
   created_at: nowIso,
@@ -76,25 +76,25 @@ export const demoOperatorConfig: CommissionOperatorConfig = {
 
 const agencySeed: Array<Pick<Agency, 'id' | 'name' | 'type' | 'commission_rate' | 'commission_type' | 'commission_base' | 'rate_mode' | 'price_mode' | 'contact_name' | 'contact_email' | 'contact_phone' | 'city' | 'state' | 'market_segment' | 'payment_terms'>> = [
   {
-    id: 'demo-agency-waikiki-resort',
-    name: 'Waikiki Beach Resort',
+    id: 'demo-agency-grandview-hotels',
+    name: 'Grandview Hotel Group',
     type: 'Hotel',
     commission_rate: 12,
     commission_type: 'percent',
     commission_base: 'total_amount',
     rate_mode: 'fixed',
     price_mode: 'gross',
-    contact_name: 'Malia Chen',
-    contact_email: 'malia.chen@example.com',
-    contact_phone: '(808) 555-0101',
-    city: 'Honolulu',
-    state: 'HI',
-    market_segment: 'Luxury hotel',
+    contact_name: 'Maya Chen',
+    contact_email: 'maya.chen@example.com',
+    contact_phone: '(212) 555-0101',
+    city: 'New York',
+    state: 'NY',
+    market_segment: 'Hotel group',
     payment_terms: 'Paid monthly, net 15',
   },
   {
-    id: 'demo-agency-aloha-corporate',
-    name: 'Aloha Corporate Travel',
+    id: 'demo-agency-summit-corporate',
+    name: 'Summit Corporate Travel',
     type: 'Travel Agent',
     commission_rate: 8,
     commission_type: 'percent',
@@ -103,15 +103,15 @@ const agencySeed: Array<Pick<Agency, 'id' | 'name' | 'type' | 'commission_rate' 
     price_mode: 'net',
     contact_name: 'Jordan Lee',
     contact_email: 'jordan.lee@example.com',
-    contact_phone: '(808) 555-0102',
-    city: 'Honolulu',
-    state: 'HI',
+    contact_phone: '(312) 555-0102',
+    city: 'Chicago',
+    state: 'IL',
     market_segment: 'Corporate travel',
     payment_terms: 'Prepaid net rate',
   },
   {
-    id: 'demo-agency-island-events',
-    name: 'Island Meetings & Events',
+    id: 'demo-agency-metro-events',
+    name: 'Metro Meetings & Events',
     type: 'DMC',
     commission_rate: 10,
     commission_type: 'percent',
@@ -120,15 +120,15 @@ const agencySeed: Array<Pick<Agency, 'id' | 'name' | 'type' | 'commission_rate' 
     price_mode: 'gross',
     contact_name: 'Sophia Martinez',
     contact_email: 'sophia.martinez@example.com',
-    contact_phone: '(808) 555-0103',
-    city: 'Kapolei',
-    state: 'HI',
+    contact_phone: '(303) 555-0103',
+    city: 'Denver',
+    state: 'CO',
     market_segment: 'Meetings and groups',
     payment_terms: 'Paid after event close',
   },
   {
-    id: 'demo-agency-pacific-concierge',
-    name: 'Pacific Concierge Desk',
+    id: 'demo-agency-central-concierge',
+    name: 'Central Concierge Desk',
     type: 'Concierge',
     commission_rate: 25,
     commission_type: 'flat',
@@ -137,15 +137,15 @@ const agencySeed: Array<Pick<Agency, 'id' | 'name' | 'type' | 'commission_rate' 
     price_mode: 'gross',
     contact_name: 'Noah Kim',
     contact_email: 'noah.kim@example.com',
-    contact_phone: '(808) 555-0104',
-    city: 'Honolulu',
-    state: 'HI',
+    contact_phone: '(214) 555-0104',
+    city: 'Dallas',
+    state: 'TX',
     market_segment: 'Hotel concierge',
     payment_terms: 'Weekly ACH',
   },
   {
-    id: 'demo-agency-hnl-express',
-    name: 'HNL Express Desk',
+    id: 'demo-agency-airport-express',
+    name: 'Airport Express Partners',
     type: 'OTA',
     commission_rate: 6,
     commission_type: 'percent',
@@ -154,15 +154,15 @@ const agencySeed: Array<Pick<Agency, 'id' | 'name' | 'type' | 'commission_rate' 
     price_mode: 'net',
     contact_name: 'Avery Wilson',
     contact_email: 'avery.wilson@example.com',
-    contact_phone: '(808) 555-0105',
-    city: 'Honolulu',
-    state: 'HI',
+    contact_phone: '(602) 555-0105',
+    city: 'Phoenix',
+    state: 'AZ',
     market_segment: 'Airport transfers',
     payment_terms: 'Prepaid net rate',
   },
   {
-    id: 'demo-agency-maui-tours',
-    name: 'Maui Premium Tours',
+    id: 'demo-agency-northwest-tours',
+    name: 'Northwest Premium Tours',
     type: 'Other',
     commission_rate: 9,
     commission_type: 'percent',
@@ -171,9 +171,9 @@ const agencySeed: Array<Pick<Agency, 'id' | 'name' | 'type' | 'commission_rate' 
     price_mode: 'gross',
     contact_name: 'Kai Thompson',
     contact_email: 'kai.thompson@example.com',
-    contact_phone: '(808) 555-0106',
-    city: 'Lahaina',
-    state: 'HI',
+    contact_phone: '(206) 555-0106',
+    city: 'Seattle',
+    state: 'WA',
     market_segment: 'Tours and activities',
     payment_terms: 'Monthly ACH',
   },
@@ -187,8 +187,8 @@ export const demoAgencies: Agency[] = agencySeed.map((seed, index) => {
     ...seed,
     operator_id: DEMO_OPERATOR_ID,
     moovs_company_id: clientType === 'company' ? clientId : null,
-    address: `${100 + index * 12} Kalakaua Ave`,
-    zip_code: '96815',
+    address: `${100 + index * 12} ${['Market Street', 'Wacker Drive', 'Wynkoop Street', 'Commerce Street', 'Central Avenue', 'Pine Street'][index]}`,
+    zip_code: index === 0 ? '10018' : index === 1 ? '60601' : index === 2 ? '80202' : index === 3 ? '75201' : index === 4 ? '85004' : '98101',
     country: 'US',
     contract_start: '2026-01-01',
     contract_end: '2026-12-31',
@@ -215,12 +215,12 @@ export const demoAgencies: Agency[] = agencySeed.map((seed, index) => {
 
 export const demoAgents: Agent[] = demoAgencies.flatMap((agency, agencyIndex) => {
   const names = [
-    ['Leilani Park', 'Marcus Stone', 'Taylor Wong'],
+    ['Lena Park', 'Marcus Stone', 'Taylor Wong'],
     ['Riley Brooks', 'Priya Shah'],
     ['Emma Rivera', 'Lucas Morgan'],
     ['Hana Imai', 'Ben Carter'],
     ['Mason Patel', 'Olivia Reed'],
-    ['Keoni Davis'],
+    ['Kevin Davis'],
   ][agencyIndex];
   return names.map((name, agentIndex) => ({
     id: `demo-agent-${agencyIndex + 1}-${agentIndex + 1}`,
@@ -228,7 +228,7 @@ export const demoAgents: Agent[] = demoAgencies.flatMap((agency, agencyIndex) =>
     moovs_contact_id: `demo-contact-${agencyIndex + 1}-${agentIndex + 1}`,
     name,
     email: `${name.toLowerCase().replace(/\s+/g, '.')}@example.com`,
-    phone: `(808) 555-02${agencyIndex}${agentIndex}`,
+    phone: `(555) 555-02${agencyIndex}${agentIndex}`,
     role: agentIndex === 0 ? 'gm' : 'agent',
     department: agentIndex === 0 ? 'Front Office' : 'Reservations',
     status: 'active',
@@ -238,8 +238,8 @@ export const demoAgents: Agent[] = demoAgencies.flatMap((agency, agencyIndex) =>
 });
 
 const passengers = ['Alex Morgan', 'Jamie Parker', 'Casey Nguyen', 'Morgan Reed', 'Drew Anderson', 'Sam Taylor', 'Cameron Young', 'Quinn Bailey', 'Ari Johnson', 'Robin Clark'];
-const pickupLocations = ['Daniel K. Inouye International Airport', 'Waikiki Beach Resort', 'Ala Moana Hotel', 'Hilton Hawaiian Village', 'Honolulu Convention Center', 'Kahala Hotel'];
-const dropoffLocations = ['Waikiki Beach Resort', 'Kualoa Ranch', 'Ko Olina Resort', 'Downtown Honolulu', 'Pearl Harbor Visitor Center', 'Daniel K. Inouye International Airport'];
+const pickupLocations = ['Metro International Airport', 'Grandview Hotel Group', 'Central City Hotel', 'Riverside Suites', 'Metro Convention Center', 'Lakeside Hotel'];
+const dropoffLocations = ['Grandview Hotel Group', 'Event Campus', 'Resort District', 'Downtown District', 'Museum District', 'Metro International Airport'];
 const vehicleTypes = ['Executive SUV', 'Mercedes Sprinter', 'Mini Coach', 'Luxury Sedan'];
 const routeIds = Object.keys(demoRouteRateConfig.routes);
 
@@ -339,11 +339,11 @@ export const demoPayoutReservations = demoPayouts.flatMap((payout, payoutIndex) 
 );
 
 export const demoShuttleRoutes: ShuttleRoute[] = [
-  { route_id: 'demo-route-hnl-waikiki', name: 'HNL ↔ Waikiki Hotel Zone' },
-  { route_id: 'demo-route-waikiki-kualoa', name: 'Waikiki ↔ Kualoa Ranch' },
-  { route_id: 'demo-route-corporate-loop', name: 'Downtown Corporate Shuttle Loop' },
-  { route_id: 'demo-route-ko-olina', name: 'Ko Olina Resort Connector' },
-  { route_id: 'demo-route-pearl-harbor', name: 'Pearl Harbor Visitor Shuttle' },
+  { route_id: 'demo-route-airport-downtown', name: 'Airport ↔ Downtown Hotel Zone' },
+  { route_id: 'demo-route-downtown-event-campus', name: 'Downtown ↔ Event Campus' },
+  { route_id: 'demo-route-corporate-loop', name: 'Corporate Campus Shuttle Loop' },
+  { route_id: 'demo-route-resort-connector', name: 'Resort Connector' },
+  { route_id: 'demo-route-museum-district', name: 'Museum District Shuttle' },
 ];
 
 export function getDemoAgencies(options?: { offset?: number; limit?: number; search?: string; matchedOnly?: boolean; unmatchedOnly?: boolean }) {
