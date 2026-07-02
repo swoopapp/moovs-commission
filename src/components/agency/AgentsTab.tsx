@@ -8,6 +8,7 @@ import { Plus, Mail, Phone, BookOpen, TrendingUp, DollarSign, Copy, Trash2 } fro
 import { AddAgentDialog } from './AddAgentDialog';
 import { deactivateAgent } from '../../services/agentService';
 import { toast } from 'sonner';
+import { useIsDemo } from '../../contexts/OperatorContext';
 
 interface AgentsTabProps {
   agents: Agent[];
@@ -39,6 +40,7 @@ interface AgentStats {
 }
 
 export function AgentsTab({ agents, attributions, reservations, agencyId, agency, onAgentCreated, onFilterByAgent }: AgentsTabProps) {
+  const isDemo = useIsDemo();
   const [showAddDialog, setShowAddDialog] = useState(false);
   const activeAgents = useMemo(() => agents.filter((agent) => agent.status === 'active'), [agents]);
 
@@ -91,10 +93,12 @@ export function AgentsTab({ agents, attributions, reservations, agencyId, agency
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <Button size="sm" className="gap-1.5" onClick={() => setShowAddDialog(true)}>
-          <Plus className="h-4 w-4" />
-          Add Agent
-        </Button>
+        {!isDemo && (
+          <Button size="sm" className="gap-1.5" onClick={() => setShowAddDialog(true)}>
+            <Plus className="h-4 w-4" />
+            Add Agent
+          </Button>
+        )}
       </div>
 
       {activeAgents.length === 0 ? (
@@ -189,19 +193,21 @@ export function AgentsTab({ agents, attributions, reservations, agencyId, agency
                       <Copy className="h-3.5 w-3.5" />
                       Copy link
                     </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="gap-1.5 text-red-600 hover:text-red-700"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleRemoveAgent(agent);
-                      }}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      Remove
-                    </Button>
+                    {!isDemo && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1.5 text-red-600 hover:text-red-700"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleRemoveAgent(agent);
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Remove
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>

@@ -1,5 +1,15 @@
 import { config } from '../config/env';
 import { Payout, PayoutReservation } from '../types/commission';
+import {
+  demoReadOnlyError,
+  getDemoPayoutReservationsByPayouts,
+  getDemoPayoutsByAgency,
+  getDemoPayoutsByOperator,
+  isDemoAgencyId,
+  isDemoOperatorId,
+  isDemoPayoutId,
+  isDemoReservationId,
+} from '../demoData';
 
 const API = config.apiBaseUrl;
 
@@ -25,17 +35,20 @@ export type CreatePayoutInput = Omit<Payout, 'id' | 'created_at' | 'updated_at'>
 // --- Lookups ---
 
 export async function fetchPayoutsByOperator(operatorId: string): Promise<Payout[]> {
+  if (isDemoOperatorId(operatorId)) return getDemoPayoutsByOperator(operatorId);
   const res = await fetch(`${API}/payouts?operator_id=${encodeURIComponent(operatorId)}`);
   return handleResponse<Payout[]>(res, 'fetchPayoutsByOperator');
 }
 
 export async function fetchPayoutsByAgency(agencyId: string): Promise<Payout[]> {
+  if (isDemoAgencyId(agencyId)) return getDemoPayoutsByAgency(agencyId);
   const res = await fetch(`${API}/payouts?agency_id=${encodeURIComponent(agencyId)}`);
   return handleResponse<Payout[]>(res, 'fetchPayoutsByAgency');
 }
 
 export async function fetchPayoutReservationsByPayouts(payoutIds: string[]): Promise<PayoutReservation[]> {
   if (payoutIds.length === 0) return [];
+  if (payoutIds.some(isDemoPayoutId)) return getDemoPayoutReservationsByPayouts(payoutIds);
   const idList = payoutIds.map(encodeURIComponent).join(',');
   const res = await fetch(`${API}/payout-reservations?payout_ids=${idList}`);
   return handleResponse<PayoutReservation[]>(res, 'fetchPayoutReservationsByPayouts');
@@ -51,6 +64,7 @@ export async function fetchAllPayoutReservations(agencyId: string): Promise<Payo
 // --- CRUD ---
 
 export async function createPayout(data: CreatePayoutInput): Promise<Payout> {
+  if (isDemoOperatorId(data.operator_id) || isDemoAgencyId(data.agency_id)) throw demoReadOnlyError('Creating payouts');
   const res = await fetch(`${API}/payouts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -66,6 +80,7 @@ export async function createPayoutReservations(
   reservationIds: string[],
 ): Promise<void> {
   if (reservationIds.length === 0) return;
+  if (isDemoPayoutId(payoutId) || reservationIds.some(isDemoReservationId)) throw demoReadOnlyError('Creating payout reservations');
   const res = await fetch(`${API}/payout-reservations`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -75,6 +90,7 @@ export async function createPayoutReservations(
 }
 
 export async function updatePayout(id: string, updates: Partial<Payout>): Promise<Payout> {
+  if (isDemoPayoutId(id)) throw demoReadOnlyError('Updating payouts');
   const res = await fetch(`${API}/payouts/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },

@@ -13,7 +13,7 @@ import { Plus } from 'lucide-react';
 
 interface PayoutsTabProps {
   payouts: Payout[];
-  onCreatePayout: () => void;
+  onCreatePayout?: () => void;
 }
 
 function formatCurrency(amount: number): string {
@@ -40,10 +40,12 @@ export function PayoutsTab({ payouts, onCreatePayout }: PayoutsTabProps) {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500 font-medium">{payouts.length} payouts</p>
-        <Button size="sm" className="gap-1.5" onClick={onCreatePayout}>
-          <Plus className="h-4 w-4" />
-          Create Payout
-        </Button>
+        {onCreatePayout && (
+          <Button size="sm" className="gap-1.5" onClick={onCreatePayout}>
+            <Plus className="h-4 w-4" />
+            Create Payout
+          </Button>
+        )}
       </div>
 
       {payouts.length === 0 ? (

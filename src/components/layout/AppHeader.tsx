@@ -1,5 +1,6 @@
-import { useOperator } from '../../contexts/OperatorContext';
+import { useIsDemo, useOperator } from '../../contexts/OperatorContext';
 import { Button } from '../ui/button';
+import { Badge } from '../ui/badge';
 import { Download, Route } from 'lucide-react';
 
 interface AppHeaderProps {
@@ -8,6 +9,7 @@ interface AppHeaderProps {
 
 export function AppHeader({ onExportClick }: AppHeaderProps) {
   const operator = useOperator();
+  const isDemo = useIsDemo();
 
   return (
     <header className="bg-white border-b border-gray-200">
@@ -25,6 +27,7 @@ export function AppHeader({ onExportClick }: AppHeaderProps) {
           )}
           <span className="text-gray-300">|</span>
           <h1 className="text-base font-semibold text-gray-900">Commission Tracking</h1>
+          {isDemo && <Badge variant="secondary" className="bg-teal-100 text-teal-800">Fake demo data</Badge>}
         </a>
 
         {/* Right: Route Rates + Export + Operator name */}

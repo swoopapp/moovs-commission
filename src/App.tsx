@@ -7,8 +7,10 @@ import { AgencyMatchingView } from './components/agency/AgencyMatchingView';
 import { RouteRatesView } from './components/routes/RouteRatesView';
 import { Toaster } from './components/ui/sonner';
 import { PoweredByMoovs } from './components/layout/PoweredByMoovs';
+import { useIsDemo } from './contexts/OperatorContext';
 
 function App() {
+  const isDemo = useIsDemo();
   const [route, setRoute] = useState(window.location.hash || '#/');
   const exportFnRef = useRef<(() => void) | null>(null);
 
@@ -31,6 +33,11 @@ function App() {
       <div className="min-h-screen bg-gray-50 pb-16">
         <AppHeader onExportClick={handleExport} />
         <main className="max-w-7xl mx-auto px-6 py-6">
+          {isDemo && (
+            <div className="mb-6 rounded-lg border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-900">
+              Demo mode uses read-only fake data and does not call production customer accounts.
+            </div>
+          )}
           {isRouteRates ? (
             <RouteRatesView />
           ) : isMatching ? (

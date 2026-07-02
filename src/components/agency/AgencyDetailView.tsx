@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Agency, Agent, Reservation, ReservationAttribution, Payout } from '../../types/commission';
-import { useOperator } from '../../contexts/OperatorContext';
+import { useIsDemo, useOperator } from '../../contexts/OperatorContext';
 import { fetchAgencyById } from '../../services/agencyService';
 import { fetchAgents } from '../../services/agentService';
 import { fetchCurrentReservations, fetchReservations } from '../../services/reservationService';
@@ -45,6 +45,7 @@ function mergeReservationRows(rows: Reservation[]): Reservation[] {
 
 export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
   const operator = useOperator();
+  const isDemo = useIsDemo();
   const [agency, setAgency] = useState<Agency | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
@@ -223,7 +224,7 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
 
   return (
     <div className="space-y-6">
-      <AgencyHeader agency={agency} stats={stats} onCreatePayout={handleCreatePayout} />
+      <AgencyHeader agency={agency} stats={stats} onCreatePayout={isDemo ? undefined : handleCreatePayout} />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
@@ -264,7 +265,7 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
         <TabsContent value="payouts" className="mt-4">
           <PayoutsTab
             payouts={payouts}
-            onCreatePayout={handleCreatePayout}
+            onCreatePayout={isDemo ? undefined : handleCreatePayout}
           />
         </TabsContent>
 
@@ -276,16 +277,18 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
         </TabsContent>
       </Tabs>
 
-      <PayoutWizard
-        open={payoutWizardOpen}
-        onOpenChange={setPayoutWizardOpen}
-        operatorId={operator.operatorId}
-        moovsOperatorId={operator.moovsOperatorId}
-        agency={agency}
-        agents={agents}
-        agencyId={agencyId}
-        onPayoutCreated={loadData}
-      />
+      {!isDemo && (
+        <PayoutWizard
+          open={payoutWizardOpen}
+          onOpenChange={setPayoutWizardOpen}
+          operatorId={operator.operatorId}
+          moovsOperatorId={operator.moovsOperatorId}
+          agency={agency}
+          agents={agents}
+          agencyId={agencyId}
+          onPayoutCreated={loadData}
+        />
+      )}
     </div>
   );
 }

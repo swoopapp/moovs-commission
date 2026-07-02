@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useOperator, useRefreshOperator } from '../../contexts/OperatorContext';
+import { useIsDemo, useOperator, useRefreshOperator } from '../../contexts/OperatorContext';
 import { ShuttleRoute, RouteRateConfig } from '../../types/commissionOperator';
 import { fetchShuttleRoutes } from '../../services/shuttleRouteService';
 import { updateOperatorRouteRates } from '../../services/commissionOperatorService';
@@ -20,6 +20,7 @@ function parseRate(text: string): number | null {
 export function RouteRatesView() {
   const operator = useOperator();
   const refreshOperator = useRefreshOperator();
+  const isDemo = useIsDemo();
 
   const [routes, setRoutes] = useState<ShuttleRoute[]>([]);
   const [loading, setLoading] = useState(true);
@@ -92,6 +93,10 @@ export function RouteRatesView() {
   }
 
   async function handleSave() {
+    if (isDemo) {
+      toast.info('Demo mode is read-only. Route rates are not saved.');
+      return;
+    }
     const config: RouteRateConfig = {
       default_rate: defaultRateNum,
       routes: {},
@@ -130,10 +135,15 @@ export function RouteRatesView() {
             source inherit these rates for shuttle bookings; routes with no rate fall back to the default below.
           </p>
         </div>
-        <Button onClick={handleSave} disabled={saving} className="shrink-0">
+        <Button onClick={handleSave} disabled={saving || isDemo} className="shrink-0">
           {saving ? <><Loader2 className="h-4 w-4 animate-spin mr-1.5" /> Saving...</> : 'Save Route Rates'}
         </Button>
       </div>
+      {isDemo && (
+        <div className="rounded-lg border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-900">
+          Route rates are fake demo values. Edits are disabled so this link can be shared safely.
+        </div>
+      )}
 
       <Card>
         <CardHeader>

@@ -1,6 +1,6 @@
 // src/components/auth/AuthGate.tsx
 import { useEffect, useState } from 'react';
-import { useOperator } from '../../contexts/OperatorContext';
+import { useIsDemo, useOperator } from '../../contexts/OperatorContext';
 import { authenticateWithPortalToken, isAuthenticated } from '../../services/authService';
 import { LoginPage } from './LoginPage';
 import { Loader2 } from 'lucide-react';
@@ -11,6 +11,7 @@ interface AuthGateProps {
 
 export function AuthGate({ children }: AuthGateProps) {
   const operator = useOperator();
+  const isDemo = useIsDemo();
   const [authed, setAuthed] = useState(() => isAuthenticated(operator.slug));
   const [checkingToken, setCheckingToken] = useState(false);
   const [tokenError, setTokenError] = useState<string | null>(null);
@@ -42,6 +43,10 @@ export function AuthGate({ children }: AuthGateProps) {
       })
       .finally(() => setCheckingToken(false));
   }, [authed, operator.slug]);
+
+  if (isDemo) {
+    return <>{children}</>;
+  }
 
   if (checkingToken) {
     return (

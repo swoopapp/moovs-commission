@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useOperator } from '../../contexts/OperatorContext';
+import { useIsDemo, useOperator } from '../../contexts/OperatorContext';
 import { Agency, CommissionType, CommissionBase, RateMode, PriceMode } from '../../types/commission';
 import { defaultPriceModeForTerms } from '../../lib/commission-calc';
 import { updateAgency, deleteAgency, fetchLinkedClientKeys } from '../../services/agencyService';
@@ -32,6 +32,7 @@ function clientKeyFor(company: MoovsCompany): string {
 
 export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
   const operator = useOperator();
+  const isDemo = useIsDemo();
   const [commissionRate, setCommissionRate] = useState(agency.commission_rate.toString());
   const [commissionType, setCommissionType] = useState<CommissionType>(agency.commission_type);
   const [commissionBase, setCommissionBase] = useState<CommissionBase>(agency.commission_base);
@@ -135,6 +136,10 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
   const isActive = agency.status === 'active';
 
   async function handleSave() {
+    if (isDemo) {
+      toast.info('Demo mode is read-only. Settings are not saved.');
+      return;
+    }
     try {
       setSaving(true);
       const updated = await updateAgency(agency.id, {
@@ -165,6 +170,10 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
   }
 
   async function handleStatusToggle() {
+    if (isDemo) {
+      toast.info('Demo mode is read-only. Status changes are disabled.');
+      return;
+    }
     try {
       const newStatus = isActive ? 'suspended' : 'active';
       const updated = await updateAgency(agency.id, { status: newStatus as Agency['status'] });
@@ -177,6 +186,10 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
   }
 
   async function handleDelete() {
+    if (isDemo) {
+      toast.info('Demo mode is read-only. Deletes are disabled.');
+      return;
+    }
     if (!confirmDelete) {
       setConfirmDelete(true);
       return;
@@ -201,6 +214,11 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {isDemo && (
+        <div className="lg:col-span-2 rounded-lg border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-900">
+          Settings are visible for walkthrough purposes only. Demo mode does not save changes.
+        </div>
+      )}
       {/* Left column: Commission & Contract */}
       <div className="space-y-6">
         <Card>
@@ -493,7 +511,7 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
               />
             </div>
 
-            <Button onClick={handleSave} disabled={saving}>
+            <Button onClick={handleSave} disabled={saving || isDemo}>
               {saving ? 'Saving...' : 'Save Settings'}
             </Button>
           </CardContent>
@@ -518,9 +536,11 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
                   </p>
                   <p className="text-xs text-green-600 font-mono">{primaryClientKey}</p>
                 </div>
-                <Button variant="ghost" size="icon" onClick={handleUnlinkCompany} className="text-green-700 hover:text-red-600">
-                  <X className="h-4 w-4" />
-                </Button>
+                {!isDemo && (
+                  <Button variant="ghost" size="icon" onClick={handleUnlinkCompany} className="text-green-700 hover:text-red-600">
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
             ) : (
               <>
@@ -546,6 +566,7 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
                             key={clientKeyFor(c)}
                             className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors"
                             onClick={() => handleLinkCompany(c)}
+                            disabled={isDemo}
                           >
                             <span className="font-medium">{c.name}</span>
                             {c.email && <span className="text-gray-500 ml-2">{c.email}</span>}
@@ -620,7 +641,7 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
                     : 'Agency is suspended and will not receive new commissions'}
                 </p>
               </div>
-              <Switch checked={isActive} onCheckedChange={handleStatusToggle} />
+              <Switch checked={isActive} onCheckedChange={handleStatusToggle} disabled={isDemo} />
             </div>
           </CardContent>
         </Card>
@@ -638,7 +659,7 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
               variant="destructive"
               className="gap-1.5"
               onClick={handleDelete}
-              disabled={deleting}
+              disabled={deleting || isDemo}
             >
               <Trash2 className="h-4 w-4" />
               {deleting ? 'Deleting...' : confirmDelete ? 'Click again to confirm' : 'Delete Agency'}

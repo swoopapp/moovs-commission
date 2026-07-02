@@ -2,6 +2,13 @@ import { config } from '../config/env';
 import { Agency, Reservation, ReservationAttribution } from '../types/commission';
 import type { RouteRateConfig } from '../types/commissionOperator';
 import { calculateCommission as calcCommission } from '../lib/commission-calc';
+import {
+  demoReadOnlyError,
+  getDemoAttributionsByAgency,
+  getDemoAttributionsByReservations,
+  isDemoAgencyId,
+  isDemoReservationId,
+} from '../demoData';
 
 const API = config.apiBaseUrl;
 
@@ -23,6 +30,7 @@ export async function fetchAttributionsByReservations(
   reservationIds: string[],
 ): Promise<ReservationAttribution[]> {
   if (reservationIds.length === 0) return [];
+  if (reservationIds.some(isDemoReservationId)) return getDemoAttributionsByReservations(reservationIds);
 
   const idList = reservationIds.map(encodeURIComponent).join(',');
   const res = await fetch(`${API}/attributions?reservation_ids=${idList}`);
@@ -32,6 +40,7 @@ export async function fetchAttributionsByReservations(
 export async function fetchAttributionsByAgency(
   agencyId: string,
 ): Promise<ReservationAttribution[]> {
+  if (isDemoAgencyId(agencyId)) return getDemoAttributionsByAgency(agencyId);
   const res = await fetch(`${API}/attributions?agency_id=${encodeURIComponent(agencyId)}`);
   return handleResponse<ReservationAttribution[]>(res, 'fetchAttributionsByAgency');
 }
@@ -41,6 +50,7 @@ export async function fetchAttributionsByAgency(
 export async function createAttribution(
   data: CreateAttributionInput,
 ): Promise<ReservationAttribution> {
+  if (isDemoAgencyId(data.agency_id) || isDemoReservationId(data.reservation_id)) throw demoReadOnlyError('Creating attributions');
   const res = await fetch(`${API}/attributions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -55,6 +65,9 @@ export async function createAttributions(
   data: CreateAttributionInput[],
 ): Promise<ReservationAttribution[]> {
   if (data.length === 0) return [];
+  if (data.some((row) => isDemoAgencyId(row.agency_id) || isDemoReservationId(row.reservation_id))) {
+    throw demoReadOnlyError('Creating attributions');
+  }
 
   const res = await fetch(`${API}/attributions`, {
     method: 'POST',

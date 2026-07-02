@@ -1,5 +1,13 @@
 import { config } from '../config/env';
 import { Agent } from '../types/commission';
+import {
+  demoAgents,
+  demoReadOnlyError,
+  getDemoAgentsByAgencies,
+  getDemoAgentsByAgency,
+  isDemoAgencyId,
+  isDemoAgentId,
+} from '../demoData';
 
 const API = config.apiBaseUrl;
 
@@ -25,18 +33,21 @@ export type CreateAgentInput = Omit<Agent, 'id' | 'created_at' | 'portal_token'>
 // --- Lookups ---
 
 export async function fetchAgents(agencyId: string): Promise<Agent[]> {
+  if (isDemoAgencyId(agencyId)) return getDemoAgentsByAgency(agencyId);
   const res = await fetch(`${API}/agents?agency_id=${encodeURIComponent(agencyId)}`);
   return handleResponse<Agent[]>(res, 'fetchAgents');
 }
 
 export async function fetchAgentsByOperator(_operatorId: string, agencyIds: string[]): Promise<Agent[]> {
   if (agencyIds.length === 0) return [];
+  if (agencyIds.some(isDemoAgencyId)) return getDemoAgentsByAgencies(agencyIds);
   const ids = agencyIds.map(encodeURIComponent).join(',');
   const res = await fetch(`${API}/agents?agency_ids=${ids}`);
   return handleResponse<Agent[]>(res, 'fetchAgentsByOperator');
 }
 
 export async function fetchAgentByToken(token: string): Promise<Agent | null> {
+  if (token.startsWith('demo-agent-portal-')) return demoAgents.find((agent) => agent.portal_token === token) ?? null;
   const res = await fetch(`${API}/agents/by-token/${encodeURIComponent(token)}`);
   const rows = await handleResponse<Agent[]>(res, 'fetchAgentByToken');
   return rows[0] ?? null;
@@ -45,6 +56,7 @@ export async function fetchAgentByToken(token: string): Promise<Agent | null> {
 // --- CRUD ---
 
 export async function createAgent(data: CreateAgentInput): Promise<Agent> {
+  if (isDemoAgencyId(data.agency_id)) throw demoReadOnlyError('Creating agents');
   const res = await fetch(`${API}/agents`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -56,6 +68,7 @@ export async function createAgent(data: CreateAgentInput): Promise<Agent> {
 }
 
 export async function updateAgent(id: string, updates: Partial<Agent>): Promise<Agent> {
+  if (isDemoAgentId(id)) throw demoReadOnlyError('Updating agents');
   const res = await fetch(`${API}/agents/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -67,6 +80,7 @@ export async function updateAgent(id: string, updates: Partial<Agent>): Promise<
 }
 
 export async function deleteAgent(id: string): Promise<void> {
+  if (isDemoAgentId(id)) throw demoReadOnlyError('Deleting agents');
   const res = await fetch(`${API}/agents/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   });

@@ -1,5 +1,13 @@
 import { config } from '../config/env';
 import { Agency, AgencyClientType } from '../types/commission';
+import {
+  demoReadOnlyError,
+  getDemoAgencies,
+  getDemoAgencyById,
+  getDemoLinkedClientKeys,
+  isDemoAgencyId,
+  isDemoOperatorId,
+} from '../demoData';
 
 const API = config.apiBaseUrl;
 
@@ -38,6 +46,7 @@ export type UpdateAgencyInput = Partial<Omit<Agency, 'client_links'>> & {
 // --- Lookups ---
 
 export async function fetchAgencies(operatorId: string): Promise<Agency[]> {
+  if (isDemoOperatorId(operatorId)) return getDemoAgencies().agencies;
   const res = await fetch(`${API}/agencies?operator_id=${encodeURIComponent(operatorId)}`);
   return handleResponse<Agency[]>(res, 'fetchAgencies');
 }
@@ -51,6 +60,10 @@ export async function fetchAgenciesPaginated(
   operatorId: string,
   options?: { offset?: number; limit?: number; search?: string; matchedOnly?: boolean; unmatchedOnly?: boolean },
 ): Promise<PaginatedAgencies> {
+  if (isDemoOperatorId(operatorId)) {
+    return getDemoAgencies(options);
+  }
+
   const offset = options?.offset ?? 0;
   const limit = options?.limit ?? 50;
 
@@ -71,18 +84,23 @@ export async function fetchAgenciesPaginated(
 }
 
 export async function fetchLinkedCompanyIds(operatorId: string): Promise<Set<string>> {
+  if (isDemoOperatorId(operatorId)) {
+    return new Set(getDemoAgencies().agencies.map((agency) => agency.moovs_company_id).filter((id): id is string => Boolean(id)));
+  }
   const res = await fetch(`${API}/agencies/linked-companies/${encodeURIComponent(operatorId)}`);
   const rows = await handleResponse<Array<{ moovs_company_id: string }>>(res, 'fetchLinkedCompanyIds');
   return new Set(rows.map((r) => r.moovs_company_id));
 }
 
 export async function fetchLinkedClientKeys(operatorId: string): Promise<Set<string>> {
+  if (isDemoOperatorId(operatorId)) return getDemoLinkedClientKeys();
   const res = await fetch(`${API}/agencies/linked-clients/${encodeURIComponent(operatorId)}`);
   const rows = await handleResponse<Array<{ client_key: string }>>(res, 'fetchLinkedClientKeys');
   return new Set(rows.map((r) => r.client_key).filter(Boolean));
 }
 
 export async function fetchAgencyById(id: string): Promise<Agency | null> {
+  if (isDemoAgencyId(id)) return getDemoAgencyById(id);
   const res = await fetch(`${API}/agencies/${encodeURIComponent(id)}`);
   const rows = await handleResponse<Agency[]>(res, 'fetchAgencyById');
   return rows[0] ?? null;
@@ -97,6 +115,7 @@ export async function fetchAgencyByToken(token: string): Promise<Agency | null> 
 // --- CRUD ---
 
 export async function createAgency(data: CreateAgencyInput): Promise<Agency> {
+  if (isDemoOperatorId(data.operator_id)) throw demoReadOnlyError('Creating agencies');
   const res = await fetch(`${API}/agencies`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -108,6 +127,7 @@ export async function createAgency(data: CreateAgencyInput): Promise<Agency> {
 }
 
 export async function updateAgency(id: string, updates: UpdateAgencyInput): Promise<Agency> {
+  if (isDemoAgencyId(id)) throw demoReadOnlyError('Updating agencies');
   const res = await fetch(`${API}/agencies/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -119,6 +139,7 @@ export async function updateAgency(id: string, updates: UpdateAgencyInput): Prom
 }
 
 export async function deleteAgency(id: string): Promise<void> {
+  if (isDemoAgencyId(id)) throw demoReadOnlyError('Deleting agencies');
   const res = await fetch(`${API}/agencies/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   });

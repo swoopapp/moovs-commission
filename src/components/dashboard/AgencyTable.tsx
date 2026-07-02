@@ -25,6 +25,7 @@ import {
   TooltipTrigger,
 } from '../ui/tooltip';
 import { Plus, Search, ChevronRight, Link2, ChevronLeft, Link, Unlink } from 'lucide-react';
+import { useIsDemo } from '../../contexts/OperatorContext';
 
 interface AgencyTableProps {
   agencies: Agency[];
@@ -73,6 +74,7 @@ export function AgencyTable({
   onSearchChange,
   onAddAgency,
 }: AgencyTableProps) {
+  const isDemo = useIsDemo();
   const [searchInput, setSearchInput] = useState('');
 
   // Debounced search
@@ -99,14 +101,18 @@ export function AgencyTable({
           />
         </div>
         <div className="flex items-center gap-3">
-          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { window.location.hash = '#/matching'; }}>
-            <Link2 className="h-4 w-4" />
-            Match Agencies
-          </Button>
-          <Button size="sm" className="gap-1.5" onClick={onAddAgency}>
-            <Plus className="h-4 w-4" />
-            Add Agency
-          </Button>
+          {!isDemo && (
+            <>
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { window.location.hash = '#/matching'; }}>
+                <Link2 className="h-4 w-4" />
+                Match Agencies
+              </Button>
+              <Button size="sm" className="gap-1.5" onClick={onAddAgency}>
+                <Plus className="h-4 w-4" />
+                Add Agency
+              </Button>
+            </>
+          )}
         </div>
       </div>
 

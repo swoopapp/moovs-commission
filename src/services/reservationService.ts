@@ -1,5 +1,13 @@
 import { config } from '../config/env';
 import { Reservation } from '../types/commission';
+import {
+  demoReadOnlyError,
+  getDemoReservations,
+  getDemoReservationsByIds,
+  isDemoMoovsOperatorId,
+  isDemoOperatorId,
+  isDemoReservationId,
+} from '../demoData';
 
 const API = config.apiBaseUrl;
 
@@ -28,6 +36,7 @@ export async function fetchReservations(
   operatorId: string,
   options?: FetchReservationsOptions,
 ): Promise<Reservation[]> {
+  if (isDemoOperatorId(operatorId)) return getDemoReservations(options);
   let url = `${API}/commission-reservations?operator_id=${encodeURIComponent(operatorId)}`;
 
   if (options?.dateFrom) {
@@ -122,6 +131,9 @@ export async function fetchLiveReservations(
   moovsOperatorId: string,
   options?: FetchReservationsOptions,
 ): Promise<Reservation[]> {
+  if (isDemoOperatorId(localOperatorId) || isDemoMoovsOperatorId(moovsOperatorId)) {
+    return getDemoReservations(options);
+  }
   const res = await fetch(`${API}/fetch-reservations`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -187,6 +199,9 @@ export async function fetchCurrentReservations(
 
 export async function upsertReservations(reservations: Reservation[]): Promise<Reservation[]> {
   if (reservations.length === 0) return [];
+  if (reservations.some((reservation) => isDemoReservationId(reservation.id) || isDemoOperatorId(reservation.operator_id))) {
+    throw demoReadOnlyError('Saving reservations');
+  }
   const payload = reservations.map(({ id: _id, synced_at: _syncedAt, ...row }) => row);
   const res = await fetch(`${API}/commission-reservations/upsert`, {
     method: 'POST',
@@ -203,6 +218,7 @@ export async function fetchUnattributedReservations(operatorId: string): Promise
 
 export async function fetchReservationsByIds(ids: string[]): Promise<Reservation[]> {
   if (ids.length === 0) return [];
+  if (ids.some(isDemoReservationId)) return getDemoReservationsByIds(ids);
   const idList = ids.map(encodeURIComponent).join(',');
   const res = await fetch(`${API}/commission-reservations/by-ids?ids=${idList}`);
   return handleResponse<Reservation[]>(res, 'fetchReservationsByIds');

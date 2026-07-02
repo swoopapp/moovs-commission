@@ -2,6 +2,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { CommissionOperator, CommissionOperatorConfig, EMPTY_ROUTE_RATE_CONFIG, RouteRateConfig } from '../types/commissionOperator';
 import { fetchOperatorBySlug } from '../services/commissionOperatorService';
+import { demoOperatorConfig, isDemoSlug } from '../demoData';
 
 function normalizeRouteRateConfig(value: RouteRateConfig | null | undefined): RouteRateConfig {
   if (!value || typeof value !== 'object') return EMPTY_ROUTE_RATE_CONFIG;
@@ -27,6 +28,7 @@ function toOperatorConfig(op: CommissionOperator): CommissionOperatorConfig {
 interface OperatorContextValue {
   operator: CommissionOperatorConfig;
   refreshOperator: () => Promise<void>;
+  isDemo: boolean;
 }
 
 const OperatorContext = createContext<OperatorContextValue | null>(null);
@@ -43,6 +45,12 @@ export function useRefreshOperator(): () => Promise<void> {
   return ctx.refreshOperator;
 }
 
+export function useIsDemo(): boolean {
+  const ctx = useContext(OperatorContext);
+  if (!ctx) throw new Error('useIsDemo must be used within OperatorProvider');
+  return ctx.isDemo;
+}
+
 interface OperatorProviderProps {
   slug: string;
   children: ReactNode;
@@ -50,10 +58,17 @@ interface OperatorProviderProps {
 }
 
 export function OperatorProvider({ slug, children, onNotFound }: OperatorProviderProps) {
-  const [operator, setOperator] = useState<CommissionOperatorConfig | null>(null);
-  const [loading, setLoading] = useState(true);
+  const demoMode = isDemoSlug(slug);
+  const [operator, setOperator] = useState<CommissionOperatorConfig | null>(demoMode ? demoOperatorConfig : null);
+  const [loading, setLoading] = useState(!demoMode);
 
   useEffect(() => {
+    if (demoMode) {
+      setOperator(demoOperatorConfig);
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
 
     async function load() {
@@ -77,13 +92,17 @@ export function OperatorProvider({ slug, children, onNotFound }: OperatorProvide
 
     load();
     return () => { cancelled = true; };
-  }, [slug, onNotFound]);
+  }, [slug, onNotFound, demoMode]);
 
   const refreshOperator = useCallback(async () => {
+    if (demoMode) {
+      setOperator(demoOperatorConfig);
+      return;
+    }
     const op = await fetchOperatorBySlug(slug);
     if (!op) return;
     setOperator(toOperatorConfig(op));
-  }, [slug]);
+  }, [slug, demoMode]);
 
   // Apply operator branding colors as CSS custom properties
   useEffect(() => {
@@ -122,7 +141,7 @@ export function OperatorProvider({ slug, children, onNotFound }: OperatorProvide
   if (!operator) return null;
 
   return (
-    <OperatorContext.Provider value={{ operator, refreshOperator }}>
+    <OperatorContext.Provider value={{ operator, refreshOperator, isDemo: demoMode }}>
       {children}
     </OperatorContext.Provider>
   );

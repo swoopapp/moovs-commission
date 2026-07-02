@@ -1,6 +1,7 @@
 // src/services/commissionOperatorService.ts
 import { config } from '../config/env';
 import { CommissionOperator, RouteRateConfig } from '../types/commissionOperator';
+import { demoOperatorRecord, demoReadOnlyError, isDemoOperatorId, isDemoSlug } from '../demoData';
 
 const API = config.apiBaseUrl;
 
@@ -22,6 +23,7 @@ async function handleVoidResponse(response: Response, context: string): Promise<
 // --- Lookups ---
 
 export async function fetchOperatorBySlug(slug: string): Promise<CommissionOperator | null> {
+  if (isDemoSlug(slug)) return demoOperatorRecord;
   const res = await fetch(`${API}/commission-operators?slug=${encodeURIComponent(slug)}`);
   const rows = await handleResponse<CommissionOperator[]>(res, 'fetchOperatorBySlug');
   return rows[0] ?? null;
@@ -74,6 +76,7 @@ export async function updateOperatorRouteRates(
   id: string,
   config_: RouteRateConfig,
 ): Promise<CommissionOperator> {
+  if (isDemoOperatorId(id)) throw demoReadOnlyError('Saving route rates');
   const res = await fetch(`${API}/commission-operators/${encodeURIComponent(id)}/route-rates`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
