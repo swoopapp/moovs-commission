@@ -5,6 +5,15 @@ import type { Agency, Agent, Reservation, ReservationAttribution } from '@/types
 import type { RouteRateConfig } from '@/types/commissionOperator';
 import { EMPTY_ROUTE_RATE_CONFIG } from '@/types/commissionOperator';
 import { calculateCommission, resolveCommissionRate } from '@/lib/commission-calc';
+import {
+  getDemoAgencyById,
+  getDemoAgencyByPortalToken,
+  getDemoAgentByPortalToken,
+  getDemoAgentsByAgency,
+  getDemoAttributionsByAgency,
+  getDemoPayoutsByAgency,
+  getDemoReservationsByIds,
+} from '@/demoData';
 
 type Row = Record<string, any>;
 type RawMoovsReservation = Record<string, unknown>;
@@ -209,8 +218,50 @@ async function portalRows(agency: Agency, agents: Agent[]) {
   };
 }
 
+function demoPortalResponse(token: string): Response | null {
+  const agency = getDemoAgencyByPortalToken(token);
+  if (agency) {
+    const agents = getDemoAgentsByAgency(agency.id);
+    const attributions = getDemoAttributionsByAgency(agency.id);
+    const reservations = getDemoReservationsByIds(attributions.map((attr) => attr.reservation_id));
+    const payouts = getDemoPayoutsByAgency(agency.id);
+
+    return Response.json({
+      view: 'gm',
+      agency: stripPortalToken(agency as unknown as Row),
+      agents: agents.map((agent) => stripPortalToken(agent as unknown as Row)),
+      reservations,
+      attributions,
+      payouts,
+    });
+  }
+
+  const agent = getDemoAgentByPortalToken(token);
+  if (!agent) return null;
+
+  const agentAgency = getDemoAgencyById(agent.agency_id);
+  if (!agentAgency) return null;
+
+  const allAttributions = getDemoAttributionsByAgency(agentAgency.id);
+  const attributions = allAttributions.filter((attr) => attr.agent_id === agent.id);
+  const reservations = getDemoReservationsByIds(attributions.map((attr) => attr.reservation_id));
+
+  return Response.json({
+    view: 'agent',
+    agency: stripPortalToken(agentAgency as unknown as Row),
+    agents: [],
+    currentAgent: stripPortalToken(agent as unknown as Row),
+    reservations,
+    attributions,
+    payouts: [],
+  });
+}
+
 export async function GET(_request: Request, context: { params: Promise<{ token: string }> }) {
   const { token } = await context.params;
+  const demoResponse = demoPortalResponse(token);
+  if (demoResponse) return demoResponse;
+
   if (!token || token.length < 24) {
     return Response.json({ error: 'Not found' }, { status: 404 });
   }

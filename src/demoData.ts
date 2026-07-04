@@ -368,6 +368,14 @@ export function getDemoAgencyById(id: string): Agency | null {
   return demoAgencies.find((agency) => agency.id === id) ?? null;
 }
 
+export function getDemoAgencyByPortalToken(token: string): Agency | null {
+  return demoAgencies.find((agency) => agency.portal_token === token) ?? null;
+}
+
+export function getDemoAgentByPortalToken(token: string): Agent | null {
+  return demoAgents.find((agent) => agent.portal_token === token) ?? null;
+}
+
 export function getDemoAgentsByAgency(agencyId: string): Agent[] {
   return demoAgents.filter((agent) => agent.agency_id === agencyId);
 }
