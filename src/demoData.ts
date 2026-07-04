@@ -279,10 +279,14 @@ export const demoReservations: Reservation[] = Array.from({ length: 36 }, (_, in
   };
 });
 
+const attributionCountByAgency = new Map<string, number>();
+
 export const demoAttributions: ReservationAttribution[] = demoReservations.map((reservation, index) => {
   const agency = demoAgencies[index % demoAgencies.length];
   const agents = demoAgents.filter((agent) => agent.agency_id === agency.id);
-  const agent = agents[index % Math.max(agents.length, 1)] ?? null;
+  const agencyAttributionIndex = attributionCountByAgency.get(agency.id) ?? 0;
+  attributionCountByAgency.set(agency.id, agencyAttributionIndex + 1);
+  const agent = agents[agencyAttributionIndex % Math.max(agents.length, 1)] ?? null;
   return {
     id: `demo-attr-${index + 1}`,
     reservation_id: reservation.id,
