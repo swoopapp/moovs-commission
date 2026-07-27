@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import App from './App';
 import { OperatorProvider } from './contexts/OperatorContext';
 import { NotFoundPage } from './components/NotFoundPage';
@@ -15,9 +15,11 @@ export function Root() {
     setPathParts(window.location.pathname.replace(/^\/|\/$/g, '').split('/').filter(Boolean));
   }, []);
 
+  const handleNotFound = useCallback(() => setNotFound(true), []);
+
   if (!pathParts) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
+      <div className="min-h-screen bg-white flex items-center justify-center" role="status" aria-live="polite">
         <div className="animate-pulse text-gray-400 text-lg">Loading...</div>
       </div>
     );
@@ -35,7 +37,7 @@ export function Root() {
   if (notFound) return <NotFoundPage />;
 
   return (
-    <OperatorProvider slug={slug} onNotFound={() => setNotFound(true)}>
+    <OperatorProvider slug={slug} onNotFound={handleNotFound}>
       <App />
     </OperatorProvider>
   );

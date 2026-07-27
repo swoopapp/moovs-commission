@@ -1,7 +1,12 @@
 export const dynamic = 'force-dynamic';
 
 import { getAdminSecret, getCommissionApiBase, getDashboardSecret, requireAuthResponse } from '@/lib/admin-auth';
-import { sanitizeOperator } from '@/lib/commission-api';
+import { fetchCommissionApi, sanitizeOperator } from '@/lib/commission-api';
+import {
+  authorizeOperatorProxyRequest,
+  type OwnershipLookupRequest,
+  type OwnershipRecord,
+} from '@/lib/commission-proxy-authorization';
 import { getOperatorSession } from '@/lib/operator-session';
 import { hashPassword } from '@/lib/password';
 
@@ -20,10 +25,11 @@ function isAdminOnlyRequest(path: string, request: Request): boolean {
   // Operator-managed shuttle route rates: allowed with an operator session (ownership checked below).
   if (path.startsWith('commission-operators/') && path.endsWith('/route-rates')) return false;
   if (path.startsWith('commission-operators/')) return true;
+  if (path.startsWith('internal/')) return true;
   if (path === 'upload-logo') return true;
   if (path === 'migrate-data') return true;
   if (path === 'debug-query' || path === 'debug-schema') return true;
-  if (path === 'fetch-operators' && url.searchParams.has('operator_id')) return true;
+  if (path === 'fetch-operators') return true;
 
   return false;
 }
@@ -31,13 +37,30 @@ function isAdminOnlyRequest(path: string, request: Request): boolean {
 function isPublicRequest(path: string, request: Request): boolean {
   const url = new URL(request.url);
   return (
-    path === 'health' ||
+    (path === 'health' && request.method === 'GET') ||
     (path === 'commission-operators' && request.method === 'GET' && url.searchParams.has('slug'))
   );
 }
 
 async function hasAdminAuth(): Promise<boolean> {
   return (await requireAuthResponse()) === null;
+}
+
+async function lookupOwnership(request: OwnershipLookupRequest): Promise<OwnershipRecord[]> {
+  const response = await fetchCommissionApi(
+    '/internal/ownership',
+    {
+      method: 'POST',
+      body: JSON.stringify(request),
+      headers: { 'content-type': 'application/json' },
+    },
+    true,
+  );
+  if (!response.ok) throw new Error(`Ownership service returned ${response.status}`);
+
+  const data = await response.json() as { records?: unknown };
+  if (!Array.isArray(data.records)) throw new Error('Ownership service returned an invalid response');
+  return data.records as OwnershipRecord[];
 }
 
 async function authorizeProxyRequest(path: string, request: Request, adminOnly: boolean): Promise<Response | null> {
@@ -48,69 +71,34 @@ async function authorizeProxyRequest(path: string, request: Request, adminOnly: 
   const session = await getOperatorSession();
   if (!session) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const url = new URL(request.url);
-
-  if (path === 'agencies' && request.method === 'GET') {
-    const operatorId = url.searchParams.get('operator_id');
-    if (operatorId !== session.operatorId) return Response.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  if (path === 'agencies' && request.method === 'POST') {
-    const body = await request.clone().json().catch(() => null);
-    if (body?.operator_id !== session.operatorId) return Response.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  if (path.startsWith('agencies/linked-companies/')) {
-    const operatorId = path.split('/')[2];
-    if (operatorId !== session.operatorId) return Response.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  if (path.startsWith('agencies/linked-clients/')) {
-    const operatorId = path.split('/')[2];
-    if (operatorId !== session.operatorId) return Response.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  if (path === 'commission-reservations') {
-    const operatorId = url.searchParams.get('operator_id');
-    if (operatorId !== session.operatorId) return Response.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  if (path === 'commission-reservations/upsert' && request.method === 'POST') {
-    const body = await request.clone().json().catch(() => null);
-    const items = Array.isArray(body) ? body : [body];
-    if (!items.length || items.some((item) => item?.operator_id !== session.operatorId)) {
-      return Response.json({ error: 'Forbidden' }, { status: 403 });
+  let jsonRead = false;
+  let jsonBody: unknown;
+  const readJson = async () => {
+    if (!jsonRead) {
+      jsonBody = await request.clone().json();
+      jsonRead = true;
     }
-  }
+    return jsonBody;
+  };
 
-  if (path === 'fetch-reservations' && request.method === 'POST') {
-    const body = await request.clone().json().catch(() => null);
-    if (body?.operator_id !== session.moovsOperatorId) return Response.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  if (path === 'fetch-companies' && request.method === 'POST') {
-    const body = await request.clone().json().catch(() => null);
-    if (body?.operator_id !== session.moovsOperatorId) return Response.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  if (path === 'fetch-shuttle-routes' && request.method === 'GET') {
-    const operatorId = url.searchParams.get('operator_id');
-    if (operatorId !== session.moovsOperatorId) return Response.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  if (path.startsWith('commission-operators/') && path.endsWith('/route-rates')) {
-    const operatorId = path.split('/')[1];
-    if (operatorId !== session.operatorId) return Response.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  if (path === 'payouts' && request.method === 'GET') {
-    const operatorId = url.searchParams.get('operator_id');
-    if (operatorId && operatorId !== session.operatorId) return Response.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  if (path === 'payouts' && request.method === 'POST') {
-    const body = await request.clone().json().catch(() => null);
-    if (body?.operator_id !== session.operatorId) return Response.json({ error: 'Forbidden' }, { status: 403 });
+  try {
+    const result = await authorizeOperatorProxyRequest({
+      path,
+      method: request.method,
+      url: new URL(request.url),
+      session,
+      readJson,
+      lookupOwnership,
+    });
+    if (!result.allowed) {
+      return Response.json({ error: result.error }, { status: result.status });
+    }
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      return Response.json({ error: 'Invalid JSON' }, { status: 400 });
+    }
+    console.error('Commission proxy authorization failed');
+    return Response.json({ error: 'Authorization service unavailable' }, { status: 503 });
   }
 
   return null;
@@ -198,9 +186,6 @@ async function proxyCommissionApi(request: Request, context: CommissionProxyCont
   const accept = request.headers.get('accept');
   if (accept) headers.set('accept', accept);
 
-  const authorization = request.headers.get('authorization');
-  if (authorization) headers.set('authorization', authorization);
-
   const init: RequestInit = {
     method: request.method,
     headers,
@@ -209,12 +194,19 @@ async function proxyCommissionApi(request: Request, context: CommissionProxyCont
 
   init.body = await prepareRequestBody(pathText, request, adminOnly);
 
-  const upstream = await fetch(targetUrl, init);
-  return sanitizeResponse(pathText, request, upstream);
+  try {
+    const upstream = await fetch(targetUrl, init);
+    return sanitizeResponse(pathText, request, upstream);
+  } catch {
+    return Response.json({ error: 'Commission API unavailable' }, { status: 502 });
+  }
 }
 
 export function OPTIONS() {
-  return new Response(null, { status: 204 });
+  return new Response(null, {
+    status: 204,
+    headers: { Allow: 'GET, POST, PATCH, DELETE, OPTIONS' },
+  });
 }
 
 export async function GET(request: Request, context: CommissionProxyContext) {

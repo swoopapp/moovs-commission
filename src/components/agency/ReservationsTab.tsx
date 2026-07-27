@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from '../ui/select';
 import { Button } from '../ui/button';
+import { formatDisplayDate } from '../../lib/date';
 
 interface ReservationsTabProps {
   reservations: Reservation[];
@@ -32,6 +33,8 @@ interface ReservationsTabProps {
   onAgentFilterChange?: (agentId: string) => void;
   onLoadMore?: () => void;
   priceMode?: PriceMode;
+  error?: string | null;
+  onRetry?: () => void;
 }
 
 function formatCurrency(amount: number): string {
@@ -39,8 +42,7 @@ function formatCurrency(amount: number): string {
 }
 
 function formatDate(dateStr: string | null): string {
-  if (!dateStr) return '--';
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return formatDisplayDate(dateStr, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 const TRIP_STATUS_COLORS: Record<string, string> = {
@@ -81,6 +83,8 @@ export function ReservationsTab({
   onAgentFilterChange,
   onLoadMore,
   priceMode = 'gross',
+  error,
+  onRetry,
 }: ReservationsTabProps) {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [internalAgentFilter, setInternalAgentFilter] = useState<string>('all');
@@ -158,37 +162,39 @@ export function ReservationsTab({
   return (
     <div className="space-y-3">
       {/* Filters */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div>
-          <p className="text-sm text-gray-500 font-medium">
+          <p className="text-sm text-gray-600 font-medium" aria-live="polite">
             {filtered.length} reservations
             {loading ? ' · loading…' : ''}
           </p>
           {loadedDateFrom && loadedDateTo && (
-            <p className="text-xs text-gray-400">Loaded {formatDate(loadedDateFrom)} – {formatDate(loadedDateTo)}</p>
+            <p className="text-xs text-gray-600">Loaded {formatDate(loadedDateFrom)} – {formatDate(loadedDateTo)}</p>
           )}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 xl:flex xl:w-auto xl:items-center">
         <div className="flex items-center gap-1.5">
-          <label className="text-sm text-gray-500">From</label>
+          <label htmlFor="reservation-date-from" className="text-sm text-gray-600">From</label>
           <Input
+            id="reservation-date-from"
             type="date"
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
-            className="w-[150px] h-9"
+            className="h-9 min-w-0 flex-1 xl:w-[150px] xl:flex-none"
           />
         </div>
         <div className="flex items-center gap-1.5">
-          <label className="text-sm text-gray-500">To</label>
+          <label htmlFor="reservation-date-to" className="text-sm text-gray-600">To</label>
           <Input
+            id="reservation-date-to"
             type="date"
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
-            className="w-[150px] h-9"
+            className="h-9 min-w-0 flex-1 xl:w-[150px] xl:flex-none"
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[160px]">
+          <SelectTrigger className="w-full xl:w-[160px]" aria-label="Filter reservations by status">
             <SelectValue placeholder="All Statuses" />
           </SelectTrigger>
           <SelectContent>
@@ -199,7 +205,7 @@ export function ReservationsTab({
           </SelectContent>
         </Select>
         <Select value={agentFilter} onValueChange={handleAgentFilterChange}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-full xl:w-[180px]" aria-label="Filter reservations by agent">
             <SelectValue placeholder="All Agents" />
           </SelectTrigger>
           <SelectContent>
@@ -212,14 +218,25 @@ export function ReservationsTab({
         </div>
       </div>
 
+      {error && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
+          <span>{error}</span>
+          {onRetry && (
+            <Button variant="outline" size="sm" onClick={onRetry} disabled={loading}>
+              Try again
+            </Button>
+          )}
+        </div>
+      )}
+
       {/* Table */}
-      {filtered.length === 0 && !loading ? (
+      {filtered.length === 0 && !loading && !error ? (
         <div className="px-6 py-12 text-center text-gray-500 bg-white rounded-lg border border-gray-200">
           No reservations found.
         </div>
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
-          <Table>
+        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+          <Table aria-label="Agency reservations">
             <TableHeader>
               <TableRow>
                 <TableHead>Order #</TableHead>

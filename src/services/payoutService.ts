@@ -32,6 +32,24 @@ async function handleVoidResponse(response: Response, context: string): Promise<
 
 export type CreatePayoutInput = Omit<Payout, 'id' | 'created_at' | 'updated_at'>;
 
+export interface CreatePayoutFromTripsInput {
+  idempotency_key: string;
+  operator_id: string;
+  agency_id: string;
+  period_start: string;
+  period_end: string;
+  adjustments: number;
+  method: Payout['method'];
+  reference_number: string | null;
+  status: Payout['status'];
+  notes: string | null;
+  date_paid: string | null;
+  items: Array<{
+    moovs_trip_id: string;
+    agent_id: string | null;
+  }>;
+}
+
 // --- Lookups ---
 
 export async function fetchPayoutsByOperator(operatorId: string): Promise<Payout[]> {
@@ -73,6 +91,20 @@ export async function createPayout(data: CreatePayoutInput): Promise<Payout> {
   const rows = await handleResponse<Payout[]>(res, 'createPayout');
   if (!rows[0]) throw new Error('createPayout: no row returned');
   return rows[0];
+}
+
+export async function createPayoutFromTrips(data: CreatePayoutFromTripsInput): Promise<Payout> {
+  if (isDemoOperatorId(data.operator_id) || isDemoAgencyId(data.agency_id)) {
+    throw demoReadOnlyError('Creating payouts');
+  }
+  const res = await fetch(`${API}/payouts/create-from-trips`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  const result = await handleResponse<{ payout: Payout }>(res, 'createPayoutFromTrips');
+  if (!result.payout) throw new Error('createPayoutFromTrips: no payout returned');
+  return result.payout;
 }
 
 export async function createPayoutReservations(

@@ -72,8 +72,13 @@ export function AgentsTab({ agents, attributions, reservations, agencyId, agency
   }
 
   async function handleCopyPortalLink(agent: Agent) {
-    await navigator.clipboard.writeText(portalUrl(agent));
-    toast.success(`Portal link copied for ${agent.name}`);
+    try {
+      await navigator.clipboard.writeText(portalUrl(agent));
+      toast.success(`Portal link copied for ${agent.name}`);
+    } catch (err) {
+      console.error('Failed to copy agent portal link:', err);
+      toast.error('Could not copy the portal link');
+    }
   }
 
   async function handleRemoveAgent(agent: Agent) {
@@ -112,8 +117,7 @@ export function AgentsTab({ agents, attributions, reservations, agencyId, agency
             return (
               <Card
                 key={agent.id}
-                className="cursor-pointer hover:shadow-md transition-shadow py-4"
-                onClick={() => onFilterByAgent(agent.id)}
+                className="py-4 transition-shadow hover:shadow-md"
               >
                 <CardContent className="space-y-3">
                   {/* Agent identity */}
@@ -179,16 +183,23 @@ export function AgentsTab({ agents, attributions, reservations, agencyId, agency
                     </div>
                   </div>
 
-                  <div className="border-t pt-3 flex items-center justify-end gap-2">
+                  <div className="border-t pt-3 flex flex-wrap items-center justify-end gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={() => onFilterByAgent(agent.id)}
+                    >
+                      <BookOpen className="h-3.5 w-3.5" />
+                      View trips
+                    </Button>
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
                       className="gap-1.5"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleCopyPortalLink(agent);
-                      }}
+                      onClick={() => handleCopyPortalLink(agent)}
                     >
                       <Copy className="h-3.5 w-3.5" />
                       Copy link
@@ -199,10 +210,7 @@ export function AgentsTab({ agents, attributions, reservations, agencyId, agency
                         variant="ghost"
                         size="sm"
                         className="gap-1.5 text-red-600 hover:text-red-700"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          handleRemoveAgent(agent);
-                        }}
+                        onClick={() => handleRemoveAgent(agent)}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                         Remove

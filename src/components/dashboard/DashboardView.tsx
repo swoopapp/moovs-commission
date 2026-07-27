@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useOperator } from '../../contexts/OperatorContext';
 import { fetchAgenciesPaginated } from '../../services/agencyService';
 import { fetchDashboardStats, DashboardStats, AgencyTableRow, AgentTableRow } from '../../services/dashboardService';
@@ -9,6 +9,8 @@ import { CommissionTrendChart } from './CommissionTrendChart';
 import { CreateAgencyDialog } from '../agency/CreateAgencyDialog';
 import { Card, CardContent, CardHeader } from '../ui/card';
 import { Skeleton } from '../ui/skeleton';
+import { Button } from '../ui/button';
+import { AlertCircle, RefreshCw } from 'lucide-react';
 
 interface DashboardViewProps {
   onRegisterExport?: (fn: () => void) => void;
@@ -69,7 +71,7 @@ function exportAgenciesToCsv(rows: AgencyTableRow[], agentRows: AgentTableRow[])
 function DashboardStatsSkeleton() {
   return (
     <>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4" aria-label="Loading dashboard metrics">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Loading dashboard metrics" role="status">
         {Array.from({ length: 4 }, (_, index) => (
           <Card key={index} className="py-4">
             <CardContent className="flex items-center gap-4">
@@ -110,8 +112,11 @@ export function DashboardView({ onRegisterExport }: DashboardViewProps) {
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const [totalAgencies, setTotalAgencies] = useState(0);
   const [tableLoading, setTableLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [statsError, setStatsError] = useState<string | null>(null);
+  const [tableError, setTableError] = useState<string | null>(null);
   const [createAgencyOpen, setCreateAgencyOpen] = useState(false);
+  const statsRequestId = useRef(0);
+  const agenciesRequestId = useRef(0);
 
   // Table pagination state
   const [page, setPage] = useState(0);
@@ -120,6 +125,8 @@ export function DashboardView({ onRegisterExport }: DashboardViewProps) {
 
   // Load KPI stats (only agencies with attributions — lightweight)
   const loadStats = useCallback(async () => {
+    const requestId = ++statsRequestId.current;
+    setStatsError(null);
     try {
       const matchedAgencies = await fetchAgenciesPaginated(operator.operatorId, {
         limit: 250,
@@ -132,28 +139,41 @@ export function DashboardView({ onRegisterExport }: DashboardViewProps) {
         matchedAgencies.agencies,
         operator.routeRateConfig,
       );
-      setStats(dashStats);
+      if (requestId === statsRequestId.current) {
+        setStats(dashStats);
+      }
     } catch (err) {
       console.error('Failed to load stats:', err);
+      if (requestId === statsRequestId.current) {
+        setStatsError(err instanceof Error ? err.message : 'Failed to load dashboard metrics');
+      }
     }
-  }, [operator.operatorId, operator.moovsOperatorId]);
+  }, [operator.operatorId, operator.moovsOperatorId, operator.routeRateConfig]);
 
   // Load paginated agencies for table
   const loadAgencies = useCallback(async () => {
+    const requestId = ++agenciesRequestId.current;
     try {
       setTableLoading(true);
+      setTableError(null);
       const result = await fetchAgenciesPaginated(operator.operatorId, {
         offset: page * pageSize,
         limit: pageSize,
         search: search || undefined,
       });
-      setAgencies(result.agencies);
-      setTotalAgencies(result.total);
+      if (requestId === agenciesRequestId.current) {
+        setAgencies(result.agencies);
+        setTotalAgencies(result.total);
+      }
     } catch (err) {
       console.error('Failed to load agencies:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load agencies');
+      if (requestId === agenciesRequestId.current) {
+        setTableError(err instanceof Error ? err.message : 'Failed to load agencies');
+      }
     } finally {
-      setTableLoading(false);
+      if (requestId === agenciesRequestId.current) {
+        setTableLoading(false);
+      }
     }
   }, [operator.operatorId, page, pageSize, search]);
 
@@ -167,14 +187,15 @@ export function DashboardView({ onRegisterExport }: DashboardViewProps) {
     }
   }, [onRegisterExport, stats]);
 
-  if (error) {
-    return (
-      <div className="text-center py-20">
-        <p className="text-red-600 mb-2">Something went wrong</p>
-        <p className="text-sm text-gray-500">{error}</p>
-      </div>
-    );
-  }
+  const handlePageSizeChange = useCallback((size: number) => {
+    setPageSize(size);
+    setPage(0);
+  }, []);
+
+  const handleSearchChange = useCallback((query: string) => {
+    setSearch(query);
+    setPage(0);
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -188,6 +209,20 @@ export function DashboardView({ onRegisterExport }: DashboardViewProps) {
           />
           <CommissionTrendChart data={stats.agencyMonthlyTrend} agencyNames={stats.topAgencyNames} />
         </>
+      ) : statsError ? (
+        <Card className="border-red-200" role="alert">
+          <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
+            <AlertCircle className="h-6 w-6 text-red-600" aria-hidden="true" />
+            <div>
+              <p className="font-medium text-gray-900">Dashboard metrics are unavailable</p>
+              <p className="mt-1 text-sm text-gray-600">{statsError}</p>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={loadStats}>
+              <RefreshCw className="h-4 w-4" aria-hidden="true" />
+              Try again
+            </Button>
+          </CardContent>
+        </Card>
       ) : (
         <DashboardStatsSkeleton />
       )}
@@ -197,9 +232,10 @@ export function DashboardView({ onRegisterExport }: DashboardViewProps) {
         page={page}
         pageSize={pageSize}
         loading={tableLoading}
+        error={tableError}
         onPageChange={setPage}
-        onPageSizeChange={(size) => { setPageSize(size); setPage(0); }}
-        onSearchChange={(q) => { setSearch(q); setPage(0); }}
+        onPageSizeChange={handlePageSizeChange}
+        onSearchChange={handleSearchChange}
         onAddAgency={() => setCreateAgencyOpen(true)}
         onRefresh={() => { loadAgencies(); loadStats(); }}
       />

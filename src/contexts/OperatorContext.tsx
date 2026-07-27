@@ -61,17 +61,23 @@ export function OperatorProvider({ slug, children, onNotFound }: OperatorProvide
   const demoMode = isDemoSlug(slug);
   const [operator, setOperator] = useState<CommissionOperatorConfig | null>(demoMode ? demoOperatorConfig : null);
   const [loading, setLoading] = useState(!demoMode);
+  const [error, setError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     if (demoMode) {
       setOperator(demoOperatorConfig);
       setLoading(false);
+      setError(null);
       return;
     }
 
     let cancelled = false;
 
     async function load() {
+      setLoading(true);
+      setError(null);
+      setOperator(null);
       try {
         const op = await fetchOperatorBySlug(slug);
         if (!op) {
@@ -84,7 +90,9 @@ export function OperatorProvider({ slug, children, onNotFound }: OperatorProvide
         }
       } catch (err) {
         console.error('Failed to load operator:', err);
-        if (!cancelled) onNotFound();
+        if (!cancelled) {
+          setError('We could not load this commission portal. Check your connection and try again.');
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -92,7 +100,7 @@ export function OperatorProvider({ slug, children, onNotFound }: OperatorProvide
 
     load();
     return () => { cancelled = true; };
-  }, [slug, onNotFound, demoMode]);
+  }, [slug, onNotFound, demoMode, retryKey]);
 
   const refreshOperator = useCallback(async () => {
     if (demoMode) {
@@ -132,8 +140,26 @@ export function OperatorProvider({ slug, children, onNotFound }: OperatorProvide
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
+      <div className="min-h-screen bg-white flex items-center justify-center" role="status" aria-live="polite">
         <div className="animate-pulse text-gray-400 text-lg">Loading...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="max-w-md rounded-lg border border-red-200 bg-white p-6 text-center shadow-sm" role="alert">
+          <h1 className="text-lg font-semibold text-gray-900">Portal unavailable</h1>
+          <p className="mt-2 text-sm text-gray-600">{error}</p>
+          <button
+            type="button"
+            className="mt-4 h-10 rounded-md bg-gray-900 px-4 text-sm font-medium text-white hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-950 focus-visible:ring-offset-2"
+            onClick={() => setRetryKey((key) => key + 1)}
+          >
+            Try again
+          </button>
+        </div>
       </div>
     );
   }

@@ -37,8 +37,8 @@
     "embla-carousel-react": "^8.6.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.563.0",
-    "next": "^16.2.4",
-    "next-auth": "^5.0.0-beta.30",
+    "next": "^16.2.12",
+    "next-auth": "^5.0.0-beta.32",
     "react": "^19.2.4",
     "react-day-picker": "^9.13.0",
     "react-dom": "^19.2.4",
@@ -48,8 +48,7 @@
     "sonner": "^2.0.3",
     "tailwind-merge": "*",
     "tailwindcss": "^4.2.1",
-    "vaul": "^1.1.2",
-    "xlsx": "^0.18.5"
+    "vaul": "^1.1.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.0",
@@ -64,6 +63,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "verify:authorization": "node --experimental-strip-types scripts/verify-commission-proxy-authorization.mjs",
+    "verify:payout-facts": "node --experimental-strip-types scripts/verify-authoritative-reservation-facts.mjs"
   }
 }

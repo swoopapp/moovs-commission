@@ -250,19 +250,30 @@ app.delete('/commission-operators/:id/portal-token', async (c) => {
   }
 });
 
-function normalizeRouteRateConfig(body: any) {
+function normalizeRouteRateConfig(body: any):
+  | { config: { default_rate: number | null; routes: Record<string, { route_id: string; name: string | null; rate: number }> } }
+  | { error: string } {
   const src = body && typeof body === 'object' ? body : {};
-  const defaultRate = typeof src.default_rate === 'number' && Number.isFinite(src.default_rate) ? src.default_rate : null;
+  const defaultRate = src.default_rate == null ? null : src.default_rate;
+  if (
+    defaultRate !== null
+    && (typeof defaultRate !== 'number' || !Number.isFinite(defaultRate) || defaultRate < 0 || defaultRate > 100)
+  ) {
+    return { error: 'default_rate must be null or a number between 0 and 100' };
+  }
   const routesIn = src.routes && typeof src.routes === 'object' ? src.routes : {};
   const routes: Record<string, { route_id: string; name: string | null; rate: number }> = {};
   for (const [key, val] of Object.entries(routesIn)) {
     const v = val as any;
-    const routeId = String(v?.route_id ?? key);
-    const rate = typeof v?.rate === 'number' && Number.isFinite(v.rate) ? v.rate : null;
-    if (!routeId || rate === null) continue;
+    const routeId = String(v?.route_id ?? key).trim();
+    const rate = v?.rate;
+    if (!routeId) return { error: 'Every route rate must have a route_id' };
+    if (typeof rate !== 'number' || !Number.isFinite(rate) || rate < 0 || rate > 100) {
+      return { error: `Rate for route ${routeId} must be between 0 and 100` };
+    }
     routes[routeId] = { route_id: routeId, name: typeof v?.name === 'string' ? v.name : null, rate };
   }
-  return { default_rate: defaultRate, routes };
+  return { config: { default_rate: defaultRate, routes } };
 }
 
 // PATCH /commission-operators/:id/route-rates
@@ -272,7 +283,9 @@ app.patch('/commission-operators/:id/route-rates', async (c) => {
   try {
     const id = c.req.param('id');
     const body = await c.req.json().catch(() => ({}));
-    const cfg = normalizeRouteRateConfig(body);
+    const normalized = normalizeRouteRateConfig(body);
+    if ('error' in normalized) return c.json({ error: normalized.error }, 400);
+    const cfg = normalized.config;
     const r = await appQuery(
       `UPDATE commission_operators SET route_rate_config = $1::jsonb, updated_at = now() WHERE id = $2 RETURNING *`,
       [JSON.stringify(cfg), id],

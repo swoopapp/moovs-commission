@@ -27,12 +27,13 @@ function App() {
   const agencyMatch = route.match(/^#\/agency\/(.+)$/);
   const isMatching = route === '#/matching';
   const isRouteRates = route === '#/route-rates';
+  const isDashboard = !isRouteRates && !isMatching && !agencyMatch;
 
   return (
     <AuthGate>
       <div className="min-h-screen bg-gray-50 pb-16">
-        <AppHeader onExportClick={handleExport} />
-        <main className="max-w-7xl mx-auto px-6 py-6">
+        <AppHeader onExportClick={isDashboard ? handleExport : undefined} />
+        <main className="max-w-7xl mx-auto px-4 py-6 sm:px-6">
           {isDemo && (
             <div className="mb-6 rounded-lg border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-900">
               Demo mode uses read-only fake data and does not call production customer accounts.

@@ -35,7 +35,9 @@ export function createOperatorSessionToken(session: Omit<OperatorSession, 'exp'>
 
 export function verifyOperatorSessionToken(token: string | undefined | null): OperatorSession | null {
   if (!token) return null;
-  const [payload, signature] = token.split('.');
+  const parts = token.split('.');
+  if (parts.length !== 2) return null;
+  const [payload, signature] = parts;
   if (!payload || !signature) return null;
 
   const expected = signPayload(payload);
@@ -45,7 +47,15 @@ export function verifyOperatorSessionToken(token: string | undefined | null): Op
 
   try {
     const session = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as OperatorSession;
-    if (!session.operatorId || !session.slug || !session.exp) return null;
+    if (
+      typeof session.operatorId !== 'string' ||
+      !session.operatorId ||
+      typeof session.moovsOperatorId !== 'string' ||
+      !session.moovsOperatorId ||
+      typeof session.slug !== 'string' ||
+      !session.slug ||
+      !Number.isSafeInteger(session.exp)
+    ) return null;
     if (session.exp <= Math.floor(Date.now() / 1000)) return null;
     return session;
   } catch {

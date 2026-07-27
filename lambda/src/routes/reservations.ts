@@ -263,7 +263,9 @@ function formatTrip(row: any) {
   const rearSeat = parseFloat(row['Rear Facing Seat Amt']) || 0;
   const boosterSeat = parseFloat(row['Booster Seat Amt']) || 0;
   const promoCode = parseFloat(row['Promo Code Amt']) || 0;
-  const total = baseRate + tax + gratuity - discount + other + other2 + other3 + meetGreet + tolls + fwdSeat + rearSeat + boosterSeat + promoCode;
+  // Keep gratuity separate so commission_base can distinguish total_amount from
+  // total_with_gratuity. Browser/server transforms add gratuity exactly once.
+  const total = baseRate + tax - discount + other + other2 + other3 + meetGreet + tolls + fwdSeat + rearSeat + boosterSeat + promoCode;
 
   const clientKeys = Array.isArray(row['Client Keys']) ? Array.from(new Set(row['Client Keys'].filter(Boolean))) : [];
 

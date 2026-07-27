@@ -3,6 +3,24 @@ import { appQuery } from '../appDb.js';
 
 const app = new Hono();
 
+function validateCommissionFields(
+  body: Record<string, any>,
+  fallbackType: string = 'percent',
+): string | null {
+  const type = 'commission_type' in body ? body.commission_type : fallbackType;
+  if (!['percent', 'flat'].includes(type)) return 'commission_type must be percent or flat';
+  if (!('commission_rate' in body)) return null;
+  const rate = body.commission_rate;
+  if (typeof rate !== 'number' || !Number.isFinite(rate)) {
+    return 'commission_rate must be a finite number';
+  }
+  if (rate < 0) return 'commission_rate cannot be negative';
+  if (type === 'percent' && rate > 100) {
+    return 'Percent commission_rate must be between 0 and 100';
+  }
+  return null;
+}
+
 type ClientLinkInput = {
   client_key?: unknown;
   client_type?: unknown;
@@ -234,6 +252,8 @@ app.post('/agencies/:id/regenerate-token', async (c) => {
 app.post('/agencies', async (c) => {
   try {
     const body = await c.req.json();
+    const validationError = validateCommissionFields(body);
+    if (validationError) return c.json({ error: validationError }, 400);
     const fields = [
       'operator_id', 'moovs_company_id', 'name', 'type', 'commission_rate', 'commission_type',
       'commission_base', 'rate_mode', 'price_mode', 'contact_name', 'contact_email', 'contact_phone', 'address', 'city',
@@ -265,6 +285,22 @@ app.patch('/agencies/:id', async (c) => {
   try {
     const id = c.req.param('id');
     const body = await c.req.json();
+    if ('commission_rate' in body || 'commission_type' in body) {
+      const current = await appQuery('SELECT commission_type FROM agencies WHERE id = $1', [id]);
+      if (current.rows.length === 0) return c.json({ error: 'Not found' }, 404);
+      const validationError = validateCommissionFields(body, current.rows[0].commission_type);
+      if (validationError) return c.json({ error: validationError }, 400);
+      if (
+        body.commission_type === 'percent'
+        && !('commission_rate' in body)
+      ) {
+        const rateResult = await appQuery('SELECT commission_rate FROM agencies WHERE id = $1', [id]);
+        const existingRate = Number(rateResult.rows[0]?.commission_rate);
+        if (!Number.isFinite(existingRate) || existingRate < 0 || existingRate > 100) {
+          return c.json({ error: 'Existing commission_rate is invalid for percent commissions' }, 400);
+        }
+      }
+    }
     const allowedFields = [
       'moovs_company_id', 'name', 'type', 'commission_rate', 'commission_type', 'commission_base',
       'rate_mode', 'price_mode',

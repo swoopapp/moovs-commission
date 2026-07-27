@@ -55,7 +55,7 @@ export function KPICards({ totalOwed, paidThisPeriod, activeAgencies, pendingPay
   const values: Record<string, number> = { totalOwed, paidThisPeriod, activeAgencies, pendingPayouts };
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Dashboard metrics">
       {cards.map((card) => {
         const Icon = card.icon;
         const value = values[card.key];
@@ -64,10 +64,10 @@ export function KPICards({ totalOwed, paidThisPeriod, activeAgencies, pendingPay
         return (
           <Card key={card.key} className="py-4">
             <CardContent className="flex items-center gap-4">
-              <div className={`${card.bgColor} p-2.5 rounded-lg`}>
+              <div className={`${card.bgColor} p-2.5 rounded-lg`} aria-hidden="true">
                 <Icon className={`h-5 w-5 ${card.color}`} />
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-sm text-gray-500 font-medium">{card.label}</p>
                 <p className="text-2xl font-bold text-gray-900">{display}</p>
                 <p className="text-xs text-gray-400 mt-0.5">{card.subtitle}</p>

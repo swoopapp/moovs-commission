@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { readCommissionJson, stripPortalToken } from '@/lib/commission-api';
-import type { Agency, Agent, Reservation, ReservationAttribution } from '@/types/commission';
+import type { Agency, Agent, Payout, PayoutReservation, Reservation, ReservationAttribution } from '@/types/commission';
 import type { RouteRateConfig } from '@/types/commissionOperator';
 import { EMPTY_ROUTE_RATE_CONFIG } from '@/types/commissionOperator';
 import { calculateCommission, resolveCommissionRate } from '@/lib/commission-calc';
@@ -12,6 +12,7 @@ import {
   getDemoAgentsByAgency,
   getDemoAttributionsByAgency,
   getDemoPayoutsByAgency,
+  getDemoPayoutReservationsByPayouts,
   getDemoReservationsByIds,
 } from '@/demoData';
 
@@ -175,6 +176,43 @@ async function fetchLivePortalReservations(agency: Agency, moovsOperatorId: stri
     .filter((row): row is Reservation => Boolean(row));
 }
 
+function isInPortalWindow(reservation: Reservation): boolean {
+  if (!reservation.pickup_date) return false;
+  const pickupDate = reservation.pickup_date.slice(0, 10);
+  const { dateFrom, dateTo } = portalWindow();
+  return pickupDate >= dateFrom && pickupDate <= dateTo;
+}
+
+async function payoutReservationRows(payouts: Payout[]): Promise<PayoutReservation[]> {
+  const paidPayoutIds = payouts.filter((payout) => payout.status === 'paid').map((payout) => payout.id);
+  if (paidPayoutIds.length === 0) return [];
+
+  const batches: string[][] = [];
+  for (let index = 0; index < paidPayoutIds.length; index += 100) {
+    batches.push(paidPayoutIds.slice(index, index + 100));
+  }
+  const results = await Promise.all(batches.map((ids) => (
+    readCommissionJson<PayoutReservation[]>(
+      `/payout-reservations?payout_ids=${ids.map(encodeURIComponent).join(',')}`,
+    )
+  )));
+  return results.flat();
+}
+
+function outstandingCommission(
+  attributions: ReservationAttribution[],
+  paidReservationIds: Set<string>,
+): number {
+  return money(attributions.reduce(
+    (sum, attribution) => (
+      paidReservationIds.has(attribution.reservation_id)
+        ? sum
+        : sum + money(attribution.commission_amount)
+    ),
+    0,
+  ));
+}
+
 async function portalRows(agency: Agency, agents: Agent[]) {
   const operatorRow = await readCommissionJson<Row>(
     `/commission-operators/${encodeURIComponent(agency.operator_id)}`,
@@ -186,9 +224,11 @@ async function portalRows(agency: Agency, agents: Agent[]) {
 
   const [persistedAttributions, payouts, liveReservations] = await Promise.all([
     readCommissionJson<ReservationAttribution[]>(`/attributions?agency_id=${encodeURIComponent(agency.id)}`),
-    readCommissionJson<Row[]>(`/payouts?agency_id=${encodeURIComponent(agency.id)}`),
+    readCommissionJson<Payout[]>(`/payouts?agency_id=${encodeURIComponent(agency.id)}`),
     fetchLivePortalReservations(agency, moovsOperatorId),
   ]);
+  const payoutReservations = await payoutReservationRows(payouts);
+  const paidReservationIds = new Set(payoutReservations.map((row) => row.reservation_id));
 
   const persistedReservations = await reservationsByIds(unique(persistedAttributions.map((a) => a.reservation_id)));
   const persistedByTripId = new Map(persistedReservations.map((row) => [row.moovs_trip_id, row]));
@@ -205,7 +245,7 @@ async function portalRows(agency: Agency, agents: Agent[]) {
 
   const liveTripIds = new Set(liveReservations.map((row) => row.moovs_trip_id));
   for (const persistedReservation of persistedReservations) {
-    if (liveTripIds.has(persistedReservation.moovs_trip_id)) continue;
+    if (liveTripIds.has(persistedReservation.moovs_trip_id) || !isInPortalWindow(persistedReservation)) continue;
     reservations.push(persistedReservation);
     const attribution = persistedAttributionByReservationId.get(persistedReservation.id);
     if (attribution) attributions.push(attribution);
@@ -215,6 +255,7 @@ async function portalRows(agency: Agency, agents: Agent[]) {
     reservations: reservations.sort((a, b) => (b.pickup_date || '').localeCompare(a.pickup_date || '')),
     attributions,
     payouts,
+    paidReservationIds,
   };
 }
 
@@ -225,6 +266,10 @@ function demoPortalResponse(token: string): Response | null {
     const attributions = getDemoAttributionsByAgency(agency.id);
     const reservations = getDemoReservationsByIds(attributions.map((attr) => attr.reservation_id));
     const payouts = getDemoPayoutsByAgency(agency.id);
+    const payoutReservations = getDemoPayoutReservationsByPayouts(
+      payouts.filter((payout) => payout.status === 'paid').map((payout) => payout.id),
+    );
+    const paidReservationIds = new Set(payoutReservations.map((row) => row.reservation_id));
 
     return Response.json({
       view: 'gm',
@@ -233,6 +278,7 @@ function demoPortalResponse(token: string): Response | null {
       reservations,
       attributions,
       payouts,
+      outstandingBalance: outstandingCommission(attributions, paidReservationIds),
     });
   }
 
@@ -245,6 +291,11 @@ function demoPortalResponse(token: string): Response | null {
   const allAttributions = getDemoAttributionsByAgency(agentAgency.id);
   const attributions = allAttributions.filter((attr) => attr.agent_id === agent.id);
   const reservations = getDemoReservationsByIds(attributions.map((attr) => attr.reservation_id));
+  const payouts = getDemoPayoutsByAgency(agentAgency.id);
+  const payoutReservations = getDemoPayoutReservationsByPayouts(
+    payouts.filter((payout) => payout.status === 'paid').map((payout) => payout.id),
+  );
+  const paidReservationIds = new Set(payoutReservations.map((row) => row.reservation_id));
 
   return Response.json({
     view: 'agent',
@@ -254,6 +305,7 @@ function demoPortalResponse(token: string): Response | null {
     reservations,
     attributions,
     payouts: [],
+    outstandingBalance: outstandingCommission(attributions, paidReservationIds),
   });
 }
 
@@ -271,7 +323,7 @@ export async function GET(_request: Request, context: { params: Promise<{ token:
 
   if (agency) {
     const agents = await readCommissionJson<Agent[]>(`/agents?agency_id=${encodeURIComponent(agency.id)}`);
-    const { reservations, attributions, payouts } = await portalRows(agency, agents);
+    const { reservations, attributions, payouts, paidReservationIds } = await portalRows(agency, agents);
 
     return Response.json({
       view: 'gm',
@@ -280,6 +332,7 @@ export async function GET(_request: Request, context: { params: Promise<{ token:
       reservations,
       attributions,
       payouts,
+      outstandingBalance: outstandingCommission(attributions, paidReservationIds),
     });
   }
 
@@ -292,7 +345,11 @@ export async function GET(_request: Request, context: { params: Promise<{ token:
   if (!agentAgency) return Response.json({ error: 'Not found' }, { status: 404 });
 
   const agents = await readCommissionJson<Agent[]>(`/agents?agency_id=${encodeURIComponent(agentAgency.id)}`);
-  const { reservations: allReservations, attributions: allAttributions } = await portalRows(agentAgency, agents);
+  const {
+    reservations: allReservations,
+    attributions: allAttributions,
+    paidReservationIds,
+  } = await portalRows(agentAgency, agents);
   const attributions = allAttributions.filter((a) => a.agent_id === agent.id);
   const reservationIds = new Set(attributions.map((a) => a.reservation_id));
   const reservations = allReservations.filter((reservation) => reservationIds.has(reservation.id));
@@ -305,5 +362,6 @@ export async function GET(_request: Request, context: { params: Promise<{ token:
     reservations,
     attributions,
     payouts: [],
+    outstandingBalance: outstandingCommission(attributions, paidReservationIds),
   });
 }

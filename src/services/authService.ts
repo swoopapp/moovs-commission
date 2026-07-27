@@ -21,6 +21,21 @@ export function isAuthenticated(slug: string): boolean {
   }
 }
 
+export async function hasValidOperatorSession(slug: string): Promise<boolean> {
+  const response = await fetch('/api/operator-auth/session', {
+    method: 'GET',
+    cache: 'no-store',
+  });
+
+  if (!response.ok) return false;
+
+  const data = await response.json() as {
+    authenticated?: boolean;
+    operator?: { slug?: string };
+  };
+  return data.authenticated === true && data.operator?.slug === slug;
+}
+
 export async function authenticateWithPassword(slug: string, password: string): Promise<boolean> {
   const response = await fetch('/api/operator-auth/password', {
     method: 'POST',
@@ -57,6 +72,7 @@ export async function authenticateWithPortalToken(slug: string, token: string): 
   return true;
 }
 
-export function logout(slug: string): void {
+export async function logout(slug: string): Promise<void> {
   sessionStorage.removeItem(authKey(slug));
+  await fetch('/api/operator-auth/logout', { method: 'POST' });
 }

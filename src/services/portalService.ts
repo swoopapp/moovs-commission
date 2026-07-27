@@ -8,10 +8,11 @@ export interface PortalData {
   reservations: Reservation[];
   attributions: ReservationAttribution[];
   payouts: Payout[];
+  outstandingBalance: number;
 }
 
-export async function fetchPortalData(token: string): Promise<PortalData | null> {
-  const response = await fetch(`/api/portal-data/${encodeURIComponent(token)}`);
+export async function fetchPortalData(token: string, signal?: AbortSignal): Promise<PortalData | null> {
+  const response = await fetch(`/api/portal-data/${encodeURIComponent(token)}`, { signal });
   if (response.status === 404) return null;
   if (!response.ok) throw new Error(`fetchPortalData failed: ${response.status}`);
   return response.json() as Promise<PortalData>;

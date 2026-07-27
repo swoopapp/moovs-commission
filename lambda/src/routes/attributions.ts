@@ -3,6 +3,29 @@ import { appQuery } from '../appDb.js';
 
 const app = new Hono();
 
+function validateAttribution(item: Record<string, any>): string | null {
+  if (!item.reservation_id || !item.agency_id) return 'Missing reservation_id or agency_id';
+  if (!['percent', 'flat'].includes(item.commission_type)) return 'Invalid commission_type';
+  if (!['base_rate', 'total_amount', 'total_with_gratuity'].includes(item.commission_base)) {
+    return 'Invalid commission_base';
+  }
+  if (typeof item.commission_rate !== 'number' || !Number.isFinite(item.commission_rate)) {
+    return 'commission_rate must be a finite number';
+  }
+  if (
+    item.commission_rate < 0
+    || (item.commission_type === 'percent' && item.commission_rate > 100)
+  ) {
+    return item.commission_type === 'percent'
+      ? 'Percent commission_rate must be between 0 and 100'
+      : 'Flat commission_rate cannot be negative';
+  }
+  if (typeof item.commission_amount !== 'number' || !Number.isFinite(item.commission_amount) || item.commission_amount < 0) {
+    return 'commission_amount must be a non-negative finite number';
+  }
+  return null;
+}
+
 // GET /attributions — ?reservation_ids=X,Y,Z or ?agency_id=X
 app.get('/attributions', async (c) => {
   try {
@@ -41,6 +64,10 @@ app.post('/attributions', async (c) => {
     const body = await c.req.json();
     const items = Array.isArray(body) ? body : [body];
     if (items.length === 0) return c.json([]);
+    for (const item of items) {
+      const validationError = validateAttribution(item);
+      if (validationError) return c.json({ error: validationError }, 400);
+    }
 
     const rows: any[] = [];
     for (const item of items) {

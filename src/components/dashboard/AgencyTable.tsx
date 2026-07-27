@@ -24,7 +24,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '../ui/tooltip';
-import { Plus, Search, ChevronRight, Link2, ChevronLeft, Link, Unlink } from 'lucide-react';
+import { Plus, Search, ChevronRight, Link2, ChevronLeft, Link, Unlink, AlertCircle, RefreshCw } from 'lucide-react';
 import { useIsDemo } from '../../contexts/OperatorContext';
 
 interface AgencyTableProps {
@@ -33,6 +33,7 @@ interface AgencyTableProps {
   page: number;
   pageSize: number;
   loading?: boolean;
+  error?: string | null;
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: number) => void;
   onSearchChange: (search: string) => void;
@@ -69,10 +70,12 @@ export function AgencyTable({
   page,
   pageSize,
   loading,
+  error,
   onPageChange,
   onPageSizeChange,
   onSearchChange,
   onAddAgency,
+  onRefresh,
 }: AgencyTableProps) {
   const isDemo = useIsDemo();
   const [searchInput, setSearchInput] = useState('');
@@ -92,23 +95,26 @@ export function AgencyTable({
       {/* Header controls */}
       <div className="px-4 py-3 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center gap-3">
         <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <label htmlFor="agency-search" className="sr-only">Search agencies</label>
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" aria-hidden="true" />
           <Input
+            id="agency-search"
+            type="search"
             placeholder="Search agencies..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             className="pl-9"
           />
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {!isDemo && (
             <>
               <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { window.location.hash = '#/matching'; }}>
-                <Link2 className="h-4 w-4" />
+                <Link2 className="h-4 w-4" aria-hidden="true" />
                 Match Agencies
               </Button>
               <Button size="sm" className="gap-1.5" onClick={onAddAgency}>
-                <Plus className="h-4 w-4" />
+                <Plus className="h-4 w-4" aria-hidden="true" />
                 Add Agency
               </Button>
             </>
@@ -118,17 +124,32 @@ export function AgencyTable({
 
       {/* Table */}
       {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900" />
+        <div className="flex items-center justify-center py-12" role="status" aria-live="polite">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900" aria-hidden="true" />
+          <span className="sr-only">Loading agencies</span>
+        </div>
+      ) : error ? (
+        <div className="flex flex-col items-center gap-3 px-6 py-12 text-center" role="alert">
+          <AlertCircle className="h-6 w-6 text-red-600" aria-hidden="true" />
+          <div>
+            <p className="font-medium text-gray-900">Agencies could not be loaded</p>
+            <p className="mt-1 text-sm text-gray-600">{error}</p>
+          </div>
+          {onRefresh && (
+            <Button type="button" variant="outline" size="sm" onClick={onRefresh}>
+              <RefreshCw className="h-4 w-4" aria-hidden="true" />
+              Try again
+            </Button>
+          )}
         </div>
       ) : agencies.length === 0 ? (
-        <div className="px-6 py-12 text-center text-gray-500">
-          {totalAgencies === 0
-            ? 'No agencies yet. Add your first agency to get started.'
-            : 'No agencies match your search.'}
+        <div className="px-6 py-12 text-center text-gray-500" role="status">
+          {searchInput.trim()
+            ? 'No agencies match your search.'
+            : 'No agencies yet. Add your first agency to get started.'}
         </div>
       ) : (
-        <Table>
+        <Table aria-label="Agencies">
           <TableHeader>
             <TableRow>
               <TableHead className="w-8"></TableHead>
@@ -156,10 +177,15 @@ export function AgencyTable({
                       <TooltipTrigger asChild>
                         <span>
                           {(agency.client_links?.length || agency.moovs_company_id) ? (
-                            <Link className="h-4 w-4 text-green-500" />
+                            <Link className="h-4 w-4 text-green-500" aria-hidden="true" />
                           ) : (
-                            <Unlink className="h-4 w-4 text-gray-300" />
+                            <Unlink className="h-4 w-4 text-gray-300" aria-hidden="true" />
                           )}
+                          <span className="sr-only">
+                            {(agency.client_links?.length || agency.moovs_company_id)
+                              ? 'Linked to Moovs client'
+                              : 'Not linked to a Moovs client'}
+                          </span>
                         </span>
                       </TooltipTrigger>
                       <TooltipContent>
@@ -168,7 +194,15 @@ export function AgencyTable({
                     </Tooltip>
                   </TooltipProvider>
                 </TableCell>
-                <TableCell className="font-medium">{agency.name}</TableCell>
+                <TableCell className="font-medium">
+                  <a
+                    href={`#/agency/${agency.id}`}
+                    className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-950 focus-visible:ring-offset-2"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    {agency.name}
+                  </a>
+                </TableCell>
                 <TableCell className="text-sm text-gray-500">
                   {agency.contact_name || '—'}
                 </TableCell>
@@ -198,7 +232,7 @@ export function AgencyTable({
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  <ChevronRight className="h-4 w-4 text-gray-400" />
+                  <ChevronRight className="h-4 w-4 text-gray-400" aria-hidden="true" />
                 </TableCell>
               </TableRow>
             ))}
@@ -207,11 +241,11 @@ export function AgencyTable({
       )}
 
       {/* Pagination */}
-      <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
+      <div className="px-4 py-3 border-t border-gray-200 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 text-sm text-gray-500">
           <span>Show</span>
-          <Select value={String(pageSize)} onValueChange={(v) => onPageSizeChange(v === 'all' ? 9999 : parseInt(v))}>
-            <SelectTrigger className="w-[80px] h-8">
+          <Select value={pageSize === 9999 ? 'all' : String(pageSize)} onValueChange={(v) => onPageSizeChange(v === 'all' ? 9999 : parseInt(v))}>
+            <SelectTrigger className="w-[80px] h-8" aria-label="Agencies per page">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -230,8 +264,9 @@ export function AgencyTable({
               size="sm"
               disabled={page === 0}
               onClick={() => onPageChange(page - 1)}
+              aria-label="Previous page"
             >
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className="h-4 w-4" aria-hidden="true" />
             </Button>
             <span className="text-sm text-gray-600">
               Page {page + 1} of {totalPages}
@@ -241,8 +276,9 @@ export function AgencyTable({
               size="sm"
               disabled={page >= totalPages - 1}
               onClick={() => onPageChange(page + 1)}
+              aria-label="Next page"
             >
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
             </Button>
           </div>
         )}

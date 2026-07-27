@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ChevronLeft, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -58,23 +58,34 @@ export function PaymentDetailsStep({
   onSave,
 }: PaymentDetailsStepProps) {
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
 
   async function handleSave(status: PayoutStatus) {
+    if (savingRef.current) return;
+    if (status === 'paid' && !paymentDate) return;
+    if (
+      status === 'paid'
+      && !window.confirm(`Mark this ${formatCurrency(netPayout)} payout for ${selectedTripCount} trip${selectedTripCount === 1 ? '' : 's'} as paid?`)
+    ) {
+      return;
+    }
     try {
+      savingRef.current = true;
       setSaving(true);
       await onSave(status);
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label>Payment Method</Label>
+          <Label htmlFor="payment-method">Payment Method</Label>
           <Select value={method} onValueChange={(val) => onMethodChange(val as PayoutMethod)}>
-            <SelectTrigger>
+            <SelectTrigger id="payment-method">
               <SelectValue placeholder="Select method" />
             </SelectTrigger>
             <SelectContent>
@@ -149,12 +160,12 @@ export function PaymentDetailsStep({
       </div>
 
       {/* Navigation + actions */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Button variant="outline" onClick={onBack} disabled={saving}>
           <ChevronLeft className="mr-1 h-4 w-4" />
           Back
         </Button>
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row">
           <Button
             variant="outline"
             onClick={() => handleSave('draft')}
@@ -165,7 +176,7 @@ export function PaymentDetailsStep({
           </Button>
           <Button
             onClick={() => handleSave('paid')}
-            disabled={saving}
+            disabled={saving || !paymentDate}
           >
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             Mark as Paid

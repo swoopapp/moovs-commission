@@ -296,9 +296,9 @@ export function AddAgentDialog({ open, onOpenChange, agencyId, agency, onCreated
           </div>
 
           <div className="space-y-2">
-            <Label>Role</Label>
+            <Label htmlFor="agent-role">Role</Label>
             <Select value={role} onValueChange={(v) => setRole(v as AgentRole)}>
-              <SelectTrigger>
+              <SelectTrigger id="agent-role">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

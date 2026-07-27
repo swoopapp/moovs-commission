@@ -30,6 +30,7 @@ interface FetchReservationsOptions {
   clientKey?: string;
   limit?: number;
   offset?: number;
+  requireLive?: boolean;
 }
 
 export async function fetchReservations(
@@ -172,11 +173,16 @@ export async function fetchCurrentReservations(
       }
     : undefined;
 
+  const liveRequest = fetchLiveReservations(localOperatorId, moovsOperatorId, options);
+  const liveWithFallback = options?.requireLive
+    ? liveRequest
+    : liveRequest.catch((err) => {
+        console.warn('Live Moovs reservation fetch failed; falling back to persisted snapshots', err);
+        return [] as Reservation[];
+      });
+
   const [liveRows, persistedRows] = await Promise.all([
-    fetchLiveReservations(localOperatorId, moovsOperatorId, options).catch((err) => {
-      console.warn('Live Moovs reservation fetch failed; falling back to persisted snapshots', err);
-      return [] as Reservation[];
-    }),
+    liveWithFallback,
     fetchReservations(localOperatorId, persistedOptions),
   ]);
 

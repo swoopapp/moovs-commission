@@ -113,6 +113,11 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
         }],
       });
       onUpdated(updated);
+      setLinkedClientKeys((current) => {
+        const next = new Set(current);
+        next.add(clientKeyFor(company));
+        return next;
+      });
       setCompanySearch('');
       toast.success('Client linked — trips will now auto-match');
     } catch (err) {
@@ -123,8 +128,16 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
 
   async function handleUnlinkCompany() {
     try {
+      const unlinkedKey = primaryClientKey;
       const updated = await updateAgency(agency.id, { moovs_company_id: null, client_links: [] });
       onUpdated(updated);
+      if (unlinkedKey) {
+        setLinkedClientKeys((current) => {
+          const next = new Set(current);
+          next.delete(unlinkedKey);
+          return next;
+        });
+      }
       toast.success('Client unlinked');
     } catch (err) {
       console.error('Failed to unlink company:', err);
@@ -133,21 +146,39 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
   }
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [autoGenerateStatements, setAutoGenerateStatements] = useState(false);
 
   const portalUrl = `${window.location.origin}/portal/${agency.portal_token}`;
   const isActive = agency.status === 'active';
+  const parsedCommissionRate = Number(commissionRate);
+  const commissionRateValid =
+    commissionRate.trim() !== '' &&
+    Number.isFinite(parsedCommissionRate) &&
+    parsedCommissionRate >= 0 &&
+    (commissionType === 'flat' || parsedCommissionRate <= 100);
+  const contractDatesValid = !contractStart || !contractEnd || contractStart <= contractEnd;
 
   async function handleSave() {
     if (isDemo) {
       toast.info('Demo mode is read-only. Settings are not saved.');
       return;
     }
+    if (!commissionRateValid) {
+      toast.error(
+        commissionType === 'percent'
+          ? 'Commission rate must be between 0% and 100%.'
+          : 'Flat commission must be zero or greater.',
+      );
+      return;
+    }
+    if (!contractDatesValid) {
+      toast.error('Contract start must be on or before contract end.');
+      return;
+    }
     try {
       setSaving(true);
       const updated = await updateAgency(agency.id, {
         type: agencyType,
-        commission_rate: parseFloat(commissionRate) || 0,
+        commission_rate: parsedCommissionRate,
         commission_type: commissionType,
         commission_base: commissionBase,
         rate_mode: rateMode,
@@ -211,9 +242,14 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
     }
   }
 
-  function handleCopyPortalLink() {
-    navigator.clipboard.writeText(portalUrl);
-    toast.success('Portal link copied to clipboard');
+  async function handleCopyPortalLink() {
+    try {
+      await navigator.clipboard.writeText(portalUrl);
+      toast.success('Portal link copied to clipboard');
+    } catch (err) {
+      console.error('Failed to copy agency portal link:', err);
+      toast.error('Could not copy the portal link');
+    }
   }
 
   return (
@@ -291,6 +327,10 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
                 <Input
                   id="commission-rate"
                   type="number"
+                  min="0"
+                  max={commissionType === 'percent' ? '100' : undefined}
+                  step="0.01"
+                  aria-invalid={!commissionRateValid}
                   value={commissionRate}
                   onChange={(e) => setCommissionRate(e.target.value)}
                   className={commissionType === 'flat' ? 'pl-7' : ''}
@@ -299,6 +339,13 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">%</span>
                 )}
               </div>
+              {!commissionRateValid && (
+                <p className="text-sm text-red-600" role="alert">
+                  {commissionType === 'percent'
+                    ? 'Enter a rate from 0% to 100%.'
+                    : 'Enter a flat amount of zero or greater.'}
+                </p>
+              )}
             </div>
 
             {/* Commission base */}
@@ -306,7 +353,7 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
               <div className="space-y-2">
                 <Label>Commission Base</Label>
                 <Select value={commissionBase} onValueChange={(v) => setCommissionBase(v as CommissionBase)}>
-                  <SelectTrigger className="max-w-[250px]">
+                  <SelectTrigger className="max-w-[250px]" aria-label="Commission base">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -379,7 +426,7 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
             <div className="space-y-2">
               <Label>Agency Type</Label>
               <Select value={agencyType} onValueChange={(value) => setAgencyType(value as AgencyType)}>
-                <SelectTrigger className="max-w-[250px]">
+                <SelectTrigger className="max-w-[250px]" aria-label="Agency type">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -438,7 +485,7 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
             <div className="space-y-2">
               <Label htmlFor="market-segment">Market Segment</Label>
               <Select value={marketSegment || 'none'} onValueChange={(v) => setMarketSegment(v === 'none' ? '' : v)}>
-                <SelectTrigger className="max-w-[250px]">
+                <SelectTrigger className="max-w-[250px]" aria-label="Market segment">
                   <SelectValue placeholder="Select segment" />
                 </SelectTrigger>
                 <SelectContent>
@@ -463,7 +510,7 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
             <div className="space-y-2">
               <Label>Payment Terms</Label>
               <Select value={paymentTerms || 'none'} onValueChange={(v) => setPaymentTerms(v === 'none' ? '' : v)}>
-                <SelectTrigger className="max-w-[250px]">
+                <SelectTrigger className="max-w-[250px]" aria-label="Payment terms">
                   <SelectValue placeholder="Select terms" />
                 </SelectTrigger>
                 <SelectContent>
@@ -501,22 +548,11 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
                 />
               </div>
             </div>
-
-            <div className="flex items-start gap-3 py-1">
-              <Switch
-                id="auto-statements"
-                checked={autoGenerateStatements}
-                onCheckedChange={setAutoGenerateStatements}
-              />
-              <div className="space-y-0.5">
-                <Label htmlFor="auto-statements" className="font-medium cursor-pointer">
-                  Auto-generate monthly statements
-                </Label>
-                <p className="text-sm text-gray-500">
-                  Automatically email a commission statement at the end of each billing period
-                </p>
-              </div>
-            </div>
+            {!contractDatesValid && (
+              <p className="text-sm text-red-600" role="alert">
+                Contract start must be on or before contract end.
+              </p>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="notes">Internal Notes</Label>
@@ -529,7 +565,7 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
               />
             </div>
 
-            <Button onClick={handleSave} disabled={saving || isDemo}>
+            <Button onClick={handleSave} disabled={saving || isDemo || !commissionRateValid || !contractDatesValid}>
               {saving ? 'Saving...' : 'Save Settings'}
             </Button>
           </CardContent>
@@ -555,7 +591,7 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
                   <p className="text-xs text-green-600 font-mono">{primaryClientKey}</p>
                 </div>
                 {!isDemo && (
-                  <Button variant="ghost" size="icon" onClick={handleUnlinkCompany} className="text-green-700 hover:text-red-600">
+                  <Button variant="ghost" size="icon" aria-label="Unlink Moovs client" onClick={handleUnlinkCompany} className="text-green-700 hover:text-red-600">
                     <X className="h-4 w-4" />
                   </Button>
                 )}
@@ -624,7 +660,7 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
                 readOnly
                 className="font-mono text-sm"
               />
-              <Button variant="outline" size="icon" onClick={handleCopyPortalLink}>
+              <Button variant="outline" size="icon" aria-label="Copy agency portal link" onClick={handleCopyPortalLink}>
                 <Copy className="h-4 w-4" />
               </Button>
             </div>
@@ -659,7 +695,7 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
                     : 'Agency is suspended and will not receive new commissions'}
                 </p>
               </div>
-              <Switch checked={isActive} onCheckedChange={handleStatusToggle} disabled={isDemo} />
+              <Switch aria-label="Agency active status" checked={isActive} onCheckedChange={handleStatusToggle} disabled={isDemo} />
             </div>
           </CardContent>
         </Card>

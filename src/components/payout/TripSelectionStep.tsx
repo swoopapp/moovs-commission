@@ -22,6 +22,7 @@ import {
 } from '../ui/select';
 import type { TripWithCommission } from './DateRangeStep';
 import type { Agent } from '../../types/commission';
+import { formatDisplayDate } from '../../lib/date';
 
 interface TripSelectionStepProps {
   trips: TripWithCommission[];
@@ -39,8 +40,7 @@ function formatCurrency(amount: number): string {
 }
 
 function formatDate(dateStr: string | null): string {
-  if (!dateStr) return '--';
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return formatDisplayDate(dateStr, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function bookingContactLabel(trip: TripWithCommission, agentMap: Map<string, Agent>): string {
@@ -129,7 +129,7 @@ export function TripSelectionStep({
       {/* Scrollable trip table */}
       <div className="flex justify-end">
         <Select value={agentFilter} onValueChange={handleAgentFilterChange}>
-          <SelectTrigger className="w-[220px]">
+          <SelectTrigger className="w-full sm:w-[220px]" aria-label="Filter payout trips by agent">
             <SelectValue placeholder="All Agents" />
           </SelectTrigger>
           <SelectContent>
@@ -144,11 +144,12 @@ export function TripSelectionStep({
 
       <div className="border rounded-lg overflow-hidden">
         <div className="max-h-64 overflow-y-auto">
-          <Table>
+          <Table aria-label="Trips eligible for payout">
             <TableHeader>
               <TableRow>
                 <TableHead className="w-10">
                   <Checkbox
+                    aria-label="Select all visible trips"
                     checked={allSelected ? true : someSelected ? 'indeterminate' : false}
                     onCheckedChange={toggleAll}
                   />
@@ -166,6 +167,7 @@ export function TripSelectionStep({
                 <TableRow key={t.reservation.id}>
                   <TableCell>
                     <Checkbox
+                      aria-label={`Select trip ${t.reservation.order_number || t.reservation.confirmation_number || t.reservation.id}`}
                       checked={selectedIds.has(t.reservation.id)}
                       onCheckedChange={() => toggleOne(t.reservation.id)}
                     />
@@ -190,6 +192,13 @@ export function TripSelectionStep({
                   </TableCell>
                 </TableRow>
               ))}
+              {visibleTrips.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-8 text-center text-sm text-gray-500">
+                    No trips match this agent filter.
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </div>

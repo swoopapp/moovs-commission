@@ -15,6 +15,7 @@ import { PayoutsTab } from './PayoutsTab';
 import { SettingsTab } from './SettingsTab';
 import { PayoutWizard } from '../payout/PayoutWizard';
 import { toast } from 'sonner';
+import { toLocalDateInput } from '../../lib/date';
 
 interface AgencyDetailViewProps {
   agencyId: string;
@@ -23,17 +24,13 @@ interface AgencyDetailViewProps {
 const RESERVATION_PAGE_SIZE = 50;
 const INITIAL_LOOKBACK_DAYS = 90;
 
-function formatIsoDate(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
 function defaultReservationWindow() {
   const dateTo = new Date();
   const dateFrom = new Date(dateTo);
   dateFrom.setDate(dateFrom.getDate() - INITIAL_LOOKBACK_DAYS);
   return {
-    dateFrom: formatIsoDate(dateFrom),
-    dateTo: formatIsoDate(dateTo),
+    dateFrom: toLocalDateInput(dateFrom),
+    dateTo: toLocalDateInput(dateTo),
   };
 }
 
@@ -53,6 +50,7 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
   const [payouts, setPayouts] = useState<Payout[]>([]);
   const [loading, setLoading] = useState(true);
   const [reservationsLoading, setReservationsLoading] = useState(false);
+  const [reservationsError, setReservationsError] = useState<string | null>(null);
   const [reservationsHasMore, setReservationsHasMore] = useState(false);
   const [reservationOffset, setReservationOffset] = useState(0);
   const [reservationWindow] = useState(defaultReservationWindow);
@@ -107,6 +105,7 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
     async function loadInitialReservations() {
       try {
         setReservationsLoading(true);
+        setReservationsError(null);
         const clientKey = primaryAgencyClientKey(currentAgency);
         const options = {
           dateFrom: reservationWindow.dateFrom,
@@ -126,7 +125,10 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
         setReservationsHasMore(rows.length >= RESERVATION_PAGE_SIZE);
       } catch (err) {
         console.error('Failed to load agency reservations:', err);
-        if (!cancelled) toast.error('Failed to load reservations');
+        if (!cancelled) {
+          setReservationsError('Reservations could not be loaded. Your agency settings and payout history are still available.');
+          toast.error('Failed to load reservations');
+        }
       } finally {
         if (!cancelled) setReservationsLoading(false);
       }
@@ -150,6 +152,7 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
 
     try {
       setReservationsLoading(true);
+      setReservationsError(null);
       const clientKey = primaryAgencyClientKey(agency);
       const options = {
         dateFrom: reservationWindow.dateFrom,
@@ -168,6 +171,7 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
       setReservationsHasMore(rows.length >= RESERVATION_PAGE_SIZE);
     } catch (err) {
       console.error('Failed to load more reservations:', err);
+      setReservationsError('More reservations could not be loaded. The trips already shown are unchanged.');
       toast.error('Failed to load more reservations');
     } finally {
       setReservationsLoading(false);
@@ -207,8 +211,9 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
+      <div className="flex items-center justify-center py-20" role="status" aria-live="polite">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+        <span className="sr-only">Loading agency</span>
       </div>
     );
   }
@@ -223,16 +228,18 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <AgencyHeader agency={agency} stats={stats} onCreatePayout={isDemo ? undefined : handleCreatePayout} />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="reservations">Reservations</TabsTrigger>
-          <TabsTrigger value="agents">Agents</TabsTrigger>
-          <TabsTrigger value="payouts">Payouts</TabsTrigger>
-          <TabsTrigger value="settings">Settings</TabsTrigger>
-        </TabsList>
+        <div className="max-w-full overflow-x-auto pb-1">
+          <TabsList className="min-w-max">
+            <TabsTrigger value="reservations">Reservations</TabsTrigger>
+            <TabsTrigger value="agents">Agents</TabsTrigger>
+            <TabsTrigger value="payouts">Payouts</TabsTrigger>
+            <TabsTrigger value="settings">Settings</TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="reservations" className="mt-4">
           <ReservationsTab
@@ -247,6 +254,10 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
             onAgentFilterChange={setReservationAgentFilter}
             onLoadMore={handleLoadMoreReservations}
             priceMode={agency.price_mode}
+            error={reservationsError}
+            onRetry={() => {
+              setAgency((current) => current ? { ...current } : current);
+            }}
           />
         </TabsContent>
 

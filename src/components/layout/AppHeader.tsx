@@ -13,7 +13,7 @@ export function AppHeader({ onExportClick }: AppHeaderProps) {
 
   return (
     <header className="bg-white border-b border-gray-200">
-      <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto min-h-16 px-4 py-3 flex items-center justify-between gap-3 sm:px-6">
         {/* Left: Logo + Title */}
         <a href="#/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
           {operator.logoUrl ? (
@@ -25,24 +25,26 @@ export function AppHeader({ onExportClick }: AppHeaderProps) {
           ) : (
             <span className="text-lg font-bold text-gray-900">Moovs</span>
           )}
-          <span className="text-gray-300">|</span>
-          <h1 className="text-base font-semibold text-gray-900">Commission Tracking</h1>
-          {isDemo && <Badge variant="secondary" className="bg-teal-100 text-teal-800">Fake demo data</Badge>}
+          <span className="hidden text-gray-300 sm:inline">|</span>
+          <h1 className="hidden text-base font-semibold text-gray-900 sm:block">Commission Tracking</h1>
+          {isDemo && <Badge variant="secondary" className="hidden bg-teal-100 text-teal-800 md:inline-flex">Fake demo data</Badge>}
         </a>
 
         {/* Right: Route Rates + Export + Operator name */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-1 sm:gap-3">
           <Button variant="ghost" size="sm" className="gap-2" asChild>
-            <a href="#/route-rates">
-              <Route className="h-4 w-4" />
-              Route Rates
+            <a href="#/route-rates" aria-label="Route rates">
+              <Route className="h-4 w-4" aria-hidden="true" />
+              <span className="hidden md:inline">Route Rates</span>
             </a>
           </Button>
-          <Button variant="outline" size="sm" className="gap-2" onClick={onExportClick}>
-            <Download className="h-4 w-4" />
-            Export Report
-          </Button>
-          <span className="text-sm text-gray-600 font-medium">{operator.displayName}</span>
+          {onExportClick && (
+            <Button variant="outline" size="sm" className="gap-2" onClick={onExportClick} aria-label="Export report">
+              <Download className="h-4 w-4" aria-hidden="true" />
+              <span className="hidden md:inline">Export Report</span>
+            </Button>
+          )}
+          <span className="hidden text-sm text-gray-600 font-medium lg:inline">{operator.displayName}</span>
         </div>
       </div>
     </header>

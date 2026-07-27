@@ -8,6 +8,5 @@ dist
 lambda/dist
 lambda/deploy.zip
 lambda/node_modules
-lambda/package-lock.json
 
 .next

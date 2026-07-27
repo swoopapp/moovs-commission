@@ -10,6 +10,7 @@ import {
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Plus } from 'lucide-react';
+import { formatDisplayDate } from '../../lib/date';
 
 interface PayoutsTabProps {
   payouts: Payout[];
@@ -21,8 +22,7 @@ function formatCurrency(amount: number): string {
 }
 
 function formatDate(dateStr: string | null): string {
-  if (!dateStr) return '--';
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return formatDisplayDate(dateStr, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function formatPeriod(start: string, end: string): string {
@@ -38,7 +38,7 @@ const PAYOUT_STATUS_COLORS: Record<string, string> = {
 export function PayoutsTab({ payouts, onCreatePayout }: PayoutsTabProps) {
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-gray-500 font-medium">{payouts.length} payouts</p>
         {onCreatePayout && (
           <Button size="sm" className="gap-1.5" onClick={onCreatePayout}>
@@ -53,8 +53,8 @@ export function PayoutsTab({ payouts, onCreatePayout }: PayoutsTabProps) {
           No payouts yet. Create your first payout to track commission payments.
         </div>
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
-          <Table>
+        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+          <Table aria-label="Agency payouts">
             <TableHeader>
               <TableRow>
                 <TableHead>Period</TableHead>

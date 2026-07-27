@@ -10,6 +10,7 @@ import {
   TableCell,
 } from '../ui/table';
 import { Badge } from '../ui/badge';
+import { formatDisplayDate } from '../../lib/date';
 
 interface PortalReservationsProps {
   reservations: Reservation[];
@@ -24,8 +25,7 @@ function formatCurrency(amount: number): string {
 }
 
 function formatDate(dateStr: string | null): string {
-  if (!dateStr) return '--';
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return formatDisplayDate(dateStr, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 const TRIP_STATUS_COLORS: Record<string, string> = {
@@ -118,7 +118,9 @@ export function PortalReservations({ reservations, attributions, agents, view, p
                   <TableCell>{row.reservation.passenger_name || '--'}</TableCell>
                   {view === 'gm' && <TableCell>{agentOrBookingContact(row)}</TableCell>}
                   <TableCell>{row.reservation.trip_type || '--'}</TableCell>
-                  <TableCell className="max-w-[200px] truncate">{formatRoute(row.reservation)}</TableCell>
+                  <TableCell className="max-w-[200px] truncate" title={formatRoute(row.reservation)}>
+                    {formatRoute(row.reservation)}
+                  </TableCell>
                   <TableCell className={`text-right${priceMode === 'gross' ? ' font-semibold text-gray-900' : ''}`}>{formatCurrency(row.reservation.total_amount)}</TableCell>
                   <TableCell className="text-right text-green-600 font-semibold">{formatCurrency(row.attribution.commission_amount)}</TableCell>
                   <TableCell className={`text-right${priceMode === 'net' ? ' font-semibold text-gray-900' : ''}`}>{formatCurrency(netAmount(row.reservation, row.attribution.commission_amount))}</TableCell>

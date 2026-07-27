@@ -16,6 +16,7 @@ import commissionReservations from './routes/commissionReservations.js';
 import attributions from './routes/attributions.js';
 import payoutsCrud from './routes/payoutsCrud.js';
 import upload from './routes/upload.js';
+import authorization from './routes/authorization.js';
 import { getAdminSecret, getDashboardSecret, safeSecretEqual } from './config.js';
 
 const app = new Hono();
@@ -26,7 +27,11 @@ const app = new Hono();
 app.get('/health', (c) => c.json({ status: 'ok' }));
 
 app.use('*', async (c, next) => {
-  if (process.env.REQUIRE_DASHBOARD_AUTH !== 'true') {
+  const explicitLocalBypass = (
+    process.env.ALLOW_UNAUTHENTICATED_LOCAL_DEV === 'true' &&
+    process.env.NODE_ENV !== 'production'
+  );
+  if (explicitLocalBypass) {
     await next();
     return;
   }
@@ -64,6 +69,7 @@ app.route('/', commissionReservations);
 app.route('/', attributions);
 app.route('/', payoutsCrud);
 app.route('/', upload);
+app.route('/', authorization);
 
 // 404 fallback
 app.notFound((c) => c.json({ error: 'Not found' }, 404));

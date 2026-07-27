@@ -14,34 +14,49 @@ function formatCurrency(value: number): string {
 }
 
 export function CommissionTrendChart({ data, agencyNames }: CommissionTrendChartProps) {
+  const totalCommission = data.reduce(
+    (total, row) => total + agencyNames.reduce((sum, name) => sum + Number(row[name] ?? 0), 0),
+    0,
+  );
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base font-semibold">Commission Trend — Top 5 Agencies</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="h-[300px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-              <YAxis tickFormatter={formatCurrency} tick={{ fontSize: 12 }} width={70} />
-              <Tooltip
-                formatter={(value, name) => [formatCurrency(Number(value)), String(name)]}
-              />
-              <Legend />
-              {agencyNames.map((name, i) => (
-                <Bar
-                  key={name}
-                  dataKey={name}
-                  stackId="a"
-                  fill={AGENCY_COLORS[i % AGENCY_COLORS.length]}
-                  radius={i === agencyNames.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
+        {agencyNames.length === 0 ? (
+          <div className="flex h-[300px] items-center justify-center text-center text-sm text-gray-500" role="status">
+            Commission trend data will appear after an agency earns commission.
+          </div>
+        ) : (
+          <div
+            className="h-[300px] w-full"
+            role="img"
+            aria-label={`Six-month commission trend for ${agencyNames.join(', ')}. Total ${formatCurrency(totalCommission)}.`}
+          >
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                <YAxis tickFormatter={formatCurrency} tick={{ fontSize: 12 }} width={64} />
+                <Tooltip
+                  formatter={(value, name) => [formatCurrency(Number(value)), String(name)]}
                 />
-              ))}
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+                <Legend />
+                {agencyNames.map((name, i) => (
+                  <Bar
+                    key={name}
+                    dataKey={name}
+                    stackId="a"
+                    fill={AGENCY_COLORS[i % AGENCY_COLORS.length]}
+                    radius={i === agencyNames.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
+                  />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

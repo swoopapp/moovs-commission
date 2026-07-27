@@ -13,11 +13,14 @@ import {
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Download, FileText } from 'lucide-react';
+import { formatDisplayDate } from '../../lib/date';
+import { downloadCSV } from '../../utils/csvExport';
 
 interface PortalStatementsProps {
   reservations: Reservation[];
   attributions: ReservationAttribution[];
   payouts: Payout[];
+  outstandingBalance: number;
   agencyName: string;
   paymentTerms: string | null;
   priceMode?: PriceMode;
@@ -28,8 +31,7 @@ function formatCurrency(amount: number): string {
 }
 
 function formatDate(dateStr: string | null): string {
-  if (!dateStr) return '--';
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return formatDisplayDate(dateStr, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function formatPeriod(start: string, end: string): string {
@@ -46,41 +48,37 @@ function exportCSV(reservations: Reservation[], attributions: ReservationAttribu
   const reservationMap = new Map<string, Reservation>();
   reservations.forEach((r) => reservationMap.set(r.id, r));
 
-  const csvRows = [
-    ['Date', 'Passenger', 'Trip Type', 'Pickup', 'Dropoff', 'Gross', 'Commission', 'Net', 'Status'].join(','),
-  ];
+  const csvRows: string[][] = [];
 
   for (const attr of attributions) {
     const r = reservationMap.get(attr.reservation_id);
     if (!r) continue;
-    const row = [
+    csvRows.push([
       r.pickup_date || '',
-      `"${(r.passenger_name || '').replace(/"/g, '""')}"`,
+      r.passenger_name || '',
       r.trip_type || '',
-      `"${(r.pickup_location || '').replace(/"/g, '""')}"`,
-      `"${(r.dropoff_location || '').replace(/"/g, '""')}"`,
+      r.pickup_location || '',
+      r.dropoff_location || '',
       r.total_amount.toFixed(2),
       attr.commission_amount.toFixed(2),
       netAmount(r, attr.commission_amount).toFixed(2),
       r.trip_status || '',
-    ];
-    csvRows.push(row.join(','));
+    ]);
   }
 
-  const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
   const slug = agencyName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-  link.download = `commission-statement-${slug}-${new Date().toISOString().slice(0, 10)}.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
+  downloadCSV(
+    `commission-statement-${slug}-${new Date().toISOString().slice(0, 10)}.csv`,
+    ['Date', 'Passenger', 'Trip Type', 'Pickup', 'Dropoff', 'Gross', 'Commission', 'Net', 'Status'],
+    csvRows,
+  );
 }
 
 export function PortalStatements({
   reservations,
   attributions,
   payouts,
+  outstandingBalance,
   agencyName,
   paymentTerms,
   priceMode = 'gross',
@@ -95,16 +93,6 @@ export function PortalStatements({
     [reservations],
   );
   const totalNet = Math.round((totalGross - totalCommission) * 100) / 100;
-
-  const totalPaid = useMemo(
-    () =>
-      payouts
-        .filter((p) => p.status === 'paid')
-        .reduce((sum, p) => sum + p.net_payout, 0),
-    [payouts],
-  );
-
-  const outstandingBalance = totalCommission - totalPaid;
 
   const recentPayouts = useMemo(
     () => payouts.filter((p) => p.status === 'paid').slice(0, 10),

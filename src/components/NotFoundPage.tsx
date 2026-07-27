@@ -1,19 +1,7 @@
-// src/components/NotFoundPage.tsx
-import { useState, useEffect } from 'react';
-import { fetchAllOperators } from '../services/commissionOperatorService';
-import { CommissionOperator } from '../types/commissionOperator';
 import moovsLogo from '../assets/moovs-logo.png';
 import { PoweredByMoovs } from './layout/PoweredByMoovs';
 
 export function NotFoundPage() {
-  const [operators, setOperators] = useState<CommissionOperator[]>([]);
-
-  useEffect(() => {
-    fetchAllOperators()
-      .then(setOperators)
-      .catch(() => {});
-  }, []);
-
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4 pb-16">
       <div className="text-center space-y-6 max-w-md">
@@ -26,31 +14,8 @@ export function NotFoundPage() {
           Commission Tracking
         </h1>
         <p className="text-gray-500">
-          Select your operator to access your commission portal.
+          This commission portal could not be found. Open the secure portal link provided by Moovs.
         </p>
-
-        {operators.length > 0 && (
-          <div className="mt-4 space-y-2">
-            {operators.map(op => (
-              <a
-                key={op.id}
-                href={`/${op.slug}`}
-                className="flex items-center gap-3 px-4 py-3 bg-white border border-gray-200 rounded-lg hover:border-gray-300 hover:shadow-sm transition-all text-left"
-              >
-                {op.logo_url ? (
-                  <img src={op.logo_url} alt="" className="h-8 w-auto shrink-0" />
-                ) : (
-                  <div className="w-8 h-8 bg-gray-100 rounded flex items-center justify-center text-sm font-medium text-gray-500 shrink-0">
-                    {(op.display_name || op.slug)[0]?.toUpperCase()}
-                  </div>
-                )}
-                <span className="font-medium text-gray-900">
-                  {op.display_name || op.slug}
-                </span>
-              </a>
-            ))}
-          </div>
-        )}
       </div>
       <PoweredByMoovs />
     </div>

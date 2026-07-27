@@ -6,6 +6,7 @@ import { PortalReservations } from './PortalReservations';
 import { PortalStatements } from './PortalStatements';
 import moovsLogo from '../../assets/moovs-logo.png';
 import { PoweredByMoovs } from '../layout/PoweredByMoovs';
+import { Button } from '../ui/button';
 
 interface PortalViewProps {
   token: string;
@@ -14,32 +15,41 @@ interface PortalViewProps {
 export function PortalView({ token }: PortalViewProps) {
   const [data, setData] = useState<PortalData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<'not-found' | 'load' | null>(null);
+  const [requestNumber, setRequestNumber] = useState(0);
 
   useEffect(() => {
+    const controller = new AbortController();
     setLoading(true);
-    setError(false);
-    fetchPortalData(token)
+    setError(null);
+    setData(null);
+    fetchPortalData(token, controller.signal)
       .then((result) => {
         if (!result) {
-          setError(true);
+          setError('not-found');
         } else {
           setData(result);
         }
       })
-      .catch(() => {
-        setError(true);
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setError('load');
       })
       .finally(() => {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       });
-  }, [token]);
+
+    return () => controller.abort();
+  }, [token, requestNumber]);
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center space-y-3">
-          <div className="h-8 w-8 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin mx-auto" />
+        <div className="text-center space-y-3" role="status" aria-live="polite">
+          <div
+            className="h-8 w-8 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin mx-auto"
+            aria-hidden="true"
+          />
           <p className="text-sm text-gray-500">Loading portal...</p>
         </div>
       </div>
@@ -47,14 +57,24 @@ export function PortalView({ token }: PortalViewProps) {
   }
 
   if (error || !data) {
+    const notFound = error === 'not-found';
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4 pb-16">
         <div className="text-center space-y-4 max-w-sm">
           <img src={typeof moovsLogo === 'string' ? moovsLogo : moovsLogo.src} alt="Moovs" className="h-10 w-auto mx-auto" />
-          <h1 className="text-xl font-semibold text-gray-900">Link Not Found</h1>
+          <h1 className="text-xl font-semibold text-gray-900">
+            {notFound ? 'Link Not Found' : 'Portal Unavailable'}
+          </h1>
           <p className="text-gray-500 text-sm">
-            This portal link is invalid or has expired. Please contact your operator for an updated link.
+            {notFound
+              ? 'This portal link is invalid. Please contact your operator for an updated link.'
+              : 'We could not load the portal right now. Please try again.'}
           </p>
+          {!notFound && (
+            <Button variant="outline" onClick={() => setRequestNumber((value) => value + 1)}>
+              Try Again
+            </Button>
+          )}
         </div>
         <PoweredByMoovs />
       </div>
@@ -77,6 +97,7 @@ export function PortalView({ token }: PortalViewProps) {
           reservations={data.reservations}
           attributions={data.attributions}
           payouts={data.payouts}
+          outstandingBalance={data.outstandingBalance}
           agencyName={data.agency.name}
           paymentTerms={data.agency.payment_terms}
           priceMode={data.agency.price_mode}

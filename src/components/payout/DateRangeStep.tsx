@@ -56,8 +56,14 @@ export function DateRangeStep({
 
   async function handleLoadTrips() {
     if (!dateFrom || !dateTo) return;
+    if (dateFrom > dateTo) {
+      setLoaded(false);
+      setError('The start date must be on or before the end date.');
+      return;
+    }
     try {
       setLoading(true);
+      setLoaded(false);
       setError(null);
 
       // Fetch attributions, reservations, and already-paid reservation IDs in parallel
@@ -68,6 +74,7 @@ export function DateRangeStep({
           dateTo,
           companyId: agency.moovs_company_id ?? undefined,
           clientKey: primaryAgencyClientKey(agency),
+          requireLive: true,
         }),
         fetchAllPayoutReservations(agencyId),
       ]);
@@ -99,7 +106,7 @@ export function DateRangeStep({
       setLoaded(true);
     } catch (err) {
       console.error('Failed to load trips:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load trips');
+      setError('Trips could not be loaded from Moovs. No payout data has been changed.');
     } finally {
       setLoading(false);
     }
@@ -109,7 +116,7 @@ export function DateRangeStep({
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="date-from">From</Label>
           <div className="relative">
@@ -118,6 +125,7 @@ export function DateRangeStep({
               id="date-from"
               type="date"
               value={dateFrom}
+              max={dateTo || undefined}
               onChange={(e) => {
                 onDateFromChange(e.target.value);
                 setLoaded(false);
@@ -134,6 +142,7 @@ export function DateRangeStep({
               id="date-to"
               type="date"
               value={dateTo}
+              min={dateFrom || undefined}
               onChange={(e) => {
                 onDateToChange(e.target.value);
                 setLoaded(false);
@@ -151,7 +160,7 @@ export function DateRangeStep({
       >
         {loading ? (
           <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
             Loading Trips...
           </>
         ) : (
@@ -160,7 +169,7 @@ export function DateRangeStep({
       </Button>
 
       {error && (
-        <p className="text-sm text-red-600">{error}</p>
+        <p className="text-sm text-red-600" role="alert">{error}</p>
       )}
 
       {loaded && (

@@ -9,11 +9,10 @@ import {
 import { DateRangeStep, TripWithCommission } from './DateRangeStep';
 import { TripSelectionStep } from './TripSelectionStep';
 import { PaymentDetailsStep } from './PaymentDetailsStep';
-import { createPayout, createPayoutReservations } from '../../services/payoutService';
-import { createAttributions } from '../../services/attributionService';
-import { upsertReservations } from '../../services/reservationService';
+import { createPayoutFromTrips } from '../../services/payoutService';
 import { toast } from 'sonner';
 import type { Agency, Agent, PayoutMethod, PayoutStatus } from '../../types/commission';
+import { toLocalDateInput } from '../../lib/date';
 
 interface PayoutWizardProps {
   open: boolean;
@@ -24,10 +23,6 @@ interface PayoutWizardProps {
   agents: Agent[];
   agencyId: string;
   onPayoutCreated: () => void;
-}
-
-function toISODate(date: Date): string {
-  return date.toISOString().split('T')[0];
 }
 
 const STEP_LABELS = ['Date Range', 'Select Trips', 'Payment Details'];
@@ -48,8 +43,8 @@ export function PayoutWizard({
   const now = new Date();
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const [dateFrom, setDateFrom] = useState(toISODate(thirtyDaysAgo));
-  const [dateTo, setDateTo] = useState(toISODate(now));
+  const [dateFrom, setDateFrom] = useState(toLocalDateInput(thirtyDaysAgo));
+  const [dateTo, setDateTo] = useState(toLocalDateInput(now));
   const [trips, setTrips] = useState<TripWithCommission[]>([]);
 
   // Step 2 state
@@ -59,8 +54,9 @@ export function PayoutWizard({
   // Step 3 state
   const [method, setMethod] = useState<PayoutMethod>('ACH');
   const [referenceNumber, setReferenceNumber] = useState('');
-  const [paymentDate, setPaymentDate] = useState(toISODate(now));
+  const [paymentDate, setPaymentDate] = useState(toLocalDateInput(now));
   const [notes, setNotes] = useState('');
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
   // Computed values
   const selectedTrips = trips.filter((t) => selectedIds.has(t.reservation.id));
@@ -73,15 +69,16 @@ export function PayoutWizard({
     const resetNow = new Date();
     const resetThirtyAgo = new Date();
     resetThirtyAgo.setDate(resetThirtyAgo.getDate() - 30);
-    setDateFrom(toISODate(resetThirtyAgo));
-    setDateTo(toISODate(resetNow));
+    setDateFrom(toLocalDateInput(resetThirtyAgo));
+    setDateTo(toLocalDateInput(resetNow));
     setTrips([]);
     setSelectedIds(new Set());
     setAdjustments(0);
     setMethod('ACH');
     setReferenceNumber('');
-    setPaymentDate(toISODate(resetNow));
+    setPaymentDate(toLocalDateInput(resetNow));
     setNotes('');
+    setIdempotencyKey(crypto.randomUUID());
   }, []);
 
   function handleOpenChange(isOpen: boolean) {
@@ -99,47 +96,23 @@ export function PayoutWizard({
 
   async function handleSave(status: PayoutStatus) {
     try {
-      const persistedReservations = await upsertReservations(selectedTrips.map((t) => t.reservation));
-      const persistedByTripId = new Map(persistedReservations.map((reservation) => [reservation.moovs_trip_id, reservation]));
-
-      const persistedAttributions = await createAttributions(
-        selectedTrips.map((trip) => {
-          const reservation = persistedByTripId.get(trip.reservation.moovs_trip_id);
-          if (!reservation) throw new Error(`Failed to snapshot trip ${trip.reservation.moovs_trip_id}`);
-          return {
-            reservation_id: reservation.id,
-            agency_id: trip.attribution.agency_id,
-            agent_id: trip.attribution.agent_id,
-            commission_rate: trip.attribution.commission_rate,
-            commission_type: trip.attribution.commission_type,
-            commission_base: trip.attribution.commission_base,
-            commission_amount: trip.attribution.commission_amount,
-          };
-        }),
-      );
-
-      const payout = await createPayout({
+      await createPayoutFromTrips({
+        idempotency_key: idempotencyKey,
         operator_id: operatorId,
         agency_id: agencyId,
         period_start: dateFrom,
         period_end: dateTo,
-        total_trips: selectedTrips.length,
-        total_revenue: Math.round(totalRevenue * 100) / 100,
-        total_commission: Math.round(totalCommission * 100) / 100,
         adjustments: Math.round(adjustments * 100) / 100,
-        net_payout: Math.round(netPayout * 100) / 100,
         method,
         reference_number: referenceNumber || null,
         status,
         notes: notes || null,
         date_paid: status === 'paid' ? paymentDate : null,
+        items: selectedTrips.map((trip) => ({
+          moovs_trip_id: trip.reservation.moovs_trip_id,
+          agent_id: trip.attribution.agent_id,
+        })),
       });
-
-      // Create junction rows
-      await createPayoutReservations(
-        payout.id,
-        persistedAttributions.map((attribution) => attribution.reservation_id),
-      );
 
       toast.success(
         status === 'paid'
@@ -166,10 +139,15 @@ export function PayoutWizard({
         </DialogHeader>
 
         {/* Step indicator */}
-        <div className="flex items-center justify-center gap-2 py-2">
+        <div
+          className="flex items-center justify-center gap-2 py-2"
+          role="status"
+          aria-label={`Step ${step} of 3: ${STEP_LABELS[step - 1]}`}
+        >
           {[1, 2, 3].map((s) => (
             <div key={s} className="flex items-center gap-2">
               <div
+                aria-hidden="true"
                 className={`flex items-center justify-center w-7 h-7 rounded-full text-xs font-semibold ${
                   s === step
                     ? 'bg-gray-900 text-white'

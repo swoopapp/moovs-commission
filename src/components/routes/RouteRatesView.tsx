@@ -13,8 +13,8 @@ import { toast } from 'sonner';
 
 function parseRate(text: string): number | null {
   if (text.trim() === '') return null;
-  const n = parseFloat(text);
-  return Number.isFinite(n) ? n : null;
+  const n = Number(text);
+  return Number.isFinite(n) && n >= 0 && n <= 100 ? n : null;
 }
 
 export function RouteRatesView() {
@@ -73,10 +73,17 @@ export function RouteRatesView() {
 
   const defaultRateNum = parseRate(defaultRate);
   const assignedCount = Object.values(rates).filter((v) => parseRate(v) != null).length;
+  const hasInvalidRate =
+    (defaultRate.trim() !== '' && defaultRateNum == null) ||
+    Object.values(rates).some((value) => value.trim() !== '' && parseRate(value) == null);
 
   function applyBulk() {
     const value = bulkRate.trim();
     if (filteredRoutes.length === 0) return;
+    if (value !== '' && parseRate(value) == null) {
+      toast.error('Enter a rate from 0% to 100%, or leave it blank to clear rates.');
+      return;
+    }
     setRates((prev) => {
       const next = { ...prev };
       for (const r of filteredRoutes) {
@@ -95,6 +102,10 @@ export function RouteRatesView() {
   async function handleSave() {
     if (isDemo) {
       toast.info('Demo mode is read-only. Route rates are not saved.');
+      return;
+    }
+    if (hasInvalidRate) {
+      toast.error('Commission rates must be between 0% and 100%.');
       return;
     }
     const config: RouteRateConfig = {
@@ -135,13 +146,18 @@ export function RouteRatesView() {
             source inherit these rates for shuttle bookings; routes with no rate fall back to the default below.
           </p>
         </div>
-        <Button onClick={handleSave} disabled={saving || isDemo} className="shrink-0">
+        <Button onClick={handleSave} disabled={saving || isDemo || hasInvalidRate} className="shrink-0">
           {saving ? <><Loader2 className="h-4 w-4 animate-spin mr-1.5" /> Saving...</> : 'Save Route Rates'}
         </Button>
       </div>
       {isDemo && (
         <div className="rounded-lg border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-900">
           Route rates are fake demo values. Edits are disabled so this link can be shared safely.
+        </div>
+      )}
+      {hasInvalidRate && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
+          Fix rates outside the 0% to 100% range before saving.
         </div>
       )}
 
@@ -155,12 +171,18 @@ export function RouteRatesView() {
             <Input
               id="default-rate"
               type="number"
+              min="0"
+              max="100"
+              step="0.01"
               value={defaultRate}
               onChange={(e) => setDefaultRate(e.target.value)}
               placeholder="No fallback"
             />
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">%</span>
           </div>
+          {defaultRate.trim() !== '' && defaultRateNum == null && (
+            <p className="text-sm text-red-600" role="alert">Enter a rate from 0% to 100%.</p>
+          )}
           <p className="text-xs text-gray-500">
             Leave blank to fall back to each agency's own rate instead.
           </p>
@@ -199,6 +221,9 @@ export function RouteRatesView() {
                   <Input
                     id="bulk-rate"
                     type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
                     value={bulkRate}
                     onChange={(e) => setBulkRate(e.target.value)}
                     placeholder="rate"
@@ -246,6 +271,11 @@ export function RouteRatesView() {
                     <div className="relative w-[120px] shrink-0">
                       <Input
                         type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        aria-label={`Commission rate for ${route.name}`}
+                        aria-invalid={value.trim() !== '' && parseRate(value) == null}
                         value={value}
                         onChange={(e) =>
                           setRates((prev) => {

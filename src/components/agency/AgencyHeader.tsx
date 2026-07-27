@@ -2,6 +2,7 @@ import { Agency } from '../../types/commission';
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
+import { formatDisplayDate } from '../../lib/date';
 import {
   ArrowLeft,
   Building2,
@@ -49,8 +50,7 @@ function formatCurrency(amount: number): string {
 }
 
 function formatDate(dateStr: string | null): string {
-  if (!dateStr) return '--';
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return formatDisplayDate(dateStr, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function formatCommission(agency: Agency): string {
@@ -79,10 +79,10 @@ export function AgencyHeader({ agency, stats, onCreatePayout }: AgencyHeaderProp
   return (
     <div className="space-y-4">
       {/* Back button + title row */}
-      <div className="flex items-start gap-4">
+      <div className="flex flex-col items-start gap-3 sm:flex-row sm:gap-4">
         <Button
           variant="ghost"
-          className="mt-1 shrink-0 gap-1.5"
+          className="shrink-0 gap-1.5 sm:mt-1"
           onClick={() => { window.location.hash = '#/'; }}
         >
           <ArrowLeft className="h-4 w-4" />
@@ -90,8 +90,8 @@ export function AgencyHeader({ agency, stats, onCreatePayout }: AgencyHeaderProp
         </Button>
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold text-gray-900 truncate">{agency.name}</h1>
+          <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
+            <h1 className="min-w-0 text-2xl font-bold text-gray-900 sm:truncate">{agency.name}</h1>
             <Badge variant="secondary" className={TYPE_BADGE_COLORS[agency.type] || TYPE_BADGE_COLORS.Other}>
               {agency.type}
             </Badge>
@@ -99,7 +99,7 @@ export function AgencyHeader({ agency, stats, onCreatePayout }: AgencyHeaderProp
               {agency.status}
             </Badge>
             {onCreatePayout && (
-              <Button size="sm" className="gap-1.5 ml-auto" onClick={onCreatePayout}>
+              <Button size="sm" className="w-full gap-1.5 sm:ml-auto sm:w-auto" onClick={onCreatePayout}>
                 <Plus className="h-4 w-4" />
                 Create Payout
               </Button>
@@ -150,7 +150,7 @@ export function AgencyHeader({ agency, stats, onCreatePayout }: AgencyHeaderProp
       </div>
 
       {/* Mini KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-5">
         {miniKPIs.map((kpi) => {
           const Icon = kpi.icon;
           const value = values[kpi.key];
@@ -160,13 +160,13 @@ export function AgencyHeader({ agency, stats, onCreatePayout }: AgencyHeaderProp
             (kpi.key === 'net' && agency.price_mode === 'net');
           return (
             <Card key={kpi.key} className={`py-3${primary ? ' ring-2 ring-gray-900/10' : ''}`}>
-              <CardContent className="flex items-center gap-3">
+              <CardContent className="flex min-w-0 items-center gap-3">
                 <div className={`${kpi.bgColor} p-2 rounded-lg`}>
                   <Icon className={`h-4 w-4 ${kpi.color}`} />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-xs text-gray-500 font-medium">{kpi.label}</p>
-                  <p className="text-lg font-bold text-gray-900">{display}</p>
+                  <p className="truncate text-lg font-bold text-gray-900" title={display}>{display}</p>
                 </div>
               </CardContent>
             </Card>
