@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useIsDemo, useOperator } from '../../contexts/OperatorContext';
-import { Agency, CommissionType, CommissionBase, RateMode, PriceMode } from '../../types/commission';
+import { Agency, AgencyType, CommissionType, CommissionBase, RateMode, PriceMode } from '../../types/commission';
 import { defaultPriceModeForTerms } from '../../lib/commission-calc';
 import { updateAgency, deleteAgency, fetchLinkedClientKeys } from '../../services/agencyService';
 import { fetchMoovsCompanies, MoovsCompany } from '../../services/companyLookupService';
@@ -26,6 +26,8 @@ interface SettingsTabProps {
   onUpdated: (agency: Agency) => void;
 }
 
+const AGENCY_TYPES: AgencyType[] = ['Hotel', 'DMC', 'Travel Agent', 'OTA', 'Concierge', 'Other'];
+
 function clientKeyFor(company: MoovsCompany): string {
   return company.client_key || `${company.client_type || company.source || 'company'}:${company.client_id || company.company_id}`;
 }
@@ -33,6 +35,7 @@ function clientKeyFor(company: MoovsCompany): string {
 export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
   const operator = useOperator();
   const isDemo = useIsDemo();
+  const [agencyType, setAgencyType] = useState<AgencyType>(agency.type);
   const [commissionRate, setCommissionRate] = useState(agency.commission_rate.toString());
   const [commissionType, setCommissionType] = useState<CommissionType>(agency.commission_type);
   const [commissionBase, setCommissionBase] = useState<CommissionBase>(agency.commission_base);
@@ -143,6 +146,7 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
     try {
       setSaving(true);
       const updated = await updateAgency(agency.id, {
+        type: agencyType,
         commission_rate: parseFloat(commissionRate) || 0,
         commission_type: commissionType,
         commission_base: commissionBase,
@@ -372,6 +376,20 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
             <CardTitle className="text-base">Address & Segment</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>Agency Type</Label>
+              <Select value={agencyType} onValueChange={(value) => setAgencyType(value as AgencyType)}>
+                <SelectTrigger className="max-w-[250px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {AGENCY_TYPES.map((type) => (
+                    <SelectItem key={type} value={type}>{type}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="address">Address</Label>
               <Input

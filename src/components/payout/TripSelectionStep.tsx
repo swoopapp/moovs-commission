@@ -55,6 +55,12 @@ function bookingContactLabel(trip: TripWithCommission, agentMap: Map<string, Age
   );
 }
 
+function filterTripsByAgent(trips: TripWithCommission[], agentFilter: string): TripWithCommission[] {
+  if (agentFilter === 'all') return trips;
+  if (agentFilter === 'unassigned') return trips.filter((trip) => !trip.attribution.agent_id);
+  return trips.filter((trip) => trip.attribution.agent_id === agentFilter);
+}
+
 export function TripSelectionStep({
   trips,
   agents,
@@ -69,11 +75,10 @@ export function TripSelectionStep({
   const [agentFilter, setAgentFilter] = useState('all');
 
   const agentMap = useMemo(() => new Map(agents.map((agent) => [agent.id, agent])), [agents]);
-  const visibleTrips = useMemo(() => {
-    if (agentFilter === 'all') return trips;
-    if (agentFilter === 'unassigned') return trips.filter((trip) => !trip.attribution.agent_id);
-    return trips.filter((trip) => trip.attribution.agent_id === agentFilter);
-  }, [trips, agentFilter]);
+  const visibleTrips = useMemo(
+    () => filterTripsByAgent(trips, agentFilter),
+    [trips, agentFilter],
+  );
 
   const visibleSelectedCount = visibleTrips.filter((t) => selectedIds.has(t.reservation.id)).length;
   const allSelected = visibleTrips.length > 0 && visibleSelectedCount === visibleTrips.length;
@@ -99,6 +104,15 @@ export function TripSelectionStep({
     onSelectedIdsChange(next);
   }
 
+  function handleAgentFilterChange(nextFilter: string) {
+    setAgentFilter(nextFilter);
+
+    // The agent filter defines the payout scope. Select only the matching trips
+    // so hidden agents are not accidentally included in the payout totals.
+    const matchingTrips = filterTripsByAgent(trips, nextFilter);
+    onSelectedIdsChange(new Set(matchingTrips.map((trip) => trip.reservation.id)));
+  }
+
   const selectedTrips = trips.filter((t) => selectedIds.has(t.reservation.id));
   const totalRevenue = selectedTrips.reduce((sum, t) => sum + t.reservation.total_amount, 0);
   const totalCommission = selectedTrips.reduce((sum, t) => sum + t.attribution.commission_amount, 0);
@@ -114,7 +128,7 @@ export function TripSelectionStep({
     <div className="space-y-4">
       {/* Scrollable trip table */}
       <div className="flex justify-end">
-        <Select value={agentFilter} onValueChange={setAgentFilter}>
+        <Select value={agentFilter} onValueChange={handleAgentFilterChange}>
           <SelectTrigger className="w-[220px]">
             <SelectValue placeholder="All Agents" />
           </SelectTrigger>
