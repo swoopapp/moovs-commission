@@ -147,6 +147,16 @@ the separate commission PostgreSQL database.
   screen-reader chart data, semantic KPI values, stronger login error semantics,
   and explicit warnings that commission portal links are bearer access.
 
+### Production hotfix
+
+- The initial salvage deployment exposed a CloudFront/WAF query-size limit:
+  agent lookup batches of 100 UUIDs were blocked at the edge with an HTML 403
+  before reaching Next.js.
+- Agent IDs are now batched by encoded query length (maximum 900 characters)
+  instead of item count, with at most four batches requested concurrently.
+- `npm run verify:query-batching` covers ordering, completeness, empty input, and
+  the encoded-size ceiling.
+
 ## Residual risks and blockers
 
 ### High / planned hardening

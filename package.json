@@ -66,6 +66,7 @@
     "typecheck": "tsc --noEmit",
     "verify:authorization": "node --experimental-strip-types scripts/verify-commission-proxy-authorization.mjs",
     "verify:dates": "node --experimental-strip-types scripts/verify-date-handling.mjs",
-    "verify:payout-facts": "node --experimental-strip-types scripts/verify-authoritative-reservation-facts.mjs"
+    "verify:payout-facts": "node --experimental-strip-types scripts/verify-authoritative-reservation-facts.mjs",
+    "verify:query-batching": "node --experimental-strip-types scripts/verify-query-batching.mjs"
   }
 }

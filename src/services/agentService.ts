@@ -8,6 +8,7 @@ import {
   isDemoAgencyId,
   isDemoAgentId,
 } from '../demoData';
+import { batchEncodedQueryValues } from '../lib/query-batching';
 
 const API = config.apiBaseUrl;
 
@@ -41,17 +42,19 @@ export async function fetchAgents(agencyId: string): Promise<Agent[]> {
 export async function fetchAgentsByOperator(_operatorId: string, agencyIds: string[]): Promise<Agent[]> {
   if (agencyIds.length === 0) return [];
   if (agencyIds.some(isDemoAgencyId)) return getDemoAgentsByAgencies(agencyIds);
-  const chunkSize = 100;
-  const chunks: string[][] = [];
-  for (let index = 0; index < agencyIds.length; index += chunkSize) {
-    chunks.push(agencyIds.slice(index, index + chunkSize));
+  const chunks = batchEncodedQueryValues(agencyIds);
+  const agents: Agent[] = [];
+  const concurrency = 4;
+
+  for (let index = 0; index < chunks.length; index += concurrency) {
+    const rows = await Promise.all(chunks.slice(index, index + concurrency).map(async (chunk) => {
+      const ids = chunk.map(encodeURIComponent).join(',');
+      const res = await fetch(`${API}/agents?agency_ids=${ids}`);
+      return handleResponse<Agent[]>(res, 'fetchAgentsByOperator');
+    }));
+    agents.push(...rows.flat());
   }
-  const rows = await Promise.all(chunks.map(async (chunk) => {
-    const ids = chunk.map(encodeURIComponent).join(',');
-    const res = await fetch(`${API}/agents?agency_ids=${ids}`);
-    return handleResponse<Agent[]>(res, 'fetchAgentsByOperator');
-  }));
-  return rows.flat();
+  return agents;
 }
 
 export async function fetchAgentByToken(token: string): Promise<Agent | null> {
