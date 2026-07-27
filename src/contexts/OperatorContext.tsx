@@ -140,8 +140,8 @@ export function OperatorProvider({ slug, children, onNotFound }: OperatorProvide
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center" role="status" aria-live="polite">
-        <div className="animate-pulse text-gray-400 text-lg">Loading...</div>
+      <div className="min-h-screen bg-white flex items-center justify-center" role="status" aria-live="polite" aria-busy="true">
+        <div className="animate-pulse motion-reduce:animate-none text-gray-600 text-lg">Loading operator…</div>
       </div>
     );
   }

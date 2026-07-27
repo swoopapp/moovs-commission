@@ -1,4 +1,5 @@
 import type { Agency, Payout, Reservation, ReservationAttribution } from '../types/commission';
+import { formatDisplayDate, toLocalDateInput } from '../lib/date';
 
 /**
  * Generic CSV download utility. Escapes cell values with double-quote wrapping.
@@ -25,8 +26,7 @@ function formatCurrency(amount: number): string {
 }
 
 function formatDate(dateStr: string | null): string {
-  if (!dateStr) return '';
-  return new Date(dateStr).toLocaleDateString('en-US');
+  return formatDisplayDate(dateStr, {}, '');
 }
 
 /**
@@ -128,7 +128,7 @@ export function exportCommissionStatement(
   });
 
   const safeName = agency.name.replace(/[^a-zA-Z0-9]/g, '_');
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalDateInput(new Date());
   const filename = `commission_statement_${safeName}_${today}.csv`;
 
   downloadCSV(filename, headers, rows);

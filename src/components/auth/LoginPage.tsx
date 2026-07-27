@@ -24,7 +24,7 @@ export function LoginPage({ error }: LoginPageProps) {
               className="h-20 w-auto"
             />
           ) : (
-            <h2 className="text-3xl font-bold text-gray-900">{operator.displayName}</h2>
+            <p className="text-3xl font-bold text-gray-900">{operator.displayName}</p>
           )}
           <div className="text-center">
             <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">
@@ -37,16 +37,16 @@ export function LoginPage({ error }: LoginPageProps) {
         </div>
 
         <div className="space-y-4 rounded-xl border border-gray-200 bg-gray-50 p-4 text-center">
-          <ShieldCheck className="mx-auto h-8 w-8 text-emerald-600" />
+          <ShieldCheck className="mx-auto h-8 w-8 text-emerald-700" aria-hidden="true" />
           <div>
             <h2 className="font-medium text-gray-900">Secure link required</h2>
             <p className="mt-1 text-sm text-gray-500">
               Password login is disabled. Use the secure commission portal link sent by Moovs.
             </p>
           </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-red-700" role="alert">{error}</p>}
           <Button type="button" variant="outline" className="w-full h-11" disabled>
-            <Link2 className="mr-2 h-4 w-4" />
+            <Link2 className="mr-2 h-4 w-4" aria-hidden="true" />
             Waiting for secure link
           </Button>
         </div>

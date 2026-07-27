@@ -32,6 +32,7 @@ the separate commission PostgreSQL database.
 | --- | --- |
 | `npm run verify:authorization` | Pass — 31 ownership/policy assertions |
 | `npm run verify:payout-facts` | Pass — 14 authoritative money/snapshot assertions |
+| `TZ=America/Chicago npm run verify:dates` | Pass — 6 local-calendar assertions |
 | `npm run typecheck` | Pass |
 | `npm run build` | Pass on Next 16.2.12; workspace-root warning resolved |
 | `cd lambda && npm ci --ignore-scripts && npm run build` | Pass from tracked lockfile |
@@ -132,6 +133,19 @@ the separate commission PostgreSQL database.
   `@auth/core` 0.41.3, eliminating the prior critical Auth.js advisories.
 - Added an explicit Turbopack root and tracked `lambda/package-lock.json`.
 - Updated Lambda production dependencies; its production audit is clean.
+
+## Worktree salvage follow-up
+
+- Ported the useful work from the four retired Crystl worktrees without merging
+  their stale auth or payout implementations.
+- Dashboard stats now paginate all agencies and reservation pages, count active
+  agencies independently from the visible/search page, and restrict “Paid This
+  Period” to the current local calendar month.
+- Dashboard, statement, and generic CSV filenames use the local calendar date;
+  date-only CSV values no longer shift west of UTC.
+- Added the missing skip link, agency-matching labels/loading semantics, detailed
+  screen-reader chart data, semantic KPI values, stronger login error semantics,
+  and explicit warnings that commission portal links are bearer access.
 
 ## Residual risks and blockers
 

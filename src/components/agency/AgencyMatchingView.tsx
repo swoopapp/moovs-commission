@@ -166,19 +166,19 @@ export function AgencyMatchingView() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => { window.location.hash = '#/'; }}>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 items-start gap-2 sm:items-center sm:gap-3">
+          <Button variant="ghost" size="icon" aria-label="Back to agencies" onClick={() => { window.location.hash = '#/'; }}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <div>
+          <div className="min-w-0">
             <h2 className="text-lg font-semibold text-gray-900">Agency Matching</h2>
             <p className="text-sm text-gray-500">
               Link agencies to Moovs companies so trips auto-match
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3 text-sm">
+        <div className="flex flex-wrap items-center gap-2 text-sm sm:gap-3">
           <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 font-medium">
             {unmatchedCount} unmatched
           </span>
@@ -195,9 +195,9 @@ export function AgencyMatchingView() {
         {/* Left: Agencies */}
         <Card>
           <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle className="text-base">Agencies</CardTitle>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button
                   variant={showMatched ? 'outline' : 'default'}
                   size="sm"
@@ -217,6 +217,7 @@ export function AgencyMatchingView() {
             <div className="relative mt-2">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
+                aria-label="Search agencies to match"
                 placeholder="Search agencies..."
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
@@ -227,8 +228,9 @@ export function AgencyMatchingView() {
           <CardContent className="p-0">
             <div className="max-h-[500px] overflow-y-auto divide-y">
               {loading ? (
-                <div className="flex items-center justify-center py-12">
+                <div className="flex items-center justify-center py-12" role="status" aria-live="polite">
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900" />
+                  <span className="sr-only">Loading agencies</span>
                 </div>
               ) : agencies.length === 0 ? (
                 <p className="px-4 py-8 text-center text-sm text-gray-500">
@@ -248,7 +250,13 @@ export function AgencyMatchingView() {
                           {company ? company.name : link?.display_name_snapshot || key}
                         </p>
                       </div>
-                      <Button variant="ghost" size="sm" onClick={() => handleUnmatch(a.id)} className="text-gray-400 hover:text-red-600">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label={`Unlink ${a.name}`}
+                        onClick={() => handleUnmatch(a.id)}
+                        className="text-gray-500 hover:text-red-700"
+                      >
                         <X className="h-4 w-4" />
                       </Button>
                     </div>
@@ -331,6 +339,7 @@ export function AgencyMatchingView() {
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                   <Input
+                    aria-label="Search Moovs companies"
                     placeholder="Search companies..."
                     value={companySearch}
                     onChange={(e) => setCompanySearch(e.target.value)}
@@ -375,7 +384,7 @@ export function AgencyMatchingView() {
                           {c.source === 'shuttle_client' ? 'Shuttle client' : 'Company'}
                         </p>
                       </div>
-                      <Check className="h-4 w-4 text-green-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <Check className="h-4 w-4 text-green-700 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
                     </div>
                   </button>
                 ))

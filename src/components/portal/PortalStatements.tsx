@@ -13,7 +13,7 @@ import {
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Download, FileText } from 'lucide-react';
-import { formatDisplayDate } from '../../lib/date';
+import { formatDisplayDate, toLocalDateInput } from '../../lib/date';
 import { downloadCSV } from '../../utils/csvExport';
 
 interface PortalStatementsProps {
@@ -68,7 +68,7 @@ function exportCSV(reservations: Reservation[], attributions: ReservationAttribu
 
   const slug = agencyName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
   downloadCSV(
-    `commission-statement-${slug}-${new Date().toISOString().slice(0, 10)}.csv`,
+    `commission-statement-${slug}-${toLocalDateInput(new Date())}.csv`,
     ['Date', 'Passenger', 'Trip Type', 'Pickup', 'Dropoff', 'Gross', 'Commission', 'Net', 'Status'],
     csvRows,
   );

@@ -34,7 +34,7 @@ const cards = [
   {
     key: 'activeAgencies',
     label: 'Active Agencies',
-    subtitle: 'With active agents',
+    subtitle: 'Currently active',
     icon: Building2,
     color: 'text-blue-600',
     bgColor: 'bg-blue-50',
@@ -67,11 +67,11 @@ export function KPICards({ totalOwed, paidThisPeriod, activeAgencies, pendingPay
               <div className={`${card.bgColor} p-2.5 rounded-lg`} aria-hidden="true">
                 <Icon className={`h-5 w-5 ${card.color}`} />
               </div>
-              <div className="min-w-0">
-                <p className="text-sm text-gray-500 font-medium">{card.label}</p>
-                <p className="text-2xl font-bold text-gray-900">{display}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{card.subtitle}</p>
-              </div>
+              <dl className="min-w-0">
+                <dt className="text-sm font-medium text-gray-600">{card.label}</dt>
+                <dd className="text-2xl font-bold text-gray-900">{display}</dd>
+                <dd className="mt-0.5 text-xs text-gray-600">{card.subtitle}</dd>
+              </dl>
             </CardContent>
           </Card>
         );

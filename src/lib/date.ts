@@ -11,6 +11,10 @@ export function toLocalDateInput(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+export function localMonthKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
 /**
  * Parse calendar dates without letting JavaScript reinterpret YYYY-MM-DD as UTC.
  * That UTC behavior displays the prior day for users west of Greenwich.
@@ -28,4 +32,9 @@ export function formatDisplayDate(
 ): string {
   const date = parseDisplayDate(value);
   return date ? date.toLocaleDateString('en-US', options) : fallback;
+}
+
+export function calendarMonthKey(value: string | null | undefined): string | null {
+  const date = parseDisplayDate(value);
+  return date ? localMonthKey(date) : null;
 }

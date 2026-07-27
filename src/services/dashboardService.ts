@@ -1,10 +1,11 @@
-import { Agency, Agent, ReservationAttribution } from '../types/commission';
+import { Agency, Agent, Reservation, ReservationAttribution } from '../types/commission';
 import type { RouteRateConfig } from '../types/commissionOperator';
 import { fetchAttributionsByAgency } from './attributionService';
 import { mergeAgencyAttributions, primaryAgencyClientKey } from './commissionTripService';
 import { fetchAgentsByOperator } from './agentService';
 import { fetchPayoutsByOperator } from './payoutService';
 import { fetchCurrentReservations } from './reservationService';
+import { calendarMonthKey, localMonthKey, toLocalDateInput } from '../lib/date';
 
 export interface AgencyTableRow {
   agency: Agency;
@@ -46,6 +47,39 @@ export interface DashboardStats {
   topAgencyNames: string[];
 }
 
+const DASHBOARD_RESERVATION_PAGE_SIZE = 250;
+
+async function fetchAllDashboardReservations(
+  operatorId: string,
+  moovsOperatorId: string,
+  options: {
+    dateFrom: string;
+    dateTo: string;
+    companyId?: string;
+    clientKey: string;
+  },
+): Promise<Reservation[]> {
+  const byId = new Map<string, Reservation>();
+  let offset = 0;
+
+  while (true) {
+    const page = await fetchCurrentReservations(operatorId, moovsOperatorId, {
+      ...options,
+      limit: DASHBOARD_RESERVATION_PAGE_SIZE,
+      offset,
+    });
+    const sizeBefore = byId.size;
+    for (const reservation of page) byId.set(reservation.id, reservation);
+
+    // The no-new-rows guard handles persisted fallback responses, which are not
+    // paginated and would otherwise repeat for every live-data offset.
+    if (page.length < DASHBOARD_RESERVATION_PAGE_SIZE || byId.size === sizeBefore) break;
+    offset += DASHBOARD_RESERVATION_PAGE_SIZE;
+  }
+
+  return [...byId.values()];
+}
+
 export async function fetchDashboardStats(
   operatorId: string,
   moovsOperatorId: string,
@@ -53,8 +87,8 @@ export async function fetchDashboardStats(
   routeConfig?: RouteRateConfig | null,
 ): Promise<DashboardStats> {
   const now = new Date();
-  const dateFrom = new Date(now.getFullYear(), now.getMonth() - 5, 1).toISOString().slice(0, 10);
-  const dateTo = now.toISOString().slice(0, 10);
+  const dateFrom = toLocalDateInput(new Date(now.getFullYear(), now.getMonth() - 5, 1));
+  const dateTo = toLocalDateInput(now);
 
   // Fetch attribution snapshots, live client-key reservations, and payouts in parallel.
   // Dashboard numbers should reflect the same auto-match logic as agency detail/payout flows,
@@ -76,13 +110,11 @@ export async function fetchDashboardStats(
       const [persistedAttributions, reservations] = await Promise.all([
         fetchAttributionsByAgency(agency.id),
         clientKey
-          ? fetchCurrentReservations(operatorId, moovsOperatorId, {
+          ? fetchAllDashboardReservations(operatorId, moovsOperatorId, {
               dateFrom,
               dateTo,
               clientKey,
               companyId: agency.moovs_company_id ?? undefined,
-              limit: 250,
-              offset: 0,
             }).catch((err) => {
               console.warn(`Dashboard live reservation fetch failed for agency ${agency.id}`, err);
               return [];
@@ -109,6 +141,7 @@ export async function fetchDashboardStats(
   const paidByAgency = new Map<string, number>();
   let paidThisPeriod = 0;
   let pendingPayouts = 0;
+  const currentMonth = localMonthKey(now);
 
   for (const payout of payouts) {
     if (payout.status === 'paid') {
@@ -116,7 +149,9 @@ export async function fetchDashboardStats(
         payout.agency_id,
         (paidByAgency.get(payout.agency_id) ?? 0) + payout.net_payout,
       );
-      paidThisPeriod += payout.net_payout;
+      if (calendarMonthKey(payout.date_paid) === currentMonth) {
+        paidThisPeriod += payout.net_payout;
+      }
     }
     if (payout.status === 'pending' || payout.status === 'draft') {
       pendingPayouts++;
@@ -176,7 +211,7 @@ export async function fetchDashboardStats(
   const trendMonths: string[] = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const key = localMonthKey(d);
     trendMonths.push(key);
     monthlyEarned.set(key, 0);
     monthlyPaid.set(key, 0);
@@ -185,9 +220,8 @@ export async function fetchDashboardStats(
   // Aggregate earned from attributions
   for (const entry of allAttributionsByAgency) {
     for (const attr of entry.attributions) {
-      const date = new Date(attr.attributed_at);
-      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      if (monthlyEarned.has(key)) {
+      const key = calendarMonthKey(attr.attributed_at);
+      if (key && monthlyEarned.has(key)) {
         monthlyEarned.set(key, (monthlyEarned.get(key) ?? 0) + attr.commission_amount);
       }
     }
@@ -196,9 +230,8 @@ export async function fetchDashboardStats(
   // Aggregate paid from payouts
   for (const payout of payouts) {
     if (payout.status === 'paid' && payout.date_paid) {
-      const date = new Date(payout.date_paid);
-      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      if (monthlyPaid.has(key)) {
+      const key = calendarMonthKey(payout.date_paid);
+      if (key && monthlyPaid.has(key)) {
         monthlyPaid.set(key, (monthlyPaid.get(key) ?? 0) + payout.net_payout);
       }
     }
@@ -224,8 +257,7 @@ export async function fetchDashboardStats(
     for (const attr of entry.attributions) {
       const res = reservationMap.get(attr.reservation_id);
       const dateStr = res?.pickup_date ?? attr.attributed_at;
-      const date = new Date(dateStr);
-      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const key = calendarMonthKey(dateStr);
 
       // Total commission per agency
       agencyTotalCommission.set(
@@ -234,7 +266,7 @@ export async function fetchDashboardStats(
       );
 
       // Per-month commission per agency
-      if (trendMonths.includes(key)) {
+      if (key && trendMonths.includes(key)) {
         if (!agencyMonthMap.has(entry.agencyId)) {
           agencyMonthMap.set(entry.agencyId, new Map());
         }

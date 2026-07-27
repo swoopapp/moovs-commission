@@ -30,32 +30,53 @@ export function CommissionTrendChart({ data, agencyNames }: CommissionTrendChart
             Commission trend data will appear after an agency earns commission.
           </div>
         ) : (
-          <div
-            className="h-[300px] w-full"
-            role="img"
-            aria-label={`Six-month commission trend for ${agencyNames.join(', ')}. Total ${formatCurrency(totalCommission)}.`}
-          >
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                <YAxis tickFormatter={formatCurrency} tick={{ fontSize: 12 }} width={64} />
-                <Tooltip
-                  formatter={(value, name) => [formatCurrency(Number(value)), String(name)]}
-                />
-                <Legend />
-                {agencyNames.map((name, i) => (
-                  <Bar
-                    key={name}
-                    dataKey={name}
-                    stackId="a"
-                    fill={AGENCY_COLORS[i % AGENCY_COLORS.length]}
-                    radius={i === agencyNames.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
+          <>
+            <div
+              className="h-[300px] w-full"
+              role="img"
+              aria-label={`Six-month commission trend for ${agencyNames.join(', ')}. Total ${formatCurrency(totalCommission)}.`}
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                  <YAxis tickFormatter={formatCurrency} tick={{ fontSize: 12 }} width={64} />
+                  <Tooltip
+                    formatter={(value, name) => [formatCurrency(Number(value)), String(name)]}
                   />
+                  <Legend />
+                  {agencyNames.map((name, i) => (
+                    <Bar
+                      key={name}
+                      dataKey={name}
+                      stackId="a"
+                      fill={AGENCY_COLORS[i % AGENCY_COLORS.length]}
+                      radius={i === agencyNames.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
+                    />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <table className="sr-only">
+              <caption>Monthly commission totals for the top five agencies</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Month</th>
+                  {agencyNames.map((name) => <th key={name} scope="col">{name}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {data.map((row) => (
+                  <tr key={String(row.month)}>
+                    <th scope="row">{row.month}</th>
+                    {agencyNames.map((name) => (
+                      <td key={name}>{formatCurrency(Number(row[name] ?? 0))}</td>
+                    ))}
+                  </tr>
                 ))}
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+              </tbody>
+            </table>
+          </>
         )}
       </CardContent>
     </Card>

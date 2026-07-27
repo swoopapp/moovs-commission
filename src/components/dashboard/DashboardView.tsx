@@ -11,9 +11,31 @@ import { Card, CardContent, CardHeader } from '../ui/card';
 import { Skeleton } from '../ui/skeleton';
 import { Button } from '../ui/button';
 import { AlertCircle, RefreshCw } from 'lucide-react';
+import { toLocalDateInput } from '../../lib/date';
 
 interface DashboardViewProps {
   onRegisterExport?: (fn: () => void) => void;
+}
+
+const DASHBOARD_AGENCY_PAGE_SIZE = 250;
+
+async function fetchAllAgencies(operatorId: string): Promise<Agency[]> {
+  const agencies: Agency[] = [];
+  let offset = 0;
+  let total = 0;
+
+  do {
+    const page = await fetchAgenciesPaginated(operatorId, {
+      limit: DASHBOARD_AGENCY_PAGE_SIZE,
+      offset,
+    });
+    agencies.push(...page.agencies);
+    total = page.total;
+    offset += page.agencies.length;
+    if (page.agencies.length === 0) break;
+  } while (agencies.length < total);
+
+  return agencies;
 }
 
 function exportAgenciesToCsv(rows: AgencyTableRow[], agentRows: AgentTableRow[]) {
@@ -63,7 +85,7 @@ function exportAgenciesToCsv(rows: AgencyTableRow[], agentRows: AgentTableRow[])
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `commission-report-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `commission-report-${toLocalDateInput(new Date())}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -123,20 +145,16 @@ export function DashboardView({ onRegisterExport }: DashboardViewProps) {
   const [pageSize, setPageSize] = useState(25);
   const [search, setSearch] = useState('');
 
-  // Load KPI stats (only agencies with attributions — lightweight)
+  // Load complete KPI/export stats independently from the paginated table.
   const loadStats = useCallback(async () => {
     const requestId = ++statsRequestId.current;
     setStatsError(null);
     try {
-      const matchedAgencies = await fetchAgenciesPaginated(operator.operatorId, {
-        limit: 250,
-        offset: 0,
-        matchedOnly: true,
-      });
+      const metricAgencies = await fetchAllAgencies(operator.operatorId);
       const dashStats = await fetchDashboardStats(
         operator.operatorId,
         operator.moovsOperatorId,
-        matchedAgencies.agencies,
+        metricAgencies,
         operator.routeRateConfig,
       );
       if (requestId === statsRequestId.current) {
@@ -204,7 +222,7 @@ export function DashboardView({ onRegisterExport }: DashboardViewProps) {
           <KPICards
             totalOwed={stats.totalOwed}
             paidThisPeriod={stats.paidThisPeriod}
-            activeAgencies={totalAgencies}
+            activeAgencies={stats.activeAgencies}
             pendingPayouts={stats.pendingPayouts}
           />
           <CommissionTrendChart data={stats.agencyMonthlyTrend} agencyNames={stats.topAgencyNames} />

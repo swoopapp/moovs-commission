@@ -27,7 +27,11 @@ export function PortalHeader({ agency, view, currentAgent }: PortalHeaderProps) 
             <span className="text-gray-300" aria-hidden="true">|</span>
             <span className="basis-full sm:basis-auto">Logged in as: {roleDescription}</span>
           </div>
-          <p className="mt-1 text-xs text-gray-400">This link is shareable with your team</p>
+          <p className="mt-1 text-xs text-gray-600">
+            {view === 'gm'
+              ? 'This link provides access to agency commission data. Share it only with authorized teammates.'
+              : 'This personal link provides access to your commission data. Do not forward it.'}
+          </p>
         </div>
       </header>
       <PoweredByMoovs />

@@ -32,8 +32,14 @@ function App() {
   return (
     <AuthGate>
       <div className="min-h-screen bg-gray-50 pb-16">
+        <a
+          href="#main-content"
+          className="fixed left-3 top-3 z-[100] -translate-y-20 rounded-md bg-gray-950 px-4 py-2 text-sm font-medium text-white transition-transform focus:translate-y-0"
+        >
+          Skip to main content
+        </a>
         <AppHeader onExportClick={isDashboard ? handleExport : undefined} />
-        <main className="max-w-7xl mx-auto px-4 py-6 sm:px-6">
+        <main id="main-content" tabIndex={-1} className="max-w-7xl min-w-0 mx-auto px-4 py-6 sm:px-6">
           {isDemo && (
             <div className="mb-6 rounded-lg border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-900">
               Demo mode uses read-only fake data and does not call production customer accounts.
