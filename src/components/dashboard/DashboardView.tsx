@@ -7,6 +7,8 @@ import { KPICards } from './KPICards';
 import { AgencyTable } from './AgencyTable';
 import { CommissionTrendChart } from './CommissionTrendChart';
 import { CreateAgencyDialog } from '../agency/CreateAgencyDialog';
+import { Card, CardContent, CardHeader } from '../ui/card';
+import { Skeleton } from '../ui/skeleton';
 
 interface DashboardViewProps {
   onRegisterExport?: (fn: () => void) => void;
@@ -64,13 +66,50 @@ function exportAgenciesToCsv(rows: AgencyTableRow[], agentRows: AgentTableRow[])
   URL.revokeObjectURL(url);
 }
 
+function DashboardStatsSkeleton() {
+  return (
+    <>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4" aria-label="Loading dashboard metrics">
+        {Array.from({ length: 4 }, (_, index) => (
+          <Card key={index} className="py-4">
+            <CardContent className="flex items-center gap-4">
+              <Skeleton className="h-10 w-10 shrink-0 rounded-lg" />
+              <div className="space-y-2">
+                <Skeleton className="h-3.5 w-28" />
+                <Skeleton className="h-7 w-24" />
+                <Skeleton className="h-3 w-20" />
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <Card aria-label="Loading commission trend">
+        <CardHeader>
+          <Skeleton className="h-4 w-64" />
+        </CardHeader>
+        <CardContent>
+          <div className="flex h-[300px] items-end gap-4 px-6 pb-8 pt-4">
+            {[42, 68, 54, 82, 64, 76].map((height, index) => (
+              <Skeleton
+                key={index}
+                className="flex-1 rounded-t-md rounded-b-none"
+                style={{ height: `${height}%` }}
+              />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </>
+  );
+}
+
 export function DashboardView({ onRegisterExport }: DashboardViewProps) {
   const operator = useOperator();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const [totalAgencies, setTotalAgencies] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [tableLoading, setTableLoading] = useState(false);
+  const [tableLoading, setTableLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [createAgencyOpen, setCreateAgencyOpen] = useState(false);
 
@@ -115,7 +154,6 @@ export function DashboardView({ onRegisterExport }: DashboardViewProps) {
       setError(err instanceof Error ? err.message : 'Failed to load agencies');
     } finally {
       setTableLoading(false);
-      setLoading(false);
     }
   }, [operator.operatorId, page, pageSize, search]);
 
@@ -129,14 +167,6 @@ export function DashboardView({ onRegisterExport }: DashboardViewProps) {
     }
   }, [onRegisterExport, stats]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
-      </div>
-    );
-  }
-
   if (error) {
     return (
       <div className="text-center py-20">
@@ -148,7 +178,7 @@ export function DashboardView({ onRegisterExport }: DashboardViewProps) {
 
   return (
     <div className="space-y-6">
-      {stats && (
+      {stats ? (
         <>
           <KPICards
             totalOwed={stats.totalOwed}
@@ -158,6 +188,8 @@ export function DashboardView({ onRegisterExport }: DashboardViewProps) {
           />
           <CommissionTrendChart data={stats.agencyMonthlyTrend} agencyNames={stats.topAgencyNames} />
         </>
+      ) : (
+        <DashboardStatsSkeleton />
       )}
       <AgencyTable
         agencies={agencies}
