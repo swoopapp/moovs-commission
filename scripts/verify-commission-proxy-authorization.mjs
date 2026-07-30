@@ -106,6 +106,15 @@ await expectAllowed(
   'owned attribution read',
   authorize('attributions', 'GET', { query: '?reservation_ids=reservation-a' }),
 );
+await expectAllowed(
+  'operator-scoped attribution collection',
+  authorize('attributions', 'GET', { query: '?operator_id=operator-a' }),
+);
+await expectDenied(
+  'cross-operator attribution collection',
+  403,
+  authorize('attributions', 'GET', { query: '?operator_id=operator-b' }),
+);
 await expectDenied(
   'cross-operator attribution read',
   403,
@@ -202,4 +211,4 @@ await expectDenied(
 );
 await expectDenied('new/unknown routes fail closed', 403, authorize('future-sensitive-route'));
 
-console.log('Commission proxy authorization verification passed (31 assertions).');
+console.log('Commission proxy authorization verification passed (33 assertions).');

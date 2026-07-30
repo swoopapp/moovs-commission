@@ -7,6 +7,7 @@ import {
   getDemoAttributionsByAgency,
   getDemoAttributionsByReservations,
   isDemoAgencyId,
+  isDemoOperatorId,
   isDemoReservationId,
 } from '../demoData';
 
@@ -43,6 +44,16 @@ export async function fetchAttributionsByAgency(
   if (isDemoAgencyId(agencyId)) return getDemoAttributionsByAgency(agencyId);
   const res = await fetch(`${API}/attributions?agency_id=${encodeURIComponent(agencyId)}`);
   return handleResponse<ReservationAttribution[]>(res, 'fetchAttributionsByAgency');
+}
+
+export async function fetchAttributionsByOperator(
+  operatorId: string,
+): Promise<ReservationAttribution[]> {
+  if (isDemoOperatorId(operatorId)) {
+    return [];
+  }
+  const res = await fetch(`${API}/attributions?operator_id=${encodeURIComponent(operatorId)}`);
+  return handleResponse<ReservationAttribution[]>(res, 'fetchAttributionsByOperator');
 }
 
 // --- CRUD ---

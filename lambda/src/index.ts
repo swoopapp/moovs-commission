@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
 import { handle } from 'hono/aws-lambda';
-import { ensureCommissionTables } from './appDb.js';
 
 // Existing routes (Moovs production read replica)
 import operators from './routes/operators.js';
@@ -80,18 +79,7 @@ app.onError((err, c) => {
   return c.json({ error: 'Internal Server Error' }, 500);
 });
 
-// Ensure tables on cold start
-let tablesReady = false;
-const originalHandler = handle(app);
-
-export const handler = async (event: any, context: any) => {
-  if (!tablesReady) {
-    try {
-      await ensureCommissionTables();
-      tablesReady = true;
-    } catch (err) {
-      console.error('Failed to ensure commission tables:', err);
-    }
-  }
-  return originalHandler(event, context);
-};
+// Schema changes are applied through reviewed migrations, never during request
+// cold starts. Concurrent DDL here previously amplified traffic spikes into
+// database contention and API failures.
+export const handler = handle(app);

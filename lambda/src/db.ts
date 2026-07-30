@@ -14,14 +14,10 @@ export async function getPool(): Promise<pg.Pool> {
     user: process.env.DB_USER || 'swoopuser',
     password: process.env.DB_PASSWORD,
     ssl: { rejectUnauthorized: false },
+    options: '-c search_path=swoop',
     max: 5,
     connectionTimeoutMillis: 10000,
     idleTimeoutMillis: 60000,
-  });
-
-  // Set search_path on each new connection
-  pool.on('connect', (client) => {
-    client.query('SET search_path TO swoop');
   });
 
   return pool;

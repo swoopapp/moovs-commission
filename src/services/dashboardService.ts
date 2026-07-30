@@ -1,11 +1,12 @@
 import { Agency, Agent, Reservation, ReservationAttribution } from '../types/commission';
 import type { RouteRateConfig } from '../types/commissionOperator';
-import { fetchAttributionsByAgency } from './attributionService';
+import { fetchAttributionsByOperator } from './attributionService';
 import { mergeAgencyAttributions, primaryAgencyClientKey } from './commissionTripService';
 import { fetchAgentsByOperator } from './agentService';
 import { fetchPayoutsByOperator } from './payoutService';
-import { fetchCurrentReservations } from './reservationService';
+import { fetchLiveReservations, fetchReservations } from './reservationService';
 import { calendarMonthKey, localMonthKey, toLocalDateInput } from '../lib/date';
+import { mapWithConcurrency } from '../lib/concurrency';
 
 export interface AgencyTableRow {
   agency: Agency;
@@ -49,7 +50,7 @@ export interface DashboardStats {
 
 const DASHBOARD_RESERVATION_PAGE_SIZE = 250;
 
-async function fetchAllDashboardReservations(
+async function fetchAllDashboardLiveReservations(
   operatorId: string,
   moovsOperatorId: string,
   options: {
@@ -63,7 +64,7 @@ async function fetchAllDashboardReservations(
   let offset = 0;
 
   while (true) {
-    const page = await fetchCurrentReservations(operatorId, moovsOperatorId, {
+    const page = await fetchLiveReservations(operatorId, moovsOperatorId, {
       ...options,
       limit: DASHBOARD_RESERVATION_PAGE_SIZE,
       offset,
@@ -71,8 +72,6 @@ async function fetchAllDashboardReservations(
     const sizeBefore = byId.size;
     for (const reservation of page) byId.set(reservation.id, reservation);
 
-    // The no-new-rows guard handles persisted fallback responses, which are not
-    // paginated and would otherwise repeat for every live-data offset.
     if (page.length < DASHBOARD_RESERVATION_PAGE_SIZE || byId.size === sizeBefore) break;
     offset += DASHBOARD_RESERVATION_PAGE_SIZE;
   }
@@ -94,23 +93,35 @@ export async function fetchDashboardStats(
   // Dashboard numbers should reflect the same auto-match logic as agency detail/payout flows,
   // including Shuttle client overrides (`shuttle_client:<uuid>`).
   const agencyIds = agencies.map((agency) => agency.id);
-  const [agents, payouts] = await Promise.all([
+  const [agents, payouts, persistedAttributions, persistedReservations] = await Promise.all([
     fetchAgentsByOperator(operatorId, agencyIds),
     fetchPayoutsByOperator(operatorId),
+    fetchAttributionsByOperator(operatorId),
+    fetchReservations(operatorId, { dateFrom, dateTo }),
   ]);
   const agentsByAgency = new Map<string, Agent[]>();
   for (const agent of agents) {
     if (!agentsByAgency.has(agent.agency_id)) agentsByAgency.set(agent.agency_id, []);
     agentsByAgency.get(agent.agency_id)!.push(agent);
   }
+  const persistedAttributionsByAgency = new Map<string, ReservationAttribution[]>();
+  for (const attribution of persistedAttributions) {
+    if (!persistedAttributionsByAgency.has(attribution.agency_id)) {
+      persistedAttributionsByAgency.set(attribution.agency_id, []);
+    }
+    persistedAttributionsByAgency.get(attribution.agency_id)!.push(attribution);
+  }
 
-  const allAttributionsByAgency = await Promise.all(
-    agencies.map(async (agency) => {
+  // Live Moovs lookups can be expensive for high-volume operators. Keep only two
+  // agencies in flight so one dashboard cannot fan out hundreds of concurrent
+  // Lambda cold starts and exhaust the database.
+  const allAttributionsByAgency = await mapWithConcurrency(
+    agencies,
+    2,
+    async (agency) => {
       const clientKey = primaryAgencyClientKey(agency);
-      const [persistedAttributions, reservations] = await Promise.all([
-        fetchAttributionsByAgency(agency.id),
-        clientKey
-          ? fetchAllDashboardReservations(operatorId, moovsOperatorId, {
+      const liveReservations = clientKey
+        ? await fetchAllDashboardLiveReservations(operatorId, moovsOperatorId, {
               dateFrom,
               dateTo,
               clientKey,
@@ -119,17 +130,17 @@ export async function fetchDashboardStats(
               console.warn(`Dashboard live reservation fetch failed for agency ${agency.id}`, err);
               return [];
             })
-          : Promise.resolve([]),
-      ]);
+        : [];
+      const reservations = [...persistedReservations, ...liveReservations];
       const attributions = mergeAgencyAttributions(
         agency,
         reservations,
-        persistedAttributions,
+        persistedAttributionsByAgency.get(agency.id) ?? [],
         agentsByAgency.get(agency.id) ?? [],
         routeConfig,
       );
       return { agencyId: agency.id, attributions, reservations };
-    }),
+    },
   );
 
   // Build reservation lookup for revenue

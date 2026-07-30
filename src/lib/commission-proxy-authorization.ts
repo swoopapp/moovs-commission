@@ -241,6 +241,12 @@ export async function authorizeOperatorProxyRequest({
           ? { allowed: true }
           : denied(403, 'Forbidden');
       }
+      const operatorId = url.searchParams.get('operator_id');
+      if (operatorId) {
+        return operatorId === session.operatorId
+          ? { allowed: true }
+          : denied(403, 'Forbidden');
+      }
       const agencyId = url.searchParams.get('agency_id');
       if (!agencyId) return denied(400, 'Missing attribution scope');
       return await ownsAgencies(lookupOwnership, [agencyId], session.operatorId)

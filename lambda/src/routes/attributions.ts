@@ -26,10 +26,11 @@ function validateAttribution(item: Record<string, any>): string | null {
   return null;
 }
 
-// GET /attributions — ?reservation_ids=X,Y,Z or ?agency_id=X
+// GET /attributions — ?reservation_ids=X,Y,Z, ?operator_id=X, or ?agency_id=X
 app.get('/attributions', async (c) => {
   try {
     const reservationIds = c.req.query('reservation_ids');
+    const operatorId = c.req.query('operator_id');
     const agencyId = c.req.query('agency_id');
 
     if (reservationIds) {
@@ -43,6 +44,18 @@ app.get('/attributions', async (c) => {
       return c.json(r.rows);
     }
 
+    if (operatorId) {
+      const r = await appQuery(
+        `SELECT ra.*
+         FROM reservation_attributions ra
+         JOIN agencies a ON a.id = ra.agency_id
+         WHERE a.operator_id = $1
+         ORDER BY ra.attributed_at DESC`,
+        [operatorId],
+      );
+      return c.json(r.rows);
+    }
+
     if (agencyId) {
       const r = await appQuery(
         'SELECT * FROM reservation_attributions WHERE agency_id = $1 ORDER BY attributed_at DESC',
@@ -51,7 +64,7 @@ app.get('/attributions', async (c) => {
       return c.json(r.rows);
     }
 
-    return c.json({ error: 'Missing reservation_ids or agency_id' }, 400);
+    return c.json({ error: 'Missing reservation_ids, operator_id, or agency_id' }, 400);
   } catch (err: any) {
     console.error('Error fetching attributions:', err);
     return c.json({ error: 'Internal Server Error' }, 500);
