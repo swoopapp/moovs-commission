@@ -53,7 +53,9 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
   const [reservationsError, setReservationsError] = useState<string | null>(null);
   const [reservationsHasMore, setReservationsHasMore] = useState(false);
   const [reservationOffset, setReservationOffset] = useState(0);
-  const [reservationWindow] = useState(defaultReservationWindow);
+  const [reservationWindow, setReservationWindow] = useState(defaultReservationWindow);
+  const [loadedReservationWindow, setLoadedReservationWindow] = useState(defaultReservationWindow);
+  const [reservationsRetryKey, setReservationsRetryKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('reservations');
   const [reservationAgentFilter, setReservationAgentFilter] = useState('all');
@@ -103,9 +105,30 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
     const currentAgency = agency;
 
     async function loadInitialReservations() {
+      if (!reservationWindow.dateFrom || !reservationWindow.dateTo) {
+        setReservationsLoading(false);
+        setReservations([]);
+        setReservationOffset(0);
+        setReservationsHasMore(false);
+        setReservationsError('Choose both a From date and a To date.');
+        return;
+      }
+
+      if (reservationWindow.dateFrom > reservationWindow.dateTo) {
+        setReservationsLoading(false);
+        setReservations([]);
+        setReservationOffset(0);
+        setReservationsHasMore(false);
+        setReservationsError('The From date must be on or before the To date.');
+        return;
+      }
+
       try {
         setReservationsLoading(true);
         setReservationsError(null);
+        setReservations([]);
+        setReservationOffset(0);
+        setReservationsHasMore(false);
         const clientKey = primaryAgencyClientKey(currentAgency);
         const options = {
           dateFrom: reservationWindow.dateFrom,
@@ -123,6 +146,7 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
         setReservations(mergeReservationRows(rows));
         setReservationOffset(rows.length);
         setReservationsHasMore(rows.length >= RESERVATION_PAGE_SIZE);
+        setLoadedReservationWindow(reservationWindow);
       } catch (err) {
         console.error('Failed to load agency reservations:', err);
         if (!cancelled) {
@@ -138,7 +162,14 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
     return () => {
       cancelled = true;
     };
-  }, [agency, operator.operatorId, operator.moovsOperatorId, reservationWindow.dateFrom, reservationWindow.dateTo]);
+  }, [
+    agency,
+    operator.operatorId,
+    operator.moovsOperatorId,
+    reservationWindow.dateFrom,
+    reservationWindow.dateTo,
+    reservationsRetryKey,
+  ]);
 
   const attributions = useMemo(() => {
     if (!agency) return [];
@@ -155,8 +186,8 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
       setReservationsError(null);
       const clientKey = primaryAgencyClientKey(agency);
       const options = {
-        dateFrom: reservationWindow.dateFrom,
-        dateTo: reservationWindow.dateTo,
+        dateFrom: loadedReservationWindow.dateFrom,
+        dateTo: loadedReservationWindow.dateTo,
         companyId: agency.moovs_company_id ?? undefined,
         clientKey,
         limit: RESERVATION_PAGE_SIZE,
@@ -248,16 +279,22 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
             agents={agents}
             loading={reservationsLoading}
             hasMore={reservationsHasMore}
-            loadedDateFrom={reservationWindow.dateFrom}
-            loadedDateTo={reservationWindow.dateTo}
+            dateFrom={reservationWindow.dateFrom}
+            dateTo={reservationWindow.dateTo}
+            loadedDateFrom={loadedReservationWindow.dateFrom}
+            loadedDateTo={loadedReservationWindow.dateTo}
+            onDateFromChange={(dateFrom) => {
+              setReservationWindow((current) => ({ ...current, dateFrom }));
+            }}
+            onDateToChange={(dateTo) => {
+              setReservationWindow((current) => ({ ...current, dateTo }));
+            }}
             agentFilter={reservationAgentFilter}
             onAgentFilterChange={setReservationAgentFilter}
             onLoadMore={handleLoadMoreReservations}
             priceMode={agency.price_mode}
             error={reservationsError}
-            onRetry={() => {
-              setAgency((current) => current ? { ...current } : current);
-            }}
+            onRetry={() => setReservationsRetryKey((key) => key + 1)}
           />
         </TabsContent>
 

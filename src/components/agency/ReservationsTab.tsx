@@ -27,8 +27,12 @@ interface ReservationsTabProps {
   agents: Agent[];
   loading?: boolean;
   hasMore?: boolean;
+  dateFrom?: string;
+  dateTo?: string;
   loadedDateFrom?: string;
   loadedDateTo?: string;
+  onDateFromChange?: (date: string) => void;
+  onDateToChange?: (date: string) => void;
   agentFilter?: string;
   onAgentFilterChange?: (agentId: string) => void;
   onLoadMore?: () => void;
@@ -77,8 +81,12 @@ export function ReservationsTab({
   agents,
   loading = false,
   hasMore = false,
+  dateFrom: controlledDateFrom,
+  dateTo: controlledDateTo,
   loadedDateFrom,
   loadedDateTo,
+  onDateFromChange,
+  onDateToChange,
   agentFilter: controlledAgentFilter,
   onAgentFilterChange,
   onLoadMore,
@@ -88,18 +96,30 @@ export function ReservationsTab({
 }: ReservationsTabProps) {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [internalAgentFilter, setInternalAgentFilter] = useState<string>('all');
-  const [dateFrom, setDateFrom] = useState<string>(loadedDateFrom ?? '');
-  const [dateTo, setDateTo] = useState<string>(loadedDateTo ?? '');
+  const [internalDateFrom, setInternalDateFrom] = useState<string>(loadedDateFrom ?? '');
+  const [internalDateTo, setInternalDateTo] = useState<string>(loadedDateTo ?? '');
   const agentFilter = controlledAgentFilter ?? internalAgentFilter;
+  const dateFrom = controlledDateFrom ?? internalDateFrom;
+  const dateTo = controlledDateTo ?? internalDateTo;
 
   useEffect(() => {
-    setDateFrom(loadedDateFrom ?? '');
-    setDateTo(loadedDateTo ?? '');
-  }, [loadedDateFrom, loadedDateTo]);
+    if (controlledDateFrom === undefined) setInternalDateFrom(loadedDateFrom ?? '');
+    if (controlledDateTo === undefined) setInternalDateTo(loadedDateTo ?? '');
+  }, [controlledDateFrom, controlledDateTo, loadedDateFrom, loadedDateTo]);
 
   function handleAgentFilterChange(value: string) {
     setInternalAgentFilter(value);
     onAgentFilterChange?.(value);
+  }
+
+  function handleDateFromChange(value: string) {
+    setInternalDateFrom(value);
+    onDateFromChange?.(value);
+  }
+
+  function handleDateToChange(value: string) {
+    setInternalDateTo(value);
+    onDateToChange?.(value);
   }
 
   const agentMap = useMemo(() => {
@@ -178,8 +198,9 @@ export function ReservationsTab({
           <Input
             id="reservation-date-from"
             type="date"
+            required
             value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
+            onChange={(e) => handleDateFromChange(e.target.value)}
             className="h-9 min-w-0 flex-1 xl:w-[150px] xl:flex-none"
           />
         </div>
@@ -188,8 +209,9 @@ export function ReservationsTab({
           <Input
             id="reservation-date-to"
             type="date"
+            required
             value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
+            onChange={(e) => handleDateToChange(e.target.value)}
             className="h-9 min-w-0 flex-1 xl:w-[150px] xl:flex-none"
           />
         </div>
