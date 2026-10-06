@@ -1,3 +1,4 @@
+import { packUuidIds } from '../../src/lib/uuid-packing.ts';
 import adjustmentsRoute from '../src/routes/adjustments.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -253,6 +254,33 @@ try {
     200,
   );
   eq(periodFacts.length, 2);
+  const packedFacts = await request(
+    '/workflow/facts',
+    {
+      operator_id: operator,
+      trip_ids_packed: packUuidIds(
+        manifest.identities.map((i: any) => i.moovs_trip_id),
+      ),
+      include_cancelled: true,
+    },
+    200,
+  );
+  eq(packedFacts.length, 2);
+  await request(
+    '/workflow/facts',
+    { operator_id: operator, trip_ids_packed: 'invalid!' },
+    400,
+  );
+  await request(
+    '/workflow/facts',
+    {
+      operator_id: operator,
+      trip_ids: [trip],
+      trip_ids_packed: packUuidIds([trip]),
+    },
+    400,
+  );
+
   eq(
     periodFacts.find((r: any) => r.moovs_trip_id === shuttle).travel_day,
     '2026-09-30',

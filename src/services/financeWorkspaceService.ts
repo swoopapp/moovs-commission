@@ -1,3 +1,4 @@
+import { packUuidIds } from '../lib/uuid-packing';
 import type { CommissionOperatorConfig } from '../types/commissionOperator';
 import type {
   Agency,
@@ -61,7 +62,16 @@ async function fetchFacts(
   const res = await fetch(`${config.apiBaseUrl}/workflow/facts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ operator_id: operatorId, trip_ids: tripIds }),
+    body: JSON.stringify({
+      operator_id: operatorId,
+      ...(tripIds.every((id) =>
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          id,
+        ),
+      )
+        ? { trip_ids_packed: packUuidIds(tripIds) }
+        : { trip_ids: tripIds }),
+    }),
   });
   if (!res.ok)
     throw new Error(
@@ -116,7 +126,11 @@ export async function fetchFinanceWorkspace(
   const live: Reservation[] = [];
   let offset = 0,
     lastSuccessfulRefresh: string | null = null,
-    timeZone: string | null = null,
+    // Preserve the explicitly verified operator setting when a later fact request fails.
+    // This never marks the failed read healthy or converts stored wall-clock dates.
+    timeZone: string | null = validTimeZone(operator.timeZone)
+      ? operator.timeZone!
+      : null,
     source = 'Moovs replica',
     liveAvailable = true,
     oldestPageRead: string | null = null,

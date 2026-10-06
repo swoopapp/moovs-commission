@@ -1,3 +1,4 @@
+import { unpackUuidIds } from '../../../src/lib/uuid-packing.ts';
 import { fetchAuthoritativeReservations } from '../moovsReservationFacts.js';
 import { Hono } from 'hono';
 import { appQuery, getAppPool } from '../appDb.js';
@@ -293,6 +294,16 @@ export default app;
 
 app.post('/workflow/facts', async (c) => {
   const b = await c.req.json().catch(() => null);
+  if (b?.trip_ids_packed !== undefined) {
+    if (b.trip_ids !== undefined)
+      return c.json({ error: 'Ambiguous fact request' }, 400);
+    try {
+      b.trip_ids = unpackUuidIds(b.trip_ids_packed);
+    } catch {
+      return c.json({ error: 'Invalid packed fact request' }, 400);
+    }
+  }
+
   if (
     !b ||
     typeof b.operator_id !== 'string' ||

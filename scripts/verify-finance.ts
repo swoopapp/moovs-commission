@@ -1,3 +1,4 @@
+import { packUuidIds, unpackUuidIds } from '../src/lib/uuid-packing';
 import { fetchFinancePeriod } from '../src/services/financeReservationService';
 import { fetchWorkflowsForAgencies } from '../src/services/workflowService';
 import assert from 'node:assert/strict';
@@ -356,6 +357,7 @@ function periodMock(m: any, facts: any[]) {
     if (String(url).endsWith('/workflow/period'))
       return new Response(JSON.stringify(m));
     const body = JSON.parse(init.body);
+    body.trip_ids ??= unpackUuidIds(body.trip_ids_packed);
     eq(body.include_cancelled, true);
     return new Response(
       JSON.stringify(
@@ -428,6 +430,24 @@ await rejectsPeriod(
   ),
 );
 
+eq(
+  JSON.stringify({
+    operator_id: '00000000-0000-4000-8000-000000000000',
+    trip_ids_packed: packUuidIds(
+      Array.from({ length: 350 }, () => largeIds[0]),
+    ),
+    include_cancelled: true,
+  }).length < 8000,
+  true,
+);
+eq(unpackUuidIds(packUuidIds(largeIds)), largeIds);
+let badPackRejected = false;
+try {
+  unpackUuidIds('invalid!');
+} catch {
+  badPackRejected = true;
+}
+eq(badPackRejected, true);
 const largeManifestIdentities = Array.from({ length: 1001 }, (_, i) => ({
   ...identities[0],
   moovs_trip_id: '10000000-0000-4000-8000-' + String(i).padStart(12, '0'),
@@ -464,6 +484,7 @@ globalThis.fetch = (async (url: any, init: any) => {
     return new Response(JSON.stringify(largeManifest));
   failedChunkCalls++;
   const body = JSON.parse(init.body);
+  body.trip_ids ??= unpackUuidIds(body.trip_ids_packed);
   if (body.trip_ids.includes(largeManifestFacts[0].moovs_trip_id))
     return new Response('{}', { status: 503 });
   return new Response(
@@ -487,6 +508,7 @@ globalThis.fetch = (async (url: any, init: any) => {
   if (String(url).endsWith('/workflow/period'))
     return new Response(JSON.stringify(largeManifest));
   const body = JSON.parse(init.body);
+  body.trip_ids ??= unpackUuidIds(body.trip_ids_packed);
   const facts = largeManifestFacts.filter((f) =>
     body.trip_ids.includes(f.moovs_trip_id),
   );

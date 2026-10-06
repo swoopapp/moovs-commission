@@ -1,3 +1,4 @@
+import { packUuidIds } from '../lib/uuid-packing';
 import { config } from '../config/env';
 import type { Reservation } from '../types/commission';
 import { isDemoOperatorId } from '../demoData';
@@ -78,7 +79,7 @@ export async function fetchFinancePeriod(
   }
   const ids = [...expected.keys()],
     chunks: string[][] = [];
-  for (let i = 0; i < ids.length; i += 500) chunks.push(ids.slice(i, i + 500));
+  for (let i = 0; i < ids.length; i += 350) chunks.push(ids.slice(i, i + 350));
   const controller = new AbortController();
   const pages = await mapWithConcurrency(chunks, 3, async (chunk) => {
     if (controller.signal.aborted)
@@ -89,7 +90,7 @@ export async function fetchFinancePeriod(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         operator_id: operatorId,
-        trip_ids: chunk,
+        trip_ids_packed: packUuidIds(chunk),
         include_cancelled: true,
       }),
     });
