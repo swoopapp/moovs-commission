@@ -1,3 +1,4 @@
+import { invalidateWorkspaceReads } from '../lib/workspace-session';
 import {
   createContext,
   useCallback,
@@ -67,7 +68,6 @@ export function useInvalidateWorkspaceReads() {
       'Workspace invalidation requires an authenticated workspace',
     );
   return useCallback(() => {
-    for (const key of values.keys())
-      if (key.endsWith(':data')) values.delete(key);
+    invalidateWorkspaceReads(values);
   }, [values]);
 }

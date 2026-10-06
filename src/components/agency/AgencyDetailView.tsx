@@ -1,3 +1,4 @@
+import { useInvalidateWorkspaceReads } from '../../contexts/WorkspaceSessionContext';
 import { CommissionAdjustments } from '../commissions/CommissionAdjustments';
 import { CommissionDetail } from '../commissions/CommissionDetail';
 import { AgencyRulesEditor } from '../commissions/AgencyRulesEditor';
@@ -50,6 +51,7 @@ function mergeReservationRows(rows: Reservation[]): Reservation[] {
 
 export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
   const operator = useOperator();
+  const invalidateReads = useInvalidateWorkspaceReads();
   const isDemo = useIsDemo();
   const [workflow, setWorkflow] = useState<WorkflowData>(emptyWorkflow);
   const [workflowError, setWorkflowError] = useState(false);
@@ -108,6 +110,8 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
       setLoading(false);
     }
   }, [agencyId, operator.operatorId, operator.moovsOperatorId]);
+
+  const afterChange = () => { invalidateReads(); return loadData(); };
 
   useEffect(() => {
     loadData();
@@ -320,29 +324,29 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
             reservations={reservations}
             agencyId={agencyId}
             agency={agency}
-            onAgentCreated={loadData}
+            onAgentCreated={afterChange}
             onFilterByAgent={handleFilterByAgent}
           />
         </TabsContent>
 
         <TabsContent value="payouts" className="mt-4">
-          <SettlementRecords payouts={payouts} operatorId={operator.operatorId} readOnly={isDemo || workflowError} onSaved={loadData}/>
-          <div className="mt-5"><CommissionAdjustments agency={agency} operatorId={operator.operatorId} payouts={payouts} adjustments={workflow.adjustments??[]} readOnly={isDemo||workflowError} onSaved={loadData}/></div>
+          <SettlementRecords payouts={payouts} operatorId={operator.operatorId} readOnly={isDemo || workflowError} onSaved={afterChange}/>
+          <div className="mt-5"><CommissionAdjustments agency={agency} operatorId={operator.operatorId} payouts={payouts} adjustments={workflow.adjustments??[]} readOnly={isDemo||workflowError} onSaved={afterChange}/></div>
           {!isDemo && <Button variant="outline" className="mt-4" onClick={handleCreatePayout} disabled={workflowError}>Prepare agency settlement</Button>}
         </TabsContent>
 
-        <TabsContent value="rules" className="mt-4"><AgencyRulesEditor agency={agency} reservations={reservations} onSaved={loadData}/></TabsContent>
+        <TabsContent value="rules" className="mt-4"><AgencyRulesEditor agency={agency} reservations={reservations} onSaved={afterChange}/></TabsContent>
 
         <TabsContent value="settings" className="mt-4">
           <SettingsTab
             agency={agency}
-            onUpdated={(updated) => setAgency(updated)}
+            onUpdated={(updated) => { invalidateReads(); setAgency(updated); }}
           />
         </TabsContent>
       </Tabs>
 
       {workflowError && <p role="alert" className="mt-4 text-sm text-amber-800">Commission review unavailable. Backend/schema release required; settlement preparation is disabled.</p>}
-      {detail && <CommissionDetail {...detail} agency={agency} agents={agents} config={operator.routeRateConfig} operatorId={operator.operatorId} readOnly={isDemo || workflowError} review={workflow.reviews.find(r=>r.moovs_trip_id===detail.reservation.moovs_trip_id)} events={workflow.events} settled={reservedIds.has(detail.reservation.id)} onClose={()=>setDetail(null)} onSaved={loadData}/>}
+      {detail && <CommissionDetail {...detail} agency={agency} agents={agents} config={operator.routeRateConfig} operatorId={operator.operatorId} readOnly={isDemo || workflowError} review={workflow.reviews.find(r=>r.moovs_trip_id===detail.reservation.moovs_trip_id)} events={workflow.events} settled={reservedIds.has(detail.reservation.id)} onClose={()=>setDetail(null)} onSaved={afterChange}/>}
       {!isDemo && (
         <PayoutWizard
           open={payoutWizardOpen}
@@ -352,7 +356,7 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
           agency={agency}
           agents={agents}
           agencyId={agencyId}
-          onPayoutCreated={loadData}
+          onPayoutCreated={afterChange}
         />
       )}
     </div>

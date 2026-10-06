@@ -1,4 +1,4 @@
-import { useWorkspaceSessionState } from '../../contexts/WorkspaceSessionContext';
+import { useWorkspaceSessionState, useInvalidateWorkspaceReads } from '../../contexts/WorkspaceSessionContext';
 import { DataHealth } from '../commissions/DataHealth';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useOperator } from '../../contexts/OperatorContext';
@@ -117,6 +117,7 @@ function DashboardStatsSkeleton() {
 
 export function DashboardView({ onRegisterExport, showOverview = true }: DashboardViewProps) {
   const operator = useOperator();
+  const invalidateReads = useInvalidateWorkspaceReads();
   const [stats, setStats] = useWorkspaceSessionState<DashboardStats | null>('overview:data', null);
   const [agencies, setAgencies] = useWorkspaceSessionState<Agency[]>('overview:agencies', []);
   const [totalAgencies, setTotalAgencies] = useWorkspaceSessionState('overview:total-agencies', 0);
@@ -264,7 +265,7 @@ export function DashboardView({ onRegisterExport, showOverview = true }: Dashboa
       <CreateAgencyDialog
         open={createAgencyOpen}
         onOpenChange={setCreateAgencyOpen}
-        onCreated={() => { loadAgencies(); loadStats(); }}
+        onCreated={() => { invalidateReads(); loadAgencies(); loadStats(); }}
       />
     </div>
   );

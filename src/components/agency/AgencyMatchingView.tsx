@@ -1,3 +1,4 @@
+import { useInvalidateWorkspaceReads } from '../../contexts/WorkspaceSessionContext';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useOperator } from '../../contexts/OperatorContext';
 import { fetchAgenciesPaginated, updateAgency, fetchLinkedClientKeys } from '../../services/agencyService';
@@ -23,6 +24,7 @@ function primaryClientKey(agency: Agency): string | null {
 
 export function AgencyMatchingView() {
   const operator = useOperator();
+  const invalidateReads = useInvalidateWorkspaceReads();
   const [companies, setCompanies] = useState<MoovsCompany[]>([]);
   const [loading, setLoading] = useState(true);
   const [companySearch, setCompanySearch] = useState('');
@@ -138,6 +140,7 @@ export function AgencyMatchingView() {
           is_primary: true,
         }],
       });
+      invalidateReads();
       setSelectedAgencyId(null);
       setCompanySearch('');
       toast.success(`Linked to ${company.name || 'client'}`);
@@ -152,6 +155,7 @@ export function AgencyMatchingView() {
   async function handleUnmatch(agencyId: string) {
     try {
       await updateAgency(agencyId, { moovs_company_id: null, client_links: [] });
+      invalidateReads();
       toast.success('Client unlinked');
       loadAgencies();
       loadCounts();

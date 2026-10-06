@@ -1,3 +1,4 @@
+import { invalidateWorkspaceReads } from '../src/lib/workspace-session';
 import assert from 'node:assert/strict';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { DataHealth } from '../src/components/commissions/DataHealth';
@@ -92,4 +93,26 @@ const corrections = renderToStaticMarkup(
 );
 assert.ok(corrections.includes('href="#/settlement"'));
 assert.ok(corrections.includes('-$5.00 pending commission corrections'));
-console.log('Shared compact data status verification passed (26 assertions).');
+const cache = new Map<string, unknown>([
+  ['settlement:data', {}],
+  ['review:data', {}],
+  ['overview:data', {}],
+  ['overview:table-signature', 'loaded'],
+  ['settlement:from', '2026-09-01'],
+  ['settlement:reconciliation-filter', 'all'],
+  ['overview:search', 'agency'],
+]);
+invalidateWorkspaceReads(cache);
+for (const key of [
+  'settlement:data',
+  'review:data',
+  'overview:data',
+  'overview:table-signature',
+])
+  assert.ok(!cache.has(key));
+assert.equal(cache.get('settlement:from'), '2026-09-01');
+assert.equal(cache.get('settlement:reconciliation-filter'), 'all');
+assert.equal(cache.get('overview:search'), 'agency');
+console.log(
+  'Shared compact data status and session invalidation verification passed (33 assertions).',
+);

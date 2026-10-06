@@ -1,3 +1,4 @@
+import { useInvalidateWorkspaceReads } from '../../contexts/WorkspaceSessionContext';
 import { useEffect, useMemo, useState } from 'react';
 import { useIsDemo, useOperator, useRefreshOperator } from '../../contexts/OperatorContext';
 import { ShuttleRoute, RouteRateConfig } from '../../types/commissionOperator';
@@ -19,6 +20,7 @@ function parseRate(text: string): number | null {
 
 export function RouteRatesView() {
   const operator = useOperator();
+  const invalidateReads = useInvalidateWorkspaceReads();
   const refreshOperator = useRefreshOperator();
   const isDemo = useIsDemo();
 
@@ -121,6 +123,7 @@ export function RouteRatesView() {
     try {
       setSaving(true);
       await updateOperatorRouteRates(operator.operatorId, config);
+      invalidateReads();
       await refreshOperator();
       toast.success('Route rates saved');
     } catch (err) {
