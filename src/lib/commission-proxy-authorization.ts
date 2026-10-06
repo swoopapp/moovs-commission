@@ -139,8 +139,19 @@ export async function authorizeOperatorProxyRequest({
   }
   if (path === 'workflow') {
     if (method !== 'GET') return denied(405, 'Method not allowed');
+    const batch = url.searchParams.get('agency_ids');
     const agencyId = nonEmptyString(url.searchParams.get('agency_id'));
-    return agencyId && await ownsAgencies(lookupOwnership, [agencyId], session.operatorId) ? { allowed: true } : denied(403, 'Forbidden');
+    const ids = batch !== null ? csvIds(batch) : agencyId ? [agencyId] : [];
+    if (
+      (batch !== null && url.searchParams.has('agency_id')) ||
+      !ids ||
+      !ids.length ||
+      ids.length > 50
+    )
+      return denied(403, 'Forbidden');
+    return (await ownsAgencies(lookupOwnership, ids, session.operatorId))
+      ? { allowed: true }
+      : denied(403, 'Forbidden');
   }
   if (['workflow/review', 'workflow/rules', 'workflow/question-resolution', 'workflow/correction'].includes(path)) {
     if (method !== 'POST') return denied(405, 'Method not allowed');

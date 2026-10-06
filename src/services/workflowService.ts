@@ -1,3 +1,5 @@
+import { batchEncodedQueryValues } from '../lib/query-batching';
+import { mapWithConcurrency } from '../lib/concurrency';
 import { config } from '../config/env';
 import {
   isDemoAgencyId,
@@ -20,6 +22,43 @@ export async function fetchWorkflow(agencyId: string): Promise<WorkflowData> {
       'Commission workflow unavailable. A reviewed backend/schema release is required.',
     );
   return res.json();
+}
+// Keep query strings within CloudFront/WAF limits. A missing agency is an incomplete read, not an empty workflow.
+export async function fetchWorkflowsForAgencies(
+  agencyIds: string[],
+): Promise<Record<string, WorkflowData>> {
+  const ids = [...new Set(agencyIds)];
+  const result: Record<string, WorkflowData> = {};
+  const real = ids.filter((id) => !isDemoAgencyId(id));
+  for (const id of ids.filter(isDemoAgencyId)) result[id] = getDemoWorkflow(id);
+  const batches = await mapWithConcurrency(
+    batchEncodedQueryValues(real),
+    2,
+    async (chunk) => {
+      const res = await fetch(
+        `${config.apiBaseUrl}/workflow?agency_ids=${chunk.map(encodeURIComponent).join(',')}`,
+      );
+      if (!res.ok)
+        throw new Error(
+          'Commission workflow unavailable. Refresh before preparing settlements.',
+        );
+      const data = await res.json();
+      for (const id of chunk) {
+        const workflow = data?.[id];
+        if (
+          !workflow ||
+          !['reviews', 'events', 'questions', 'adjustments'].every((key) =>
+            Array.isArray(workflow[key]),
+          )
+        )
+          throw new Error(
+            'Incomplete commission workflow read. Refresh before preparing settlements.',
+          );
+      }
+      return Object.fromEntries(chunk.map((id) => [id, data[id]]));
+    },
+  );
+  return Object.assign(result, ...batches);
 }
 export async function saveWorkflow(
   action: 'review' | 'rules' | 'question-resolution' | 'correction',

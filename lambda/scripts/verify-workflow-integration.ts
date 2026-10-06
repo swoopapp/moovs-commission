@@ -281,6 +281,55 @@ try {
   await request('/workflow/review', review, 200);
   const w = await request(`/workflow?agency_id=${agency}`, null, 200, 'GET');
   eq(w.reviews[0].expected_payment_date, '2026-10-15');
+  // Disposable-only rows: batch isolation, per-agency event limit and compatible date/amount shapes.
+  await pool.query(
+    "INSERT INTO commission_workflow_events(agency_id,action,actor,reason) SELECT $1,'batch-qa','qa','Synthetic batch event' FROM generate_series(1,205)",
+    [agency],
+  );
+  await pool.query(
+    "INSERT INTO commission_workflow_events(agency_id,action,actor,reason) VALUES($1,'batch-qa','qa','Other synthetic agency')",
+    [otherAgency],
+  );
+  const batchWorkflow = await request(
+    `/workflow?agency_ids=${agency},${otherAgency}`,
+    null,
+    200,
+    'GET',
+  );
+  eq(Object.keys(batchWorkflow).length, 2);
+  eq(batchWorkflow[agency].reviews[0].expected_payment_date, '2026-10-15');
+  eq(batchWorkflow[otherAgency].reviews.length, 0);
+  eq(batchWorkflow[agency].events.length, 200);
+  eq(batchWorkflow[otherAgency].events.length, 1);
+  eq(
+    batchWorkflow[agency].events.every((e: any) => e.agency_id === agency),
+    true,
+  );
+  eq(
+    batchWorkflow[otherAgency].events.every(
+      (e: any) => e.agency_id === otherAgency,
+    ),
+    true,
+  );
+  await request(
+    `/workflow?agency_ids=${agency}&agency_id=${agency}`,
+    null,
+    400,
+    'GET',
+  );
+  await request('/workflow?agency_ids=', null, 400, 'GET');
+  await request('/workflow?agency_ids=invalid', null, 400, 'GET');
+  await request(
+    '/workflow?agency_ids=' +
+      Array.from({ length: 51 }, () => randomUUID()).join(','),
+    null,
+    400,
+    'GET',
+  );
+  await pool.query(
+    "DELETE FROM commission_workflow_events WHERE action='batch-qa'",
+  );
+
   await request(
     '/workflow/review',
     { ...review, operator_id: otherOperator },

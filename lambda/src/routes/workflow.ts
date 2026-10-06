@@ -20,38 +20,61 @@ function actorFor(c: any) {
 }
 app.get('/workflow', async (c) => {
   const agencyId = c.req.query('agency_id');
-  if (!agencyId || !UUID.test(agencyId))
-    return c.json({ error: 'Invalid agency' }, 400);
+  const batch = c.req.query('agency_ids');
+  const ids =
+    batch !== undefined ? [...new Set(batch.split(','))] : [agencyId ?? ''];
+  if (
+    (batch !== undefined && agencyId !== undefined) ||
+    !ids.length ||
+    ids.length > 50 ||
+    ids.some((id) => !UUID.test(id))
+  )
+    return c.json({ error: 'Invalid agency scope' }, 400);
   const [reviews, adjustments, events, questions] = await Promise.all([
-    appQuery('SELECT * FROM commission_reviews WHERE agency_id=$1', [agencyId]),
     appQuery(
-      'SELECT * FROM commission_adjustments WHERE agency_id=$1 ORDER BY created_at DESC',
-      [agencyId],
+      'SELECT * FROM commission_reviews WHERE agency_id=ANY($1::uuid[])',
+      [ids],
     ),
     appQuery(
-      'SELECT id,agency_id,moovs_trip_id,action,actor,reason,created_at FROM commission_workflow_events WHERE agency_id=$1 ORDER BY created_at DESC LIMIT 200',
-      [agencyId],
+      'SELECT * FROM commission_adjustments WHERE agency_id=ANY($1::uuid[]) ORDER BY created_at DESC',
+      [ids],
     ),
     appQuery(
-      'SELECT id,agency_id,agent_id,moovs_trip_id,message,status,resolution,created_at,resolved_at FROM commission_questions WHERE agency_id=$1 ORDER BY created_at DESC',
-      [agencyId],
+      `SELECT id,agency_id,moovs_trip_id,action,actor,reason,created_at FROM
+      (SELECT *,row_number() OVER (PARTITION BY agency_id ORDER BY created_at DESC,id DESC) AS rank
+       FROM commission_workflow_events WHERE agency_id=ANY($1::uuid[])) e
+      WHERE rank<=200 ORDER BY created_at DESC,id DESC`,
+      [ids],
+    ),
+    appQuery(
+      'SELECT id,agency_id,agent_id,moovs_trip_id,message,status,resolution,created_at,resolved_at FROM commission_questions WHERE agency_id=ANY($1::uuid[]) ORDER BY created_at DESC',
+      [ids],
     ),
   ]);
-  return c.json({
-    reviews: reviews.rows.map((r) => ({
+  const result = Object.fromEntries(
+    ids.map((id) => [
+      id,
+      {
+        reviews: [] as any[],
+        events: [] as any[],
+        questions: [] as any[],
+        adjustments: [] as any[],
+      },
+    ]),
+  );
+  for (const r of reviews.rows)
+    result[r.agency_id].reviews.push({
       ...r,
       expected_payment_date:
         r.expected_payment_date instanceof Date
           ? r.expected_payment_date.toISOString().slice(0, 10)
           : r.expected_payment_date,
-    })),
-    events: events.rows,
-    questions: questions.rows,
-    adjustments: adjustments.rows.map((r) => ({
-      ...r,
-      amount: Number(r.amount),
-    })),
-  });
+    });
+  for (const r of adjustments.rows)
+    result[r.agency_id].adjustments.push({ ...r, amount: Number(r.amount) });
+  for (const r of events.rows) result[r.agency_id].events.push(r);
+  for (const r of questions.rows) result[r.agency_id].questions.push(r);
+  return c.json(batch !== undefined ? result : result[ids[0]]);
 });
 app.post('/workflow/review', async (c) => {
   const b = await c.req.json().catch(() => null),

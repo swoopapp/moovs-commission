@@ -299,6 +299,14 @@ for (const path of [
 }
 eq((await auth('workflow', 'GET', null, '?agency_id=agency-a')).allowed, true);
 eq((await auth('workflow', 'GET', null, '?agency_id=agency-b')).allowed, false);
+eq((await auth('workflow', 'GET', null, '?agency_ids=agency-a')).allowed, true);
+eq((await auth('workflow', 'GET', null, '?agency_ids=agency-a,agency-b')).allowed, false);
+eq((await auth('workflow', 'GET', null, '?agency_ids=agency-a,missing')).allowed, false);
+eq((await auth('workflow', 'GET', null, '?agency_ids=')).allowed, false);
+eq((await auth('workflow', 'GET', null, '?agency_ids=agency-a,&agency_id=agency-a')).allowed, false);
+eq((await auth('workflow', 'GET', null, '?agency_ids=agency-a&agency_id=agency-a')).allowed, false);
+eq((await auth('workflow', 'POST', null, '?agency_ids=agency-a')).allowed, false);
+
 eq(
   (
     await auth('payouts/payout-a/record-payment', 'POST', {

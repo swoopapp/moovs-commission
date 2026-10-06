@@ -12,14 +12,13 @@ import {
   fetchReservations,
   fetchReservationsByIds,
 } from './reservationService';
-import { fetchAgents } from './agentService';
-import { fetchWorkflow, emptyWorkflow } from './workflowService';
+import { fetchAgentsByOperator } from './agentService';
+import { fetchWorkflowsForAgencies, emptyWorkflow } from './workflowService';
 import {
   fetchPayoutsByOperator,
   fetchPayoutReservationsByPayouts,
 } from './payoutService';
 import { fetchAttributionsByOperator } from './attributionService';
-import { mapWithConcurrency } from '../lib/concurrency';
 import { reservationTravelDay, validTimeZone } from '../lib/operator-time';
 import {
   reconcileBookings,
@@ -74,8 +73,8 @@ const defaults = {
   fetchReservations,
   fetchPayoutsByOperator,
   fetchAttributionsByOperator,
-  fetchAgents,
-  fetchWorkflow,
+  fetchAgentsByOperator,
+  fetchWorkflowsForAgencies,
   fetchLiveReservationPage,
   fetchPayoutReservationsByPayouts,
   fetchReservationsByIds,
@@ -92,29 +91,28 @@ export async function fetchFinanceWorkspace(
   const api = { ...defaults, ...overrides },
     attemptedAt = new Date().toISOString(),
     warnings: string[] = [];
-  const [persisted, payouts, attrs, agencyData] = await Promise.all([
+  const agencyIds = agencies.map((agency) => agency.id);
+  // Start independent application reads and source paging together. Attach rejection handling
+  // immediately so a failed app read cannot become an unhandled rejection while Moovs is paging.
+  const appReads = Promise.all([
     api.fetchReservations(operator.operatorId, { dateFrom: from, dateTo: to }),
     api.fetchPayoutsByOperator(operator.operatorId),
     api.fetchAttributionsByOperator(operator.operatorId),
-    mapWithConcurrency(agencies, 2, async (agency) => {
-      const agents = await api.fetchAgents(agency.id);
-      try {
-        return {
-          agency,
-          agents,
-          workflow: await api.fetchWorkflow(agency.id),
-          workflowAvailable: true,
-        };
-      } catch {
-        return {
-          agency,
-          agents,
-          workflow: emptyWorkflow,
-          workflowAvailable: false,
-        };
-      }
-    }),
-  ]);
+    api.fetchAgentsByOperator(operator.operatorId, agencyIds),
+    api
+      .fetchWorkflowsForAgencies(agencyIds)
+      .then((workflows) => ({ workflows, available: true }))
+      .catch(() => ({
+        workflows: {} as Record<
+          string,
+          import('../types/workflow').WorkflowData
+        >,
+        available: false,
+      })),
+  ]).then(
+    (value) => ({ value }),
+    (error) => ({ error }),
+  );
   const live: Reservation[] = [];
   let offset = 0,
     lastSuccessfulRefresh: string | null = null,
@@ -189,6 +187,16 @@ export async function fetchFinanceWorkspace(
       e instanceof Error ? e.message : 'Current Moovs facts unavailable.',
     );
   }
+  const appResult = await appReads;
+  if ('error' in appResult) throw appResult.error;
+  const [persisted, payouts, attrs, agents, workflowRead] = appResult.value;
+  const agencyData = agencies.map((agency) => ({
+    agency,
+    agents: agents.filter((agent) => agent.agency_id === agency.id),
+    workflow: workflowRead.workflows[agency.id] ?? emptyWorkflow,
+    workflowAvailable:
+      workflowRead.available && !!workflowRead.workflows[agency.id],
+  }));
   if (!timeZone)
     warnings.push(
       'Operator timezone unavailable. Stored wall-clock/service dates stay unchanged; automatic local periods cannot be verified.',

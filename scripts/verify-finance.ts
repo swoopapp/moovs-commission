@@ -1,3 +1,4 @@
+import { fetchWorkflowsForAgencies } from '../src/services/workflowService';
 import assert from 'node:assert/strict';
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import {
@@ -276,8 +277,8 @@ const deps = {
   fetchReservations: async () => [base],
   fetchPayoutsByOperator: async () => [],
   fetchAttributionsByOperator: async () => [],
-  fetchAgents: async () => agents,
-  fetchWorkflow: async () => workflow,
+  fetchAgentsByOperator: async () => agents,
+  fetchWorkflowsForAgencies: async () => ({ [agency.id]: workflow }),
   fetchLiveReservationPage: async () => ({
     reservations: [base],
     metadata: meta,
@@ -287,6 +288,66 @@ const deps = {
   fetchReservationsByIds: async () => [],
   fetchFacts: async () => [],
 };
+
+// 69-agency regression: bounded provider batches, strict completeness, no serial wait for Moovs.
+const largeIds = Array.from(
+  { length: 69 },
+  (_, i) => '00000000-0000-4000-8000-' + String(i).padStart(12, '0'),
+);
+const originalFetch = globalThis.fetch;
+let batchCalls = 0;
+globalThis.fetch = (async (url: any) => {
+  batchCalls++;
+  const ids = new URL(String(url), 'https://qa.invalid').searchParams
+    .get('agency_ids')!
+    .split(',');
+  eq(encodeURIComponent(ids.join(',')).length <= 950, true);
+  return new Response(
+    JSON.stringify(
+      Object.fromEntries(
+        ids.map((id) => [
+          id,
+          { reviews: [], events: [], questions: [], adjustments: [] },
+        ]),
+      ),
+    ),
+  );
+}) as typeof fetch;
+const batches = await fetchWorkflowsForAgencies(largeIds);
+eq(Object.keys(batches).length, 69);
+eq(batchCalls, 3);
+globalThis.fetch = (async () => new Response('{}')) as typeof fetch;
+let incompleteRejected = false;
+try {
+  await fetchWorkflowsForAgencies(largeIds.slice(0, 1));
+} catch {
+  incompleteRejected = true;
+}
+eq(incompleteRejected, true);
+globalThis.fetch = originalFetch;
+let releaseApp!: (value: any[]) => void;
+const heldAgents = new Promise<any[]>((resolve) => {
+  releaseApp = resolve;
+});
+let sourceStarted = false;
+const parallelRead = fetchFinanceWorkspace(
+  demoOperatorConfig,
+  [agency],
+  '2026-09-01',
+  '2026-09-30',
+  {
+    ...deps,
+    fetchAgentsByOperator: () => heldAgents,
+    fetchLiveReservationPage: async () => {
+      sourceStarted = true;
+      return { reservations: [base], metadata: meta, total: 1 };
+    },
+  },
+);
+await Promise.resolve();
+eq(sourceStarted, true);
+releaseApp(agents);
+eq((await parallelRead).totals.approved, 10);
 const ok = await fetchFinanceWorkspace(
   demoOperatorConfig,
   [agency],
@@ -420,7 +481,7 @@ const workflowDown = await fetchFinanceWorkspace(
   '2026-09-30',
   {
     ...deps,
-    fetchWorkflow: async () => {
+    fetchWorkflowsForAgencies: async () => {
       throw new Error('Unavailable');
     },
   },
@@ -441,9 +502,11 @@ const carry = await fetchFinanceWorkspace(
   '2026-09-30',
   {
     ...deps,
-    fetchWorkflow: async () => ({
-      ...workflow,
-      reviews: [approval(base), approval(older)],
+    fetchWorkflowsForAgencies: async () => ({
+      [agency.id]: {
+        ...workflow,
+        reviews: [approval(base), approval(older)],
+      },
     }),
     fetchFacts: async () => [older],
   },
@@ -458,9 +521,11 @@ const lost = await fetchFinanceWorkspace(
   '2026-09-30',
   {
     ...deps,
-    fetchWorkflow: async () => ({
-      ...workflow,
-      reviews: [approval(base), approval(older)],
+    fetchWorkflowsForAgencies: async () => ({
+      [agency.id]: {
+        ...workflow,
+        reviews: [approval(base), approval(older)],
+      },
     }),
     fetchFacts: async () => {
       throw new Error('Unavailable');
@@ -476,13 +541,15 @@ const ledger = await fetchFinanceWorkspace(
   '2026-09-30',
   {
     ...deps,
-    fetchWorkflow: async () => ({
-      ...workflow,
-      adjustments: [
-        { id: 'x', amount: -5, applied_payout_id: null, cancelled_at: null },
-        { id: 'y', amount: 10, applied_payout_id: 'p', cancelled_at: null },
-        { id: 'z', amount: 20, applied_payout_id: null, cancelled_at: 'now' },
-      ] as any,
+    fetchWorkflowsForAgencies: async () => ({
+      [agency.id]: {
+        ...workflow,
+        adjustments: [
+          { id: 'x', amount: -5, applied_payout_id: null, cancelled_at: null },
+          { id: 'y', amount: 10, applied_payout_id: 'p', cancelled_at: null },
+          { id: 'z', amount: 20, applied_payout_id: null, cancelled_at: 'now' },
+        ] as any,
+      },
     }),
   },
 );
