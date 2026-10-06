@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import type { FinanceWorkspace } from '../../services/financeWorkspaceService';
 import type { ReconciliationRow } from '../../lib/finance-reconciliation';
 import { reservationTravelDay } from '../../lib/operator-time';
@@ -11,15 +10,18 @@ export const isReconciliationException = (r: ReconciliationRow) =>
 export function ReconciliationPanel({
   data,
   onInspect,
+  filter,
+  onFilterChange,
   acknowledged,
   onAcknowledge,
 }: {
   data: FinanceWorkspace;
+  filter: string;
+  onFilterChange: (value: string) => void;
   onInspect?: (r: ReconciliationRow) => void;
   acknowledged: boolean;
   onAcknowledge: (value: boolean) => void;
 }) {
-  const [filter, setFilter] = useState('exceptions');
   const exceptions = data.rows.filter(isReconciliationException),
     outside = data.rows.filter((r) => r.state === 'outside-program');
   const visible =
@@ -91,7 +93,7 @@ export function ReconciliationPanel({
         <select
           className="rounded border bg-white p-2 ml-2"
           value={filter}
-          onChange={(e) => setFilter(e.target.value)}
+          onChange={(e) => onFilterChange(e.target.value)}
         >
           <option value="exceptions">Period exceptions</option>
           <option value="all">All period bookings</option>

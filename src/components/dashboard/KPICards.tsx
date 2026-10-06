@@ -4,6 +4,10 @@ const money = (n: number) =>
   n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 export function KPICards({ finance }: { finance: FinanceWorkspace }) {
   const { totals: t } = finance;
+  const outside = finance.rows.filter(
+    (r) => r.state === 'outside-program',
+  ).length;
+  const unresolved = Math.max(0, t.unknownBookings - outside);
   const items = [
     ['Calculated', t.calculated, 'Known booking calculations—not all payable'],
     ['Projected', t.projected, 'Not yet eligible or completion unverified'],
@@ -21,9 +25,8 @@ export function KPICards({ finance }: { finance: FinanceWorkspace }) {
       <div>
         <h2 className="font-semibold">Booking commission lifecycle</h2>
         <p className="text-sm text-gray-500">
-          Travel dates {finance.from} through {finance.to}. Each booking
-          occupies one state; calculated is the sum of known states, not a
-          balance owed.
+          Travel dates {finance.from} through {finance.to}. Calculated
+          commissions are not a balance owed.
         </p>
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -41,15 +44,52 @@ export function KPICards({ finance }: { finance: FinanceWorkspace }) {
           </Card>
         ))}
       </div>
-      <p className="text-sm text-gray-600">
-        Needs review / recheck: {money(t.needsReview)} · Rejected:{' '}
-        {money(t.rejected)} · {t.unknownBookings} bookings excluded from known
-        totals. Pending commission corrections:{' '}
-        {money(finance.pendingAdjustments)} (separate from booking amounts).{' '}
-        {finance.carryForward.length} older reviewed/unpaid bookings are
-        outside this dashboard window. Use month-end reconciliation for
-        period-specific carry-forward.
-      </p>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+        {t.needsReview !== 0 && (
+          <a
+            href="#/review"
+            className="font-medium text-blue-600 hover:underline"
+          >
+            {money(t.needsReview)} needs review
+          </a>
+        )}
+        {unresolved > 0 && (
+          <a
+            href="#/review"
+            className="font-medium text-amber-800 hover:underline"
+          >
+            {unresolved.toLocaleString()}{' '}
+            {unresolved === 1 ? 'booking needs' : 'bookings need'} attention
+          </a>
+        )}
+        {finance.pendingAdjustments !== 0 && (
+          <a href="#/settlement" className="text-blue-600 hover:underline">
+            {money(finance.pendingAdjustments)} pending commission corrections
+          </a>
+        )}
+        <details className="text-xs text-gray-500">
+          <summary className="cursor-pointer hover:text-gray-900">
+            Calculation details
+          </summary>
+          <div className="mt-2 space-y-1">
+            <p>
+              {outside.toLocaleString()} bookings outside the agency program;{' '}
+              {unresolved.toLocaleString()} other bookings excluded from known
+              totals.
+            </p>
+            <p>
+              Rejected: {money(t.rejected)}. Pending commission corrections:{' '}
+              {money(finance.pendingAdjustments)}, separate from booking
+              amounts.
+            </p>
+            <p>
+              {finance.carryForward.length} older reviewed/unpaid bookings are
+              outside this window. Month-end reconciliation includes
+              period-specific carry-forward.
+            </p>
+          </div>
+        </details>
+      </div>
     </section>
   );
 }

@@ -1,3 +1,4 @@
+import { useWorkspaceSessionState } from '../../contexts/WorkspaceSessionContext';
 import { DataHealth } from '../commissions/DataHealth';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useOperator } from '../../contexts/OperatorContext';
@@ -116,20 +117,25 @@ function DashboardStatsSkeleton() {
 
 export function DashboardView({ onRegisterExport, showOverview = true }: DashboardViewProps) {
   const operator = useOperator();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [agencies, setAgencies] = useState<Agency[]>([]);
-  const [totalAgencies, setTotalAgencies] = useState(0);
+  const [stats, setStats] = useWorkspaceSessionState<DashboardStats | null>('overview:data', null);
+  const [agencies, setAgencies] = useWorkspaceSessionState<Agency[]>('overview:agencies', []);
+  const [totalAgencies, setTotalAgencies] = useWorkspaceSessionState('overview:total-agencies', 0);
   const [tableLoading, setTableLoading] = useState(true);
-  const [statsError, setStatsError] = useState<string | null>(null);
-  const [tableError, setTableError] = useState<string | null>(null);
+  const [statsError, setStatsError] = useWorkspaceSessionState<string | null>('overview:stats-error', null);
+  const [tableError, setTableError] = useWorkspaceSessionState<string | null>('overview:table-error', null);
   const [createAgencyOpen, setCreateAgencyOpen] = useState(false);
   const statsRequestId = useRef(0);
   const agenciesRequestId = useRef(0);
 
   // Table pagination state
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(25);
-  const [search, setSearch] = useState('');
+  const [page, setPage] = useWorkspaceSessionState('overview:page', 0);
+  const [pageSize, setPageSize] = useWorkspaceSessionState('overview:page-size', 25);
+  const [search, setSearch] = useWorkspaceSessionState('overview:search', '');
+
+  const metricSignature = JSON.stringify([operator.operatorId, operator.moovsOperatorId, operator.routeRateConfig, operator.timeZone]);
+  const tableSignature = JSON.stringify([operator.operatorId, page, pageSize, search]);
+  const [loadedMetricSignature, setLoadedMetricSignature] = useWorkspaceSessionState<string | null>('overview:metric-signature', null);
+  const [loadedTableSignature, setLoadedTableSignature] = useWorkspaceSessionState<string | null>('overview:table-signature', null);
 
   // Load complete KPI/export stats independently from the paginated table.
   const loadStats = useCallback(async () => {
@@ -146,10 +152,13 @@ export function DashboardView({ onRegisterExport, showOverview = true }: Dashboa
       );
       if (requestId === statsRequestId.current) {
         setStats(dashStats);
+        setLoadedMetricSignature(metricSignature);
       }
     } catch (err) {
       console.error('Failed to load stats:', err);
       if (requestId === statsRequestId.current) {
+        setStats(null);
+        setLoadedMetricSignature(null);
         setStatsError(err instanceof Error ? err.message : 'Failed to load dashboard metrics');
       }
     }
@@ -169,10 +178,12 @@ export function DashboardView({ onRegisterExport, showOverview = true }: Dashboa
       if (requestId === agenciesRequestId.current) {
         setAgencies(result.agencies);
         setTotalAgencies(result.total);
+        setLoadedTableSignature(tableSignature);
       }
     } catch (err) {
       console.error('Failed to load agencies:', err);
       if (requestId === agenciesRequestId.current) {
+        setLoadedTableSignature(null);
         setTableError(err instanceof Error ? err.message : 'Failed to load agencies');
       }
     } finally {
@@ -182,8 +193,13 @@ export function DashboardView({ onRegisterExport, showOverview = true }: Dashboa
     }
   }, [operator.operatorId, page, pageSize, search]);
 
-  useEffect(() => { loadStats(); }, [loadStats]);
-  useEffect(() => { loadAgencies(); }, [loadAgencies]);
+  useEffect(() => {
+    if (!stats || loadedMetricSignature !== metricSignature) loadStats();
+  }, [loadStats, metricSignature]);
+  useEffect(() => {
+    if (loadedTableSignature !== tableSignature) loadAgencies();
+    else setTableLoading(false);
+  }, [loadAgencies, tableSignature]);
 
   // Register export function with parent
   useEffect(() => {

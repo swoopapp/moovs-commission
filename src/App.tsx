@@ -8,13 +8,15 @@ import { AgencyMatchingView } from './components/agency/AgencyMatchingView';
 import { RouteRatesView } from './components/routes/RouteRatesView';
 import { Toaster } from './components/ui/sonner';
 import { PoweredByMoovs } from './components/layout/PoweredByMoovs';
-import { useIsDemo } from './contexts/OperatorContext';
+import { WorkspaceSessionProvider } from './contexts/WorkspaceSessionContext';
+import { useIsDemo, useOperator } from './contexts/OperatorContext';
 import * as Dialog from '@radix-ui/react-dialog';
 import { MobileWorkspaceNavigation, WorkspaceSidebar } from './components/layout/WorkspaceNavigation';
 import { workspaceSection } from './lib/workspace-navigation';
 
 function App() {
   const isDemo = useIsDemo();
+  const operator = useOperator();
   const [route, setRoute] = useState(window.location.hash || '#/');
   const [navigationOpen, setNavigationOpen] = useState(false);
   const exportFnRef = useRef<(() => void) | null>(null);
@@ -48,6 +50,7 @@ function App() {
 
   return (
     <AuthGate>
+      <WorkspaceSessionProvider key={operator.operatorId}>
       <Dialog.Root open={navigationOpen} onOpenChange={setNavigationOpen}>
         <div className="min-h-screen bg-gray-50 pb-16">
           <a
@@ -100,6 +103,7 @@ function App() {
           <PoweredByMoovs />
         </div>
       </Dialog.Root>
+      </WorkspaceSessionProvider>
     </AuthGate>
   );
 }

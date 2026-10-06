@@ -1,3 +1,7 @@
+import {
+  useWorkspaceSessionState,
+  useInvalidateWorkspaceReads,
+} from '../../contexts/WorkspaceSessionContext';
 import { useEffect, useRef, useState } from 'react';
 import { useIsDemo, useOperator } from '../../contexts/OperatorContext';
 import { fetchAgencies } from '../../services/agencyService';
@@ -27,6 +31,11 @@ export function CommissionWorkbench({
 }) {
   const operator = useOperator(),
     demo = useIsDemo();
+  const invalidateReads = useInvalidateWorkspaceReads();
+  async function afterChange() {
+    invalidateReads();
+    await load();
+  }
   const initial = () => {
     try {
       return previousOperatorMonth(operator.timeZone ?? '');
@@ -35,19 +44,24 @@ export function CommissionWorkbench({
     }
   };
   const [period] = useState(initial),
-    [from, setFrom] = useState(period.from),
-    [to, setTo] = useState(period.to);
-  const [data, setData] = useState<FinanceWorkspace | null>(null),
+    [from, setFrom] = useWorkspaceSessionState(`${mode}:from`, period.from),
+    [to, setTo] = useWorkspaceSessionState(`${mode}:to`, period.to);
+  const [data, setData] = useWorkspaceSessionState<FinanceWorkspace | null>(
+      `${mode}:data`,
+      null,
+    ),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
     [detail, setDetail] = useState<ReconciliationRow | null>(null),
-    [filter, setFilter] = useState('all'),
+    [filter, setFilter] = useWorkspaceSessionState(`${mode}:filter`, 'all'),
     [selected, setSelected] = useState(new Set<string>()),
     [notes, setNotes] = useState(''),
     [result, setResult] = useState<string[]>([]),
     [ack, setAck] = useState(false),
     [includeCarry, setIncludeCarry] = useState(false),
     [includeLedger, setIncludeLedger] = useState(false);
+  const [reconciliationFilter, setReconciliationFilter] =
+    useWorkspaceSessionState(`${mode}:reconciliation-filter`, 'exceptions');
   const running = useRef(false),
     generation = useRef(0),
     keys = useRef(new Map<string, string>());
@@ -183,7 +197,7 @@ export function CommissionWorkbench({
       running.current = false;
       setBusy(false);
     }
-    await load();
+    await afterChange();
   }
   async function resolve(agencyId: string, id: string) {
     if (demo) return;
@@ -198,7 +212,7 @@ export function CommissionWorkbench({
         id,
         resolution,
       });
-      await load();
+      await afterChange();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not resolve');
     }
@@ -266,6 +280,8 @@ export function CommissionWorkbench({
           <DataHealth health={data.health} onRefresh={load} busy={busy} />
           <ReconciliationPanel
             data={data}
+            filter={reconciliationFilter}
+            onFilterChange={setReconciliationFilter}
             onInspect={setDetail}
             acknowledged={ack}
             onAcknowledge={setAck}
@@ -520,7 +536,7 @@ export function CommissionWorkbench({
                     )}
                     operatorId={operator.operatorId}
                     readOnly={demo || busy || !healthy}
-                    onSaved={load}
+                    onSaved={afterChange}
                   />
                   <CommissionAdjustments
                     agency={w.agency}
@@ -530,7 +546,7 @@ export function CommissionWorkbench({
                     )}
                     adjustments={w.workflow.adjustments ?? []}
                     readOnly={demo || busy || !healthy}
-                    onSaved={load}
+                    onSaved={afterChange}
                   />
                 </section>
               ))}
@@ -558,7 +574,7 @@ export function CommissionWorkbench({
           }
           settled={!!detail.payoutId}
           onClose={() => setDetail(null)}
-          onSaved={load}
+          onSaved={afterChange}
         />
       )}
     </div>
