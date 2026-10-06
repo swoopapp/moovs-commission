@@ -337,6 +337,10 @@ eq((await auth('internal/partner-question', 'POST', {})).allowed, false);
 eq((await auth('workflow/facts','POST',{operator_id:'operator-a'})).allowed,true);
 eq((await auth('workflow/facts','POST',{operator_id:'operator-b'})).allowed,false);
 eq((await auth('workflow/facts','GET',null)).allowed,false);
+eq((await auth('workflow/period','POST',{operator_id:'operator-a'})).allowed,true);
+eq((await auth('workflow/period','POST',{operator_id:'operator-b'})).allowed,false);
+eq((await auth('workflow/period','GET',null)).allowed,false);
+
 eq((await auth('workflow/adjustments','POST',{operator_id:'operator-a',agency_id:'agency-b'})).allowed,false);
 console.log(
   `Commission workflow verification passed (${count} assertions). PDF fixture written to output/qa.`,

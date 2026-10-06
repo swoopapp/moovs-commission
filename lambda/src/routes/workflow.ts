@@ -312,6 +312,7 @@ app.post('/workflow/facts', async (c) => {
     b.operator_id,
     co.moovs_operator_id,
     b.trip_ids,
+    { includeCancelled: b.include_cancelled === true },
   );
   return c.json(
     rows.map((r) => ({

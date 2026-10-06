@@ -1,3 +1,4 @@
+import { fetchFinancePeriod } from '../src/services/financeReservationService';
 import { fetchWorkflowsForAgencies } from '../src/services/workflowService';
 import assert from 'node:assert/strict';
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -324,6 +325,185 @@ try {
   incompleteRejected = true;
 }
 eq(incompleteRejected, true);
+
+// Fixed-manifest finance reads enrich each identity once, preserve missing prices/cancellations,
+// and reject changed/missing/cross-operator facts instead of silently displaying partial totals.
+const qaOperator = 'qa-real-operator';
+const identities = largeIds.map((id) => ({
+  moovs_trip_id: id,
+  travel_day: '2026-09-15',
+  source: 'trip',
+}));
+const manifest = {
+  total: identities.length,
+  max_records: 25000,
+  identities,
+  metadata: meta,
+};
+const manifestFacts = identities.map((identity) => ({
+  ...base,
+  ...identity,
+  operator_id: qaOperator,
+  booking_timezone: meta.time_zone,
+  facts_fetched_at: meta.fetched_at,
+  refund_amount: null,
+  trip_status: 'cancelled',
+}));
+let periodCalls = 0;
+function periodMock(m: any, facts: any[]) {
+  globalThis.fetch = (async (url: any, init: any) => {
+    periodCalls++;
+    if (String(url).endsWith('/workflow/period'))
+      return new Response(JSON.stringify(m));
+    const body = JSON.parse(init.body);
+    eq(body.include_cancelled, true);
+    return new Response(
+      JSON.stringify(
+        facts.filter((f) => body.trip_ids.includes(f.moovs_trip_id)),
+      ),
+    );
+  }) as typeof fetch;
+}
+periodMock(manifest, manifestFacts);
+const period = await fetchFinancePeriod(qaOperator, 'source-qa', {
+  dateFrom: '2026-09-01',
+  dateTo: '2026-09-30',
+});
+eq(period.total, 69);
+eq(period.reservations.length, 69);
+eq(periodCalls, 2);
+eq(
+  period.reservations.every(
+    (r) => r.refund_amount === null && r.trip_status === 'cancelled',
+  ),
+  true,
+);
+async function rejectsPeriod(m: any, f: any[]) {
+  periodMock(m, f);
+  let rejected = false;
+  try {
+    await fetchFinancePeriod(qaOperator, 'source-qa', {
+      dateFrom: '2026-09-01',
+      dateTo: '2026-09-30',
+    });
+  } catch {
+    rejected = true;
+  }
+  eq(rejected, true);
+}
+await rejectsPeriod({ ...manifest, total: 70 }, manifestFacts);
+await rejectsPeriod(
+  { ...manifest, metadata: { ...meta, complete: false } },
+  manifestFacts,
+);
+await rejectsPeriod(
+  { ...manifest, identities: [identities[0], ...identities.slice(0, -1)] },
+  manifestFacts,
+);
+await rejectsPeriod(
+  { ...manifest, metadata: { ...meta, fetched_at: '2026-10-01T12:00:00' } },
+  manifestFacts,
+);
+await rejectsPeriod(manifest, manifestFacts.slice(1));
+await rejectsPeriod(
+  manifest,
+  manifestFacts.map((f, i) =>
+    i === 0 ? { ...f, travel_day: '2026-09-16' } : f,
+  ),
+);
+await rejectsPeriod(
+  manifest,
+  manifestFacts.map((f, i) => (i === 0 ? { ...f, operator_id: 'foreign' } : f)),
+);
+await rejectsPeriod(
+  manifest,
+  manifestFacts.map((f, i) =>
+    i === 0 ? { ...f, booking_timezone: 'UTC' } : f,
+  ),
+);
+await rejectsPeriod(
+  manifest,
+  manifestFacts.map((f, i) =>
+    i === 0 ? { ...f, facts_fetched_at: 'invalid' } : f,
+  ),
+);
+
+const largeManifestIdentities = Array.from({ length: 1001 }, (_, i) => ({
+  ...identities[0],
+  moovs_trip_id: '10000000-0000-4000-8000-' + String(i).padStart(12, '0'),
+}));
+const largeManifestFacts = largeManifestIdentities.map((i) => ({
+  ...manifestFacts[0],
+  ...i,
+}));
+const largeManifest = {
+  ...manifest,
+  total: 1001,
+  identities: largeManifestIdentities,
+};
+periodCalls = 0;
+periodMock(largeManifest, largeManifestFacts);
+eq(
+  (
+    await fetchFinancePeriod(qaOperator, 'source-qa', {
+      dateFrom: '2026-09-01',
+      dateTo: '2026-09-30',
+    })
+  ).reservations.length,
+  1001,
+);
+eq(periodCalls, 4);
+await rejectsPeriod(largeManifest, largeManifestFacts.slice(1));
+await rejectsPeriod(largeManifest, [
+  largeManifestFacts[1],
+  ...largeManifestFacts.slice(1),
+]);
+let failedChunkCalls = 0;
+globalThis.fetch = (async (url: any, init: any) => {
+  if (String(url).endsWith('/workflow/period'))
+    return new Response(JSON.stringify(largeManifest));
+  failedChunkCalls++;
+  const body = JSON.parse(init.body);
+  if (body.trip_ids.includes(largeManifestFacts[0].moovs_trip_id))
+    return new Response('{}', { status: 503 });
+  return new Response(
+    JSON.stringify(
+      largeManifestFacts.filter((f) => body.trip_ids.includes(f.moovs_trip_id)),
+    ),
+  );
+}) as typeof fetch;
+let chunkFailed = false;
+try {
+  await fetchFinancePeriod(qaOperator, 'source-qa', {
+    dateFrom: '2026-09-01',
+    dateTo: '2026-09-30',
+  });
+} catch {
+  chunkFailed = true;
+}
+eq(chunkFailed, true);
+eq(failedChunkCalls <= 3, true);
+globalThis.fetch = (async (url: any, init: any) => {
+  if (String(url).endsWith('/workflow/period'))
+    return new Response(JSON.stringify(largeManifest));
+  const body = JSON.parse(init.body);
+  const facts = largeManifestFacts.filter((f) =>
+    body.trip_ids.includes(f.moovs_trip_id),
+  );
+  if (body.trip_ids.includes(largeManifestFacts[0].moovs_trip_id))
+    facts[0] = largeManifestFacts[1000];
+  return new Response(JSON.stringify(facts));
+}) as typeof fetch;
+let wrongChunkFailed = false;
+try {
+  await fetchFinancePeriod(qaOperator, 'source-qa', {
+    dateFrom: '2026-09-01',
+    dateTo: '2026-09-30',
+  });
+} catch {
+  wrongChunkFailed = true;
+}
+eq(wrongChunkFailed, true);
 globalThis.fetch = originalFetch;
 let releaseApp!: (value: any[]) => void;
 const heldAgents = new Promise<any[]>((resolve) => {

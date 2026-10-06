@@ -10,9 +10,13 @@ export async function fetchAuthoritativeReservations(
   commissionOperatorId: string,
   moovsOperatorId: string,
   tripIds: string[],
+  options: { includeCancelled?: boolean } = {},
 ): Promise<AuthoritativeReservation[]> {
   if (!moovsOperatorId || tripIds.length === 0) return [];
 
+  const uuidIds = tripIds.every((id) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id),
+  );
   const timeZone = await operatorTimezone(moovsOperatorId);
   const [trips, shuttles] = await Promise.all([
     query(
@@ -80,7 +84,7 @@ export async function fetchAuthoritativeReservations(
        LEFT JOIN vehicle fv ON fr.vehicle_id = fv.vehicle_id
        LEFT JOIN contact pc ON pickup.passenger_contact_id = pc.contact_id
        WHERE req.operator_id = $1
-         AND t.trip_id::text = ANY($2::text[])`,
+         AND ${uuidIds ? 't.trip_id = ANY($2::uuid[])' : 't.trip_id::text = ANY($2::text[])'}`,
       [moovsOperatorId, tripIds],
     ),
     query(
@@ -123,8 +127,8 @@ export async function fetchAuthoritativeReservations(
        LEFT JOIN shuttle_route_definition rd
          ON rd.route_definition_id = rv.route_definition_id AND rd.operator_id = sb.operator_id
        WHERE sb.operator_id = $1
-         AND sb.cancelled_at IS NULL
-         AND sb.booking_id::text = ANY($2::text[])`,
+         ${options.includeCancelled ? '' : 'AND sb.cancelled_at IS NULL'}
+         AND ${uuidIds ? 'sb.booking_id = ANY($2::uuid[])' : 'sb.booking_id::text = ANY($2::text[])'}`,
       [moovsOperatorId, tripIds],
     ),
   ]);

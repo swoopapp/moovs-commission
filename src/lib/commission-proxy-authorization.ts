@@ -129,7 +129,7 @@ export async function authorizeOperatorProxyRequest({
   const segments = path.split('/').filter(Boolean);
   const bodyFor = async (): Promise<Record<string, unknown> | null> => asRecord(await readJson());
 
-  if(path==='workflow/facts') {
+  if(path==='workflow/facts'||path==='workflow/period') {
     if(method!=='POST')return denied(405,'Method not allowed');
     const body=await bodyFor();return body?.operator_id===session.operatorId?{allowed:true}:denied(403,'Forbidden');
   }

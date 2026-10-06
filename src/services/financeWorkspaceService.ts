@@ -8,10 +8,10 @@ import type {
 import { config } from '../config/env';
 import { getDemoReservations, isDemoOperatorId } from '../demoData';
 import {
-  fetchLiveReservationPage,
   fetchReservations,
   fetchReservationsByIds,
 } from './reservationService';
+import { fetchFinancePeriod } from './financeReservationService';
 import { fetchAgentsByOperator } from './agentService';
 import { fetchWorkflowsForAgencies, emptyWorkflow } from './workflowService';
 import {
@@ -75,9 +75,9 @@ const defaults = {
   fetchAttributionsByOperator,
   fetchAgentsByOperator,
   fetchWorkflowsForAgencies,
-  fetchLiveReservationPage,
   fetchPayoutReservationsByPayouts,
   fetchReservationsByIds,
+  fetchLiveReservationPage: fetchFinancePeriod,
   fetchFacts,
 };
 /** Dependency seam is for zero-provider local failure/paging tests; production uses the real services. */
@@ -270,13 +270,14 @@ export async function fetchFinanceWorkspace(
     ))
       if (!byTrip.has(r.moovs_trip_id))
         byTrip.set(r.moovs_trip_id, { ...r, fact_origin: 'snapshot' });
+  const liveIds = new Set(live.map((r) => r.moovs_trip_id));
   const carryIds = [
     ...new Set(
       [...reviewed.map((v) => v.review.moovs_trip_id), ...byTrip.values()].map(
         (v) => (typeof v === 'string' ? v : v.moovs_trip_id),
       ),
     ),
-  ].filter((id) => !live.some((r) => r.moovs_trip_id === id));
+  ].filter((id) => !liveIds.has(id));
   let carryAvailable = true;
   try {
     for (let i = 0; i < carryIds.length; i += 250)

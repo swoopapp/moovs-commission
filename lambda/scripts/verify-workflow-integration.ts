@@ -7,6 +7,7 @@ import { Hono } from 'hono';
 import { ensureCommissionTables, getAppPool } from '../src/appDb.js';
 import { getPool } from '../src/db.js';
 import workflow from '../src/routes/workflow.js';
+import financePeriod from '../src/routes/financePeriod.js';
 import questions from '../src/routes/partnerQuestions.js';
 import payouts from '../src/routes/payoutsCrud.js';
 import reservations from '../src/routes/reservations.js';
@@ -45,6 +46,7 @@ const eq = (a: unknown, b: unknown) => {
 };
 const app = new Hono();
 app.route('/', workflow);
+app.route('/', financePeriod);
 app.route('/', adjustmentsRoute);
 app.route('/', questions);
 app.route('/', payouts);
@@ -223,6 +225,110 @@ try {
   );
   eq(shuttleDate['Travel Day'], '2026-09-30');
   eq(shuttleDate['Pickup Date Time'], '2026-10-01T06:30:00.000Z');
+  const manifest = await request(
+    '/workflow/period',
+    { operator_id: operator, date_from: '2026-09-30', date_to: '2026-09-30' },
+    200,
+  );
+  eq(manifest.total, 2);
+  eq(manifest.metadata.complete, true);
+  eq(manifest.metadata.time_zone, 'America/Los_Angeles');
+  eq(
+    manifest.identities.every((i: any) => i.travel_day === '2026-09-30'),
+    true,
+  );
+  eq(
+    manifest.identities.some(
+      (i: any) => i.moovs_trip_id === shuttle && i.source === 'shuttle',
+    ),
+    true,
+  );
+  const periodFacts = await request(
+    '/workflow/facts',
+    {
+      operator_id: operator,
+      trip_ids: manifest.identities.map((i: any) => i.moovs_trip_id),
+      include_cancelled: true,
+    },
+    200,
+  );
+  eq(periodFacts.length, 2);
+  eq(
+    periodFacts.find((r: any) => r.moovs_trip_id === shuttle).travel_day,
+    '2026-09-30',
+  );
+  eq(
+    periodFacts.find((r: any) => r.moovs_trip_id === shuttle).pickup_date,
+    '2026-10-01T06:30:00.000Z',
+  );
+  const emptyManifest = await request(
+    '/workflow/period',
+    {
+      operator_id: otherOperator,
+      date_from: '2026-09-30',
+      date_to: '2026-09-30',
+    },
+    200,
+  );
+  eq(emptyManifest.total, 0);
+  eq(emptyManifest.identities.length, 0);
+  eq(emptyManifest.metadata.complete, true);
+  await replica.query(
+    "INSERT INTO shuttle_booking(booking_id,operator_id,travel_date) SELECT gen_random_uuid(),'other-moovs','2026-09-30' FROM generate_series(1,25001)",
+  );
+  const tooLarge = await request(
+    '/workflow/period',
+    {
+      operator_id: otherOperator,
+      date_from: '2026-09-30',
+      date_to: '2026-09-30',
+    },
+    200,
+  );
+  eq(tooLarge.total, 25001);
+  eq(tooLarge.metadata.complete, false);
+  eq(tooLarge.identities.length, 0);
+  await replica.query(
+    "DELETE FROM shuttle_booking WHERE operator_id='other-moovs'",
+  );
+
+  await request(
+    '/workflow/period',
+    { operator_id: operator, date_from: 'bad', date_to: '2026-09-30' },
+    400,
+  );
+  await request(
+    '/workflow/period',
+    { operator_id: operator, date_from: '2026-10-01', date_to: '2026-09-30' },
+    400,
+  );
+  await replica.query(
+    'UPDATE shuttle_booking SET cancelled_at=now() WHERE booking_id=$1',
+    [shuttle],
+  );
+  const cancelledManifest = await request(
+    '/workflow/period',
+    { operator_id: operator, date_from: '2026-09-30', date_to: '2026-09-30' },
+    200,
+  );
+  eq(cancelledManifest.total, 2);
+  const cancelledFacts = await request(
+    '/workflow/facts',
+    { operator_id: operator, trip_ids: [shuttle], include_cancelled: true },
+    200,
+  );
+  eq(cancelledFacts.length, 1);
+  const legacyFacts = await request(
+    '/workflow/facts',
+    { operator_id: operator, trip_ids: [shuttle] },
+    200,
+  );
+  eq(legacyFacts.length, 0);
+  await replica.query(
+    'UPDATE shuttle_booking SET cancelled_at=NULL WHERE booking_id=$1',
+    [shuttle],
+  );
+
   const dateClient = await pool.connect();
   const dateFact = await agencyTrip(dateClient, agency, trip, operator);
   eq(dateFact.reservation.travel_day, '2026-10-01');

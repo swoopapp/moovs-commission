@@ -17,6 +17,7 @@ import payoutsCrud from './routes/payoutsCrud.js';
 import upload from './routes/upload.js';
 import authorization from './routes/authorization.js';
 import workflow from './routes/workflow.js';
+import financePeriod from './routes/financePeriod.js';
 import adjustments from './routes/adjustments.js';
 import partnerQuestions from './routes/partnerQuestions.js';
 import { getAdminSecret, getDashboardSecret, safeSecretEqual } from './config.js';
@@ -73,6 +74,7 @@ app.route('/', payoutsCrud);
 app.route('/', upload);
 app.route('/', authorization);
 app.route('/', workflow);
+app.route('/', financePeriod);
 app.route('/', adjustments);
 app.route('/', partnerQuestions);
 
