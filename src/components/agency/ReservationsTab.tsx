@@ -1,3 +1,4 @@
+import { reservationTravelDay } from '../../lib/operator-time';
 import { useEffect, useMemo, useState } from 'react';
 import { Reservation, ReservationAttribution, Agent, PriceMode } from '../../types/commission';
 import { netAmount } from '../../lib/commission-calc';
@@ -39,6 +40,7 @@ interface ReservationsTabProps {
   priceMode?: PriceMode;
   error?: string | null;
   onRetry?: () => void;
+  onInspect?: (reservation: Reservation, attribution: ReservationAttribution) => void;
 }
 
 function formatCurrency(amount: number): string {
@@ -93,6 +95,7 @@ export function ReservationsTab({
   priceMode = 'gross',
   error,
   onRetry,
+  onInspect,
 }: ReservationsTabProps) {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [internalAgentFilter, setInternalAgentFilter] = useState<string>('all');
@@ -277,9 +280,9 @@ export function ReservationsTab({
               {filtered.map((j) => (
                 <TableRow key={j.attribution.id}>
                   <TableCell className="font-medium text-blue-600">
-                    {j.reservation.order_number || j.reservation.confirmation_number || '--'}
+                    {onInspect ? <button className="underline underline-offset-2" onClick={() => onInspect(j.reservation,j.attribution)}>{j.reservation.order_number || j.reservation.confirmation_number || 'View commission'}</button> : j.reservation.order_number || j.reservation.confirmation_number || '--'}
                   </TableCell>
-                  <TableCell>{formatDate(j.reservation.pickup_date)}</TableCell>
+                  <TableCell>{formatDate(reservationTravelDay(j.reservation))}</TableCell>
                   <TableCell>{j.reservation.passenger_name || '--'}</TableCell>
                   <TableCell>{agentOrBookingContact(j)}</TableCell>
                   <TableCell>{j.reservation.trip_type || '--'}</TableCell>

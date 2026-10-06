@@ -46,9 +46,10 @@ app.get('/attributions', async (c) => {
 
     if (operatorId) {
       const r = await appQuery(
-        `SELECT ra.*
+        `SELECT ra.*, cr.moovs_trip_id
          FROM reservation_attributions ra
          JOIN agencies a ON a.id = ra.agency_id
+         JOIN commission_reservations cr ON cr.id=ra.reservation_id AND cr.operator_id=a.operator_id
          WHERE a.operator_id = $1
          ORDER BY ra.attributed_at DESC`,
         [operatorId],

@@ -1,5 +1,14 @@
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from 'recharts';
 import { AgencyMonthlyTrend } from '../../services/dashboardService';
 
 const AGENCY_COLORS = ['#195FE9', '#0C893F', '#7B61FF', '#E67E22', '#D63F49'];
@@ -13,21 +22,32 @@ function formatCurrency(value: number): string {
   return `$${value.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
 
-export function CommissionTrendChart({ data, agencyNames }: CommissionTrendChartProps) {
+export function CommissionTrendChart({
+  data,
+  agencyNames,
+}: CommissionTrendChartProps) {
   const totalCommission = data.reduce(
-    (total, row) => total + agencyNames.reduce((sum, name) => sum + Number(row[name] ?? 0), 0),
+    (total, row) =>
+      total +
+      agencyNames.reduce((sum, name) => sum + Number(row[name] ?? 0), 0),
     0,
   );
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base font-semibold">Commission Trend — Top 5 Agencies</CardTitle>
+        <CardTitle className="text-base font-semibold">
+          Calculated commission by travel month
+        </CardTitle>
       </CardHeader>
       <CardContent>
         {agencyNames.length === 0 ? (
-          <div className="flex h-[300px] items-center justify-center text-center text-sm text-gray-500" role="status">
-            Commission trend data will appear after an agency earns commission.
+          <div
+            className="flex h-[300px] items-center justify-center text-center text-sm text-gray-500"
+            role="status"
+          >
+            Known booking calculations will appear after linked bookings are
+            loaded.
           </div>
         ) : (
           <>
@@ -36,13 +56,27 @@ export function CommissionTrendChart({ data, agencyNames }: CommissionTrendChart
               role="img"
               aria-label={`Six-month commission trend for ${agencyNames.join(', ')}. Total ${formatCurrency(totalCommission)}.`}
             >
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+              <ResponsiveContainer
+                width="100%"
+                height="100%"
+                initialDimension={{ width: 800, height: 300 }}
+              >
+                <BarChart
+                  data={data}
+                  margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
+                >
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                  <YAxis tickFormatter={formatCurrency} tick={{ fontSize: 12 }} width={64} />
+                  <YAxis
+                    tickFormatter={formatCurrency}
+                    tick={{ fontSize: 12 }}
+                    width={64}
+                  />
                   <Tooltip
-                    formatter={(value, name) => [formatCurrency(Number(value)), String(name)]}
+                    formatter={(value, name) => [
+                      formatCurrency(Number(value)),
+                      String(name),
+                    ]}
                   />
                   <Legend />
                   {agencyNames.map((name, i) => (
@@ -51,31 +85,45 @@ export function CommissionTrendChart({ data, agencyNames }: CommissionTrendChart
                       dataKey={name}
                       stackId="a"
                       fill={AGENCY_COLORS[i % AGENCY_COLORS.length]}
-                      radius={i === agencyNames.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
+                      radius={
+                        i === agencyNames.length - 1
+                          ? [4, 4, 0, 0]
+                          : [0, 0, 0, 0]
+                      }
                     />
                   ))}
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <table className="sr-only">
-              <caption>Monthly commission totals for the top five agencies</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Month</th>
-                  {agencyNames.map((name) => <th key={name} scope="col">{name}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {data.map((row) => (
-                  <tr key={String(row.month)}>
-                    <th scope="row">{row.month}</th>
+            <div className="sr-only">
+              <table>
+                <caption>
+                  Monthly commission totals for the top five agencies
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Month</th>
                     {agencyNames.map((name) => (
-                      <td key={name}>{formatCurrency(Number(row[name] ?? 0))}</td>
+                      <th key={name} scope="col">
+                        {name}
+                      </th>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {data.map((row) => (
+                    <tr key={String(row.month)}>
+                      <th scope="row">{row.month}</th>
+                      {agencyNames.map((name) => (
+                        <td key={name}>
+                          {formatCurrency(Number(row[name] ?? 0))}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </>
         )}
       </CardContent>

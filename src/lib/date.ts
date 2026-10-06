@@ -1,4 +1,4 @@
-const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+import { wallClockDay } from './operator-time.ts';
 
 /**
  * Format a Date for an HTML date input without converting the local calendar
@@ -17,11 +17,16 @@ export function localMonthKey(date: Date): string {
 
 /**
  * Parse calendar dates without letting JavaScript reinterpret YYYY-MM-DD as UTC.
- * That UTC behavior displays the prior day for users west of Greenwich.
+ * Wall-clock ISO containers also retain their written calendar components.
+ * For true instants use operatorDay/explicit operator timezone instead.
  */
-export function parseDisplayDate(value: string | null | undefined): Date | null {
+export function parseDisplayDate(
+  value: string | null | undefined,
+): Date | null {
   if (!value) return null;
-  const date = new Date(DATE_ONLY_PATTERN.test(value) ? `${value}T00:00:00` : value);
+  const day = wallClockDay(value);
+  if (!day) return null;
+  const date = new Date(`${day}T00:00:00`);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
@@ -30,11 +35,17 @@ export function formatDisplayDate(
   options: Intl.DateTimeFormatOptions = {},
   fallback = '--',
 ): string {
-  const date = parseDisplayDate(value);
-  return date ? date.toLocaleDateString('en-US', options) : fallback;
+  const day = wallClockDay(value);
+  return day
+    ? new Date(`${day}T12:00:00Z`).toLocaleDateString('en-US', {
+        ...options,
+        timeZone: 'UTC',
+      })
+    : fallback;
 }
 
-export function calendarMonthKey(value: string | null | undefined): string | null {
-  const date = parseDisplayDate(value);
-  return date ? localMonthKey(date) : null;
+export function calendarMonthKey(
+  value: string | null | undefined,
+): string | null {
+  return wallClockDay(value)?.slice(0, 7) ?? null;
 }

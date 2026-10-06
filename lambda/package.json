@@ -6,7 +6,9 @@
   "scripts": {
     "build": "esbuild src/index.ts --bundle --platform=node --target=node20 --outfile=dist/index.js --format=cjs --external:pg-native",
     "package": "npm run build && cd dist && zip -r ../deploy.zip .",
-    "deploy": "npm run package && aws lambda update-function-code --function-name commissions-api --zip-file fileb://deploy.zip --region us-east-1"
+    "deploy": "npm run package && aws lambda update-function-code --function-name commissions-api --zip-file fileb://deploy.zip --region us-east-1",
+    "typecheck": "tsc --noEmit --allowImportingTsExtensions",
+    "verify:workflow-integration": "esbuild scripts/verify-workflow-integration.ts --bundle --platform=node --format=esm --packages=external --outfile=output/qa/workflow-integration.mjs && node output/qa/workflow-integration.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1023.0",

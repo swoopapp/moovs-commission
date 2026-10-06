@@ -16,6 +16,9 @@ import attributions from './routes/attributions.js';
 import payoutsCrud from './routes/payoutsCrud.js';
 import upload from './routes/upload.js';
 import authorization from './routes/authorization.js';
+import workflow from './routes/workflow.js';
+import adjustments from './routes/adjustments.js';
+import partnerQuestions from './routes/partnerQuestions.js';
 import { getAdminSecret, getDashboardSecret, safeSecretEqual } from './config.js';
 
 const app = new Hono();
@@ -69,6 +72,9 @@ app.route('/', attributions);
 app.route('/', payoutsCrud);
 app.route('/', upload);
 app.route('/', authorization);
+app.route('/', workflow);
+app.route('/', adjustments);
+app.route('/', partnerQuestions);
 
 // 404 fallback
 app.notFound((c) => c.json({ error: 'Not found' }, 404));

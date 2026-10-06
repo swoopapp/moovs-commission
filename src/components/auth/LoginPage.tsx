@@ -1,6 +1,5 @@
 // src/components/auth/LoginPage.tsx
 import { Button } from '../ui/button';
-import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { useOperator } from '../../contexts/OperatorContext';
 import { Link2, ShieldCheck } from 'lucide-react';
 import { PoweredByMoovs } from '../layout/PoweredByMoovs';
@@ -17,15 +16,8 @@ export function LoginPage({ error }: LoginPageProps) {
       <div className="w-full max-w-sm space-y-8">
         {/* Logo */}
         <div className="flex flex-col items-center space-y-4">
-          {operator.logoUrl ? (
-            <ImageWithFallback
-              src={operator.logoUrl}
-              alt={operator.displayName}
-              className="h-20 w-auto"
-            />
-          ) : (
-            <p className="text-3xl font-bold text-gray-900">{operator.displayName}</p>
-          )}
+          <img src="/moovs-wordmark-black.svg" alt="Moovs" width={123} height={29} className="h-8 w-auto" />
+          <p className="text-sm font-medium text-gray-600">{operator.displayName}</p>
           <div className="text-center">
             <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">
               Commission Tracking

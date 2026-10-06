@@ -1,3 +1,4 @@
+import { validateRules } from '../../../src/lib/commission-rules.ts';
 import { Hono } from 'hono';
 import { appQuery } from '../appDb.js';
 
@@ -285,6 +286,11 @@ app.patch('/agencies/:id', async (c) => {
   try {
     const id = c.req.param('id');
     const body = await c.req.json();
+    if ('commission_type' in body) {
+      const existing = await appQuery('SELECT commission_rules FROM agencies WHERE id=$1', [id]);
+      const rulesError = validateRules(existing.rows[0]?.commission_rules ?? [], body.commission_type);
+      if (rulesError) return c.json({error: rulesError},400);
+    }
     if ('commission_rate' in body || 'commission_type' in body) {
       const current = await appQuery('SELECT commission_type FROM agencies WHERE id = $1', [id]);
       if (current.rows.length === 0) return c.json({ error: 'Not found' }, 404);

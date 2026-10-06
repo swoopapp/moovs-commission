@@ -1,3 +1,4 @@
+import { validTimeZone } from '../../../src/lib/operator-time.ts';
 import { Hono } from 'hono';
 import crypto from 'crypto';
 import { appQuery } from '../appDb.js';
@@ -68,19 +69,19 @@ function safeOperators(rows: Array<Record<string, any>>) {
   return rows.map(safeOperator);
 }
 
-async function fetchMoovsLogos(moovsOperatorIds: string[]): Promise<Map<string, string | null>> {
+async function fetchMoovsLogos(moovsOperatorIds: string[]): Promise<Map<string, {logo:string|null;timeZone:string|null}>> {
   const ids = Array.from(new Set(moovsOperatorIds.filter(Boolean)));
   if (ids.length === 0) return new Map();
 
   const placeholders = ids.map((_, i) => `$${i + 1}`).join(',');
   const r = await moovsQuery(
-    `SELECT operator_id, company_logo_url FROM operator WHERE operator_id IN (${placeholders})`,
+    `SELECT operator_id, company_logo_url, timezone_id FROM operator WHERE operator_id IN (${placeholders})`,
     ids,
   );
 
-  const logos = new Map<string, string | null>();
+  const logos = new Map<string, {logo:string|null;timeZone:string|null}>();
   for (const row of r.rows) {
-    logos.set(row.operator_id, row.company_logo_url || null);
+    logos.set(row.operator_id, {logo:row.company_logo_url || null,timeZone:validTimeZone(row.timezone_id)?row.timezone_id:null});
   }
   return logos;
 }
@@ -95,7 +96,8 @@ async function withMoovsLogos<T extends CommissionOperatorRow>(rows: T[]): Promi
 
   return rows.map((row) => ({
     ...row,
-    logo_url: row.moovs_operator_id ? logos.get(row.moovs_operator_id) ?? null : null,
+    timezone_id:row.moovs_operator_id ? logos.get(row.moovs_operator_id)?.timeZone ?? null : null,
+    logo_url: row.moovs_operator_id ? logos.get(row.moovs_operator_id)?.logo ?? null : null,
   }));
 }
 

@@ -83,7 +83,7 @@ export function AgencyHeader({ agency, stats, onCreatePayout }: AgencyHeaderProp
         <Button
           variant="ghost"
           className="shrink-0 gap-1.5 sm:mt-1"
-          onClick={() => { window.location.hash = '#/'; }}
+          onClick={() => { window.location.hash = '#/agencies'; }}
         >
           <ArrowLeft className="h-4 w-4" />
           Back to agencies
@@ -101,7 +101,7 @@ export function AgencyHeader({ agency, stats, onCreatePayout }: AgencyHeaderProp
             {onCreatePayout && (
               <Button size="sm" className="w-full gap-1.5 sm:ml-auto sm:w-auto" onClick={onCreatePayout}>
                 <Plus className="h-4 w-4" />
-                Create Payout
+                Prepare settlement
               </Button>
             )}
           </div>

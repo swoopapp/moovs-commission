@@ -1,10 +1,17 @@
 export type AuthoritativeReservation = {
   operator_id: string;
   moovs_trip_id: string;
+  moovs_request_id?: string | null;
+  route_public_id?: string | null;
+  refund_amount?: number | null;
   moovs_company_id: string | null;
   order_number: string | null;
   confirmation_number: string | null;
   pickup_date: string | null;
+  travel_day?: string | null;
+  booking_timezone?: string | null;
+  fact_origin?: 'live' | 'snapshot';
+  facts_fetched_at?:string;
   pickup_location: string | null;
   dropoff_location: string | null;
   passenger_name: string | null;
@@ -64,10 +71,14 @@ export function buildTripReservationFact(
   return {
     operator_id: operatorId,
     moovs_trip_id: String(row.moovs_trip_id),
+    moovs_request_id: text(row.moovs_request_id),
+    route_public_id: text(row.route_public_id),
+    refund_amount: row.refund_amount == null ? null : money(row.refund_amount),
     moovs_company_id: text(row.moovs_company_id),
     order_number: text(row.order_number),
     confirmation_number: text(row.order_number),
     pickup_date: text(row.pickup_date),
+    travel_day: text(row.travel_day),
     pickup_location: text(row.pickup_location),
     dropoff_location: text(row.dropoff_location),
     passenger_name: text(row.passenger_name),
@@ -95,10 +106,14 @@ export function buildShuttleReservationFact(
   return {
     operator_id: operatorId,
     moovs_trip_id: String(row.moovs_trip_id),
+    moovs_request_id: text(row.moovs_request_id),
+    route_public_id: text(row.route_public_id),
+    refund_amount: row.refund_amount == null ? null : money(row.refund_amount),
     moovs_company_id: text(row.moovs_company_id),
     order_number: text(row.order_number),
     confirmation_number: text(row.order_number),
     pickup_date: text(row.pickup_date),
+    travel_day: text(row.travel_day),
     pickup_location: text(row.pickup_location),
     dropoff_location: text(row.dropoff_location),
     passenger_name: text(row.passenger_name),

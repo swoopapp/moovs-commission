@@ -179,6 +179,8 @@ async function proxyCommissionApi(request: Request, context: CommissionProxyCont
     'x-dashboard-secret': dashboardSecret,
   });
   if (adminSecret) headers.set('x-admin-secret', adminSecret);
+  const actorSession = await getOperatorSession();
+  headers.set('x-workflow-actor', actorSession ? `operator:${actorSession.operatorId}` : 'admin');
 
   const contentType = request.headers.get('content-type');
   if (contentType) headers.set('content-type', contentType);

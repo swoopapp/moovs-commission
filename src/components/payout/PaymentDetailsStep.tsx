@@ -62,10 +62,10 @@ export function PaymentDetailsStep({
 
   async function handleSave(status: PayoutStatus) {
     if (savingRef.current) return;
-    if (status === 'paid' && !paymentDate) return;
+    if (status === 'paid' && (!paymentDate || !referenceNumber.trim())) return;
     if (
       status === 'paid'
-      && !window.confirm(`Mark this ${formatCurrency(netPayout)} payout for ${selectedTripCount} trip${selectedTripCount === 1 ? '' : 's'} as paid?`)
+      && !window.confirm(`Mark this ${formatCurrency(netPayout)} payout for ${selectedTripCount} trip${selectedTripCount === 1 ? '' : 's'} as paid externally? No funds will move.`)
     ) {
       return;
     }
@@ -81,9 +81,10 @@ export function PaymentDetailsStep({
 
   return (
     <div className="space-y-4">
+      <p className="rounded-md bg-blue-50 p-3 text-sm text-blue-900">Record a payment made outside this portal. No bank transfer is initiated.</p>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label htmlFor="payment-method">Payment Method</Label>
+          <Label htmlFor="payment-method">External payment method</Label>
           <Select value={method} onValueChange={(val) => onMethodChange(val as PayoutMethod)}>
             <SelectTrigger id="payment-method">
               <SelectValue placeholder="Select method" />
@@ -131,7 +132,7 @@ export function PaymentDetailsStep({
 
       {/* Payout summary card */}
       <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-        <h4 className="text-sm font-semibold text-gray-900 mb-2">Payout Summary</h4>
+        <h4 className="text-sm font-semibold text-gray-900 mb-2">Settlement Summary</h4>
         <div className="flex justify-between text-sm">
           <span className="text-gray-600">Selected trips</span>
           <span className="font-medium">{selectedTripCount}</span>
@@ -176,10 +177,10 @@ export function PaymentDetailsStep({
           </Button>
           <Button
             onClick={() => handleSave('paid')}
-            disabled={saving || !paymentDate}
+            disabled={saving || !paymentDate || !referenceNumber.trim()}
           >
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            Mark as Paid
+            Record external payment
           </Button>
         </div>
       </div>

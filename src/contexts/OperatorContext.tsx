@@ -22,6 +22,7 @@ function toOperatorConfig(op: CommissionOperator): CommissionOperatorConfig {
     primaryColor: op.primary_color,
     secondaryColor: op.secondary_color,
     routeRateConfig: normalizeRouteRateConfig(op.route_rate_config),
+    timeZone:op.timezone_id ?? null,
   };
 }
 
@@ -112,30 +113,19 @@ export function OperatorProvider({ slug, children, onNotFound }: OperatorProvide
     setOperator(toOperatorConfig(op));
   }, [slug, demoMode]);
 
-  // Apply operator branding colors as CSS custom properties
+  // Product workspace branding is Moovs-owned, not the customer's brand palette.
+  // Scope on body so portalled dialogs/selects inherit it, without changing public portals.
+  useEffect(() => {
+    const body = document.body;
+    body.classList.add('moovs-operator-workspace');
+    return () => body.classList.remove('moovs-operator-workspace');
+  }, []);
+
   useEffect(() => {
     if (!operator) return;
-    const root = document.documentElement;
-    if (operator.primaryColor) {
-      root.style.setProperty('--primary', operator.primaryColor);
-      root.style.setProperty('--sidebar-primary', operator.primaryColor);
-      root.style.setProperty('--secondary-foreground', operator.primaryColor);
-      root.style.setProperty('--accent-foreground', operator.primaryColor);
-    }
-    if (operator.secondaryColor) {
-      root.style.setProperty('--secondary', operator.secondaryColor);
-    }
-    // Update page title
+    const previousTitle = document.title;
     document.title = `${operator.displayName} — Commissions`;
-
-    return () => {
-      // Reset on unmount
-      root.style.removeProperty('--primary');
-      root.style.removeProperty('--sidebar-primary');
-      root.style.removeProperty('--secondary-foreground');
-      root.style.removeProperty('--accent-foreground');
-      root.style.removeProperty('--secondary');
-    };
+    return () => { document.title = previousTitle; };
   }, [operator]);
 
   if (loading) {

@@ -41,6 +41,7 @@ export interface CommissionOperator {
   contact_email: string | null;
   contact_phone: string | null;
   status: 'active' | 'inactive';
+  timezone_id?: string | null;
   route_rate_config?: RouteRateConfig | null;
   created_at: string;
   updated_at: string;
@@ -55,4 +56,5 @@ export interface CommissionOperatorConfig {
   primaryColor: string | null;
   secondaryColor: string | null;
   routeRateConfig: RouteRateConfig;
+  timeZone?: string | null;
 }

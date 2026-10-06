@@ -4,6 +4,7 @@ import type { RouteRateConfig } from '../types/commissionOperator';
 import { calculateCommission as calcCommission } from '../lib/commission-calc';
 import {
   demoReadOnlyError,
+  demoAttributions,
   getDemoAttributionsByAgency,
   getDemoAttributionsByReservations,
   isDemoAgencyId,
@@ -50,7 +51,7 @@ export async function fetchAttributionsByOperator(
   operatorId: string,
 ): Promise<ReservationAttribution[]> {
   if (isDemoOperatorId(operatorId)) {
-    return [];
+    return demoAttributions;
   }
   const res = await fetch(`${API}/attributions?operator_id=${encodeURIComponent(operatorId)}`);
   return handleResponse<ReservationAttribution[]>(res, 'fetchAttributionsByOperator');

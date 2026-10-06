@@ -33,6 +33,7 @@ const PAYOUT_STATUS_COLORS: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-600',
   pending: 'bg-yellow-100 text-yellow-800',
   paid: 'bg-green-100 text-green-800',
+  void: 'bg-gray-100 text-gray-600',
 };
 
 export function PayoutsTab({ payouts, onCreatePayout }: PayoutsTabProps) {

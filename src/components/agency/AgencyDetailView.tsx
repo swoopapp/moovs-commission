@@ -1,3 +1,10 @@
+import { CommissionAdjustments } from '../commissions/CommissionAdjustments';
+import { CommissionDetail } from '../commissions/CommissionDetail';
+import { AgencyRulesEditor } from '../commissions/AgencyRulesEditor';
+import { SettlementRecords } from '../commissions/SettlementRecords';
+import { fetchWorkflow, emptyWorkflow } from '../../services/workflowService';
+import type { WorkflowData } from '../../types/workflow';
+import { fetchPayoutReservationsByPayouts } from '../../services/payoutService';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Agency, Agent, Reservation, ReservationAttribution, Payout } from '../../types/commission';
 import { useIsDemo, useOperator } from '../../contexts/OperatorContext';
@@ -6,7 +13,8 @@ import { fetchAgents } from '../../services/agentService';
 import { fetchCurrentReservations, fetchReservations } from '../../services/reservationService';
 import { fetchAttributionsByAgency } from '../../services/attributionService';
 import { fetchPayoutsByAgency } from '../../services/payoutService';
-import { mergeAgencyAttributions, primaryAgencyClientKey } from '../../services/commissionTripService';
+import { mergeAgencyAttributions, agencyClientKeys } from '../../services/commissionTripService';
+import { Button } from '../ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
 import { AgencyHeader } from './AgencyHeader';
 import { ReservationsTab } from './ReservationsTab';
@@ -43,6 +51,10 @@ function mergeReservationRows(rows: Reservation[]): Reservation[] {
 export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
   const operator = useOperator();
   const isDemo = useIsDemo();
+  const [workflow, setWorkflow] = useState<WorkflowData>(emptyWorkflow);
+  const [workflowError, setWorkflowError] = useState(false);
+  const [reservedIds, setReservedIds] = useState<Set<string>>(new Set());
+  const [detail, setDetail] = useState<{reservation:Reservation;attribution:ReservationAttribution}|null>(null);
   const [agency, setAgency] = useState<Agency | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
@@ -86,6 +98,9 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
       setAgents(agentsData);
       setPersistedAttributions(attributionsData);
       setPayouts(payoutsData);
+      const links = await fetchPayoutReservationsByPayouts(payoutsData.filter(p=>p.status!=='void').map(p => p.id));
+      setReservedIds(new Set(links.map(l => l.reservation_id)));
+      try { setWorkflow(await fetchWorkflow(agencyId)); setWorkflowError(false); } catch { setWorkflow(emptyWorkflow); setWorkflowError(true); }
     } catch (err) {
       console.error('Failed to load agency detail:', err);
       setError(err instanceof Error ? err.message : 'Failed to load agency');
@@ -129,18 +144,17 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
         setReservations([]);
         setReservationOffset(0);
         setReservationsHasMore(false);
-        const clientKey = primaryAgencyClientKey(currentAgency);
+        const clientKeys = agencyClientKeys(currentAgency);
         const options = {
           dateFrom: reservationWindow.dateFrom,
           dateTo: reservationWindow.dateTo,
-          companyId: currentAgency.moovs_company_id ?? undefined,
-          clientKey,
+          clientKeys,
           limit: RESERVATION_PAGE_SIZE,
           offset: 0,
         };
-        const rows = clientKey
+        const rows = clientKeys.length
           ? await fetchCurrentReservations(operator.operatorId, operator.moovsOperatorId, options)
-          : await fetchReservations(operator.operatorId, options);
+          : [];
 
         if (cancelled) return;
         setReservations(mergeReservationRows(rows));
@@ -174,9 +188,9 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
   const attributions = useMemo(() => {
     if (!agency) return [];
     const reservationIds = new Set(reservations.map((reservation) => reservation.id));
-    return mergeAgencyAttributions(agency, reservations, persistedAttributions, agents, operator.routeRateConfig)
+    return mergeAgencyAttributions(agency, reservations, persistedAttributions, agents, operator.routeRateConfig, reservedIds)
       .filter((attribution) => reservationIds.has(attribution.reservation_id));
-  }, [agency, reservations, persistedAttributions, agents, operator.routeRateConfig]);
+  }, [agency, reservations, persistedAttributions, agents, operator.routeRateConfig, reservedIds]);
 
   async function handleLoadMoreReservations() {
     if (!agency || reservationsLoading) return;
@@ -184,18 +198,17 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
     try {
       setReservationsLoading(true);
       setReservationsError(null);
-      const clientKey = primaryAgencyClientKey(agency);
+      const clientKeys = agencyClientKeys(agency);
       const options = {
         dateFrom: loadedReservationWindow.dateFrom,
         dateTo: loadedReservationWindow.dateTo,
-        companyId: agency.moovs_company_id ?? undefined,
-        clientKey,
+        clientKeys,
         limit: RESERVATION_PAGE_SIZE,
         offset: reservationOffset,
       };
-      const rows = clientKey
+      const rows = clientKeys.length
         ? await fetchCurrentReservations(operator.operatorId, operator.moovsOperatorId, options)
-        : await fetchReservations(operator.operatorId, options);
+        : [];
 
       setReservations((current) => mergeReservationRows([...current, ...rows]));
       setReservationOffset((current) => current + rows.length);
@@ -260,20 +273,22 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
 
   return (
     <div className="min-w-0 space-y-6">
-      <AgencyHeader agency={agency} stats={stats} onCreatePayout={isDemo ? undefined : handleCreatePayout} />
+      <AgencyHeader agency={agency} stats={stats} onCreatePayout={isDemo || workflowError ? undefined : handleCreatePayout} />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <div className="max-w-full overflow-x-auto pb-1">
           <TabsList className="min-w-max">
             <TabsTrigger value="reservations">Reservations</TabsTrigger>
             <TabsTrigger value="agents">Agents</TabsTrigger>
-            <TabsTrigger value="payouts">Payouts</TabsTrigger>
+            <TabsTrigger value="rules">Commission rules</TabsTrigger>
+            <TabsTrigger value="payouts">Settlements</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
         </div>
 
         <TabsContent value="reservations" className="mt-4">
           <ReservationsTab
+            onInspect={(reservation,attribution)=>setDetail({reservation,attribution})}
             reservations={reservations}
             attributions={attributions}
             agents={agents}
@@ -311,11 +326,12 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
         </TabsContent>
 
         <TabsContent value="payouts" className="mt-4">
-          <PayoutsTab
-            payouts={payouts}
-            onCreatePayout={isDemo ? undefined : handleCreatePayout}
-          />
+          <SettlementRecords payouts={payouts} operatorId={operator.operatorId} readOnly={isDemo || workflowError} onSaved={loadData}/>
+          <div className="mt-5"><CommissionAdjustments agency={agency} operatorId={operator.operatorId} payouts={payouts} adjustments={workflow.adjustments??[]} readOnly={isDemo||workflowError} onSaved={loadData}/></div>
+          {!isDemo && <Button variant="outline" className="mt-4" onClick={handleCreatePayout} disabled={workflowError}>Prepare agency settlement</Button>}
         </TabsContent>
+
+        <TabsContent value="rules" className="mt-4"><AgencyRulesEditor agency={agency} reservations={reservations} onSaved={loadData}/></TabsContent>
 
         <TabsContent value="settings" className="mt-4">
           <SettingsTab
@@ -325,6 +341,8 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
         </TabsContent>
       </Tabs>
 
+      {workflowError && <p role="alert" className="mt-4 text-sm text-amber-800">Commission review unavailable. Backend/schema release required; settlement preparation is disabled.</p>}
+      {detail && <CommissionDetail {...detail} agency={agency} agents={agents} config={operator.routeRateConfig} operatorId={operator.operatorId} readOnly={isDemo || workflowError} review={workflow.reviews.find(r=>r.moovs_trip_id===detail.reservation.moovs_trip_id)} events={workflow.events} settled={reservedIds.has(detail.reservation.id)} onClose={()=>setDetail(null)} onSaved={loadData}/>}
       {!isDemo && (
         <PayoutWizard
           open={payoutWizardOpen}

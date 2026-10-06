@@ -1,3 +1,4 @@
+import { reservationTravelDay } from '../../lib/operator-time';
 import { useMemo, useState } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -176,7 +177,7 @@ export function TripSelectionStep({
                     {t.reservation.order_number || t.reservation.confirmation_number || '--'}
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-sm">
-                    {formatDate(t.reservation.pickup_date)}
+                    {formatDate(reservationTravelDay(t.reservation))}
                   </TableCell>
                   <TableCell className="text-sm">
                     {bookingContactLabel(t, agentMap)}

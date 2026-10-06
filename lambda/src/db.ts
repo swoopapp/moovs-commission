@@ -1,3 +1,4 @@
+import { calendarPgTypes } from './pgDateTypes.js';
 import pg from 'pg';
 
 const { Pool } = pg;
@@ -6,8 +7,16 @@ let pool: pg.Pool | null = null;
 
 export async function getPool(): Promise<pg.Pool> {
   if (pool) return pool;
+  if (process.env.NODE_ENV !== 'production' && process.env.LOCAL_MOOVS_DATABASE_URL) {
+    const localUrl = new URL(process.env.LOCAL_MOOVS_DATABASE_URL!);
+    if (!['localhost','127.0.0.1','[::1]'].includes(localUrl.hostname)) throw new Error('Local test DB must be loopback');
+    pool = new Pool({ connectionString: localUrl.toString(), max: 5, types: calendarPgTypes });
+    return pool;
+  }
+
 
   pool = new Pool({
+    types: calendarPgTypes,
     host: process.env.DB_HOST || 'database-production-read-replica.c4xzucffjf3i.us-east-1.rds.amazonaws.com',
     port: 5432,
     database: process.env.DB_NAME || 'production',

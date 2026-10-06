@@ -6,6 +6,11 @@ const app = new Hono();
 const RESERVATION_FIELDS = [
   'operator_id',
   'moovs_trip_id',
+  'travel_day',
+  'booking_timezone',
+  'moovs_request_id',
+  'route_public_id',
+  'refund_amount',
   'moovs_company_id',
   'order_number',
   'confirmation_number',
@@ -38,6 +43,7 @@ app.get('/commission-reservations', async (c) => {
     const dateTo = c.req.query('date_to');
     const companyId = c.req.query('company_id');
     const clientKey = c.req.query('client_key');
+    const clientKeys = c.req.query('client_keys')?.split(',').filter(Boolean);
     const limitParam = c.req.query('limit');
     const offsetParam = c.req.query('offset');
 
@@ -45,12 +51,14 @@ app.get('/commission-reservations', async (c) => {
     const params: any[] = [operatorId];
     let idx = 2;
 
+    // Legacy trip pickup_date is a UTC-shaped wall-clock container in this app DB.
+    // Extract its written components; never use that fallback for true-instant shuttle times.
     if (dateFrom) {
-      conditions.push(`pickup_date >= $${idx++}`);
+      conditions.push(`COALESCE(travel_day,CASE WHEN source IS DISTINCT FROM 'shuttle' THEN (pickup_date AT TIME ZONE 'UTC')::date END) >= $${idx++}::date`);
       params.push(dateFrom);
     }
     if (dateTo) {
-      conditions.push(`pickup_date <= $${idx++}`);
+      conditions.push(`COALESCE(travel_day,CASE WHEN source IS DISTINCT FROM 'shuttle' THEN (pickup_date AT TIME ZONE 'UTC')::date END) <= $${idx++}::date`);
       params.push(dateTo);
     }
     if (companyId) {
@@ -64,6 +72,12 @@ app.get('/commission-reservations', async (c) => {
       }
       conditions.push(`client_keys @> ARRAY[$${idx++}]::text[]`);
       params.push(clientKey);
+    }
+
+    if (clientKeys) {
+      if (!clientKeys.length || clientKeys.length > 100 || clientKeys.some(k=>!/^(company|shuttle_client):[^:,\s]+$/.test(k))) return c.json({error:'Invalid client_keys'},400);
+      conditions.push(`(client_keys && $${idx}::text[] OR ('company:' || moovs_company_id)=ANY($${idx++}::text[]))`);
+      params.push(clientKeys);
     }
 
     const parsedLimit = Number.parseInt(limitParam ?? '', 10);

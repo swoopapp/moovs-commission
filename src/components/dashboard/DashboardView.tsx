@@ -1,3 +1,4 @@
+import { DataHealth } from '../commissions/DataHealth';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useOperator } from '../../contexts/OperatorContext';
 import { fetchAgenciesPaginated } from '../../services/agencyService';
@@ -7,7 +8,7 @@ import { KPICards } from './KPICards';
 import { AgencyTable } from './AgencyTable';
 import { CommissionTrendChart } from './CommissionTrendChart';
 import { CreateAgencyDialog } from '../agency/CreateAgencyDialog';
-import { Card, CardContent, CardHeader } from '../ui/card';
+import { Card, CardContent } from '../ui/card';
 import { Skeleton } from '../ui/skeleton';
 import { Button } from '../ui/button';
 import { AlertCircle, RefreshCw } from 'lucide-react';
@@ -15,6 +16,7 @@ import { toLocalDateInput } from '../../lib/date';
 
 interface DashboardViewProps {
   onRegisterExport?: (fn: () => void) => void;
+  showOverview?: boolean;
 }
 
 const DASHBOARD_AGENCY_PAGE_SIZE = 250;
@@ -108,27 +110,11 @@ function DashboardStatsSkeleton() {
         ))}
       </div>
 
-      <Card aria-label="Loading commission trend">
-        <CardHeader>
-          <Skeleton className="h-4 w-64" />
-        </CardHeader>
-        <CardContent>
-          <div className="flex h-[300px] items-end gap-4 px-6 pb-8 pt-4">
-            {[42, 68, 54, 82, 64, 76].map((height, index) => (
-              <Skeleton
-                key={index}
-                className="flex-1 rounded-t-md rounded-b-none"
-                style={{ height: `${height}%` }}
-              />
-            ))}
-          </div>
-        </CardContent>
-      </Card>
     </>
   );
 }
 
-export function DashboardView({ onRegisterExport }: DashboardViewProps) {
+export function DashboardView({ onRegisterExport, showOverview = true }: DashboardViewProps) {
   const operator = useOperator();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [agencies, setAgencies] = useState<Agency[]>([]);
@@ -156,6 +142,7 @@ export function DashboardView({ onRegisterExport }: DashboardViewProps) {
         operator.moovsOperatorId,
         metricAgencies,
         operator.routeRateConfig,
+        operator.timeZone,
       );
       if (requestId === statsRequestId.current) {
         setStats(dashStats);
@@ -166,7 +153,7 @@ export function DashboardView({ onRegisterExport }: DashboardViewProps) {
         setStatsError(err instanceof Error ? err.message : 'Failed to load dashboard metrics');
       }
     }
-  }, [operator.operatorId, operator.moovsOperatorId, operator.routeRateConfig]);
+  }, [operator.operatorId, operator.moovsOperatorId, operator.routeRateConfig, operator.timeZone]);
 
   // Load paginated agencies for table
   const loadAgencies = useCallback(async () => {
@@ -217,15 +204,11 @@ export function DashboardView({ onRegisterExport }: DashboardViewProps) {
 
   return (
     <div className="space-y-6">
-      {stats ? (
+      {showOverview && (stats ? (
         <>
-          <KPICards
-            totalOwed={stats.totalOwed}
-            paidThisPeriod={stats.paidThisPeriod}
-            activeAgencies={stats.activeAgencies}
-            pendingPayouts={stats.pendingPayouts}
-          />
-          <CommissionTrendChart data={stats.agencyMonthlyTrend} agencyNames={stats.topAgencyNames} />
+          <KPICards finance={stats.finance}/>
+          <DataHealth health={stats.finance.health} onRefresh={loadStats}/>
+
         </>
       ) : statsError ? (
         <Card className="border-red-200" role="alert">
@@ -243,7 +226,7 @@ export function DashboardView({ onRegisterExport }: DashboardViewProps) {
         </Card>
       ) : (
         <DashboardStatsSkeleton />
-      )}
+      ))}
       <AgencyTable
         agencies={agencies}
         totalAgencies={totalAgencies}
@@ -257,6 +240,10 @@ export function DashboardView({ onRegisterExport }: DashboardViewProps) {
         onAddAgency={() => setCreateAgencyOpen(true)}
         onRefresh={() => { loadAgencies(); loadStats(); }}
       />
+
+      {showOverview && stats && (
+        <CommissionTrendChart data={stats.agencyMonthlyTrend} agencyNames={stats.topAgencyNames} />
+      )}
 
       <CreateAgencyDialog
         open={createAgencyOpen}

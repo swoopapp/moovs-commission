@@ -68,6 +68,9 @@
     "verify:dates": "node --experimental-strip-types scripts/verify-date-handling.mjs",
     "verify:payout-facts": "node --experimental-strip-types scripts/verify-authoritative-reservation-facts.mjs",
     "verify:query-batching": "node --experimental-strip-types scripts/verify-query-batching.mjs",
-    "verify:dashboard-concurrency": "node --experimental-strip-types scripts/verify-dashboard-concurrency.mjs"
+    "verify:dashboard-concurrency": "node --experimental-strip-types scripts/verify-dashboard-concurrency.mjs",
+    "verify:workspace": "node --experimental-strip-types scripts/verify-workspace-navigation.mjs",
+    "verify:workflow": "node --experimental-strip-types scripts/verify-commission-workflow.mjs",
+    "verify:finance": "lambda/node_modules/.bin/esbuild scripts/verify-finance.ts --bundle --platform=node --format=esm --packages=external --outfile=output/qa/finance-verification.mjs && node output/qa/finance-verification.mjs"
   }
 }

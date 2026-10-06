@@ -1,3 +1,4 @@
+import { agentMatch } from '../lib/commission-workflow';
 import { Agency, Agent, Reservation, ReservationAttribution } from '../types/commission';
 import type { RouteRateConfig } from '../types/commissionOperator';
 import { calculateCommission } from './attributionService';
@@ -8,8 +9,7 @@ export function agencyClientKeys(agency: Agency): string[] {
     .map((link) => link.client_key)
     .filter((key): key is string => Boolean(key));
 
-  if (keys.length > 0) return Array.from(new Set(keys));
-  return agency.moovs_company_id ? [`company:${agency.moovs_company_id}`] : [];
+  return Array.from(new Set([...keys,...(agency.moovs_company_id ? [`company:${agency.moovs_company_id}`] : [])]));
 }
 
 export function primaryAgencyClientKey(agency: Agency): string | undefined {
@@ -37,17 +37,7 @@ function normalize(value: string | null | undefined): string | null {
 }
 
 export function findReservationAgent(reservation: Reservation, agents: Agent[] = []): Agent | null {
-  const bookingContactId = normalize(reservation.booking_contact_id);
-  const bookingContactEmail = normalize(reservation.booking_contact_email);
-
-  if (!bookingContactId && !bookingContactEmail) return null;
-
-  return agents.find((agent) => {
-    if (agent.status !== 'active') return false;
-    if (bookingContactId && normalize(agent.moovs_contact_id) === bookingContactId) return true;
-    if (bookingContactEmail && normalize(agent.email) === bookingContactEmail) return true;
-    return false;
-  }) ?? null;
+  return agentMatch(reservation, agents).agent;
 }
 
 export function buildSyntheticAttribution(
@@ -63,11 +53,12 @@ export function buildSyntheticAttribution(
     reservation_id: reservation.id,
     agency_id: agency.id,
     agent_id: agent?.id ?? null,
-    commission_rate: agency.commission_type === 'flat' ? agency.commission_rate : resolved.rate,
+    commission_rate: resolved.rate,
     commission_type: agency.commission_type,
     commission_base: agency.commission_base,
     commission_amount: calculateCommission(reservation, agency, routeConfig),
     attributed_at: new Date().toISOString(),
+    rule_source: resolved.source,
   };
 }
 
@@ -77,6 +68,7 @@ export function mergeAgencyAttributions(
   persistedAttributions: ReservationAttribution[],
   agents: Agent[] = [],
   routeConfig?: RouteRateConfig | null,
+  frozenReservationIds: Set<string> = new Set(),
 ): ReservationAttribution[] {
   const byReservationId = new Map(persistedAttributions.map((attr) => [attr.reservation_id, attr]));
   const merged: ReservationAttribution[] = [...persistedAttributions];
@@ -87,7 +79,14 @@ export function mergeAgencyAttributions(
   const agencyKeySet = new Set(clientKeys);
 
   for (const reservation of reservations) {
-    if (byReservationId.has(reservation.id)) continue;
+    if (byReservationId.has(reservation.id)) {
+      if (!frozenReservationIds.has(reservation.id)) {
+        const current=buildSyntheticAttribution(reservation,agency,agents,routeConfig);
+        const index=merged.findIndex(a=>a.reservation_id===reservation.id);
+        merged[index]={...current,id:byReservationId.get(reservation.id)!.id};
+      }
+      continue;
+    }
     if (!reservationClientKeys(reservation).some((key) => agencyKeySet.has(key))) continue;
     if (seenReservationIds.has(reservation.id)) continue;
 

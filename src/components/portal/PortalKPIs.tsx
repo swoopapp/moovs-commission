@@ -36,7 +36,7 @@ export function PortalKPIs({ reservations, attributions, priceMode = 'gross' }: 
       primary: priceMode === 'gross',
     },
     {
-      label: 'Commission Earned',
+      label: 'Calculated Commission',
       value: formatCurrency(totalCommission),
       icon: Banknote,
       color: 'text-amber-600',

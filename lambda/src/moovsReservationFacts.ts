@@ -1,3 +1,4 @@
+import { operatorTimezone } from './operatorTimezone.js';
 import { query } from './db.js';
 import {
   buildShuttleReservationFact,
@@ -12,10 +13,14 @@ export async function fetchAuthoritativeReservations(
 ): Promise<AuthoritativeReservation[]> {
   if (!moovsOperatorId || tripIds.length === 0) return [];
 
+  const timeZone = await operatorTimezone(moovsOperatorId);
   const [trips, shuttles] = await Promise.all([
     query(
       `SELECT
          t.trip_id::text AS moovs_trip_id,
+         req.request_id::text AS moovs_request_id,
+         r.public_id AS route_public_id,
+         COALESCE((SELECT SUM(sr.sub_refund_amount) FROM sub_refund sr JOIN refund rf ON rf.refund_id = sr.refund_id AND rf.refund_status IN ('succeeded','pending') WHERE sr.route_id = r.route_id OR sr.farmed_route_id = fr.farmed_route_id),0) / 100.0 AS refund_amount,
          req.order_number,
          req.company_id::text AS moovs_company_id,
          bc.contact_id::text AS booking_contact_id,
@@ -24,7 +29,8 @@ export async function fetchAuthoritativeReservations(
            NULLIF(bc.email, '')
          ) AS booking_contact_name,
          bc.email AS booking_contact_email,
-         pickup.date_time AS pickup_date,
+         to_char(pickup.date_time, 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS pickup_date,
+         to_char(pickup.date_time, 'YYYY-MM-DD') AS travel_day,
          pickup.location AS pickup_location,
          dropoff.location AS dropoff_location,
          COALESCE(
@@ -80,9 +86,20 @@ export async function fetchAuthoritativeReservations(
     query(
       `SELECT
          sb.booking_id::text AS moovs_trip_id,
+         to_char(sb.travel_date,'YYYY-MM-DD') AS travel_day,
          sb.external_reservation_id AS order_number,
+         -- Missing legacy booking-price facts must not become a payable zero-price booking.
+         CASE WHEN pay.booking_id IS NULL THEN NULL ELSE (
+           COALESCE((SELECT SUM(ra.refund_amount_in_cents) FROM shuttle_booking_refund_allocation ra
+             JOIN shuttle_refund rf ON rf.shuttle_refund_id=ra.shuttle_refund_id AND rf.status IN ('succeeded','pending')
+             WHERE ra.booking_id=sb.booking_id AND ra.operator_id=sb.operator_id),0)
+           + COALESCE((SELECT SUM(rf.refund_amount_in_cents) FROM shuttle_refund rf
+             JOIN shuttle_payment legacy ON legacy.shuttle_payment_id=rf.shuttle_payment_id
+             WHERE legacy.booking_id=sb.booking_id AND rf.operator_id=sb.operator_id AND rf.status IN ('succeeded','pending')
+               AND NOT EXISTS(SELECT 1 FROM shuttle_booking_refund_allocation ra WHERE ra.shuttle_refund_id=rf.shuttle_refund_id)),0)
+         ) END / 100.0 AS refund_amount,
          COALESCE(sc.company_id, sp.company_id, rd.company_id)::text AS moovs_company_id,
-         COALESCE(sb.scheduled_pickup_time, sb.travel_date::timestamptz) AS pickup_date,
+         sb.scheduled_pickup_time AS pickup_date,
          sb.pickup_location,
          sb.dropoff_location,
          CONCAT(COALESCE(sp.first_name, ''), ' ', COALESCE(sp.last_name, '')) AS passenger_name,
@@ -113,8 +130,20 @@ export async function fetchAuthoritativeReservations(
   ]);
 
   const facts = [
-    ...trips.rows.map((row) => buildTripReservationFact(row, commissionOperatorId)),
-    ...shuttles.rows.map((row) => buildShuttleReservationFact(row, commissionOperatorId)),
+    ...trips.rows.map((row) => ({
+      ...buildTripReservationFact(row, commissionOperatorId),
+      travel_day: row.travel_day,
+      booking_timezone: timeZone,
+      fact_origin: 'live' as const,
+      facts_fetched_at: new Date().toISOString(),
+    })),
+    ...shuttles.rows.map((row) => ({
+      ...buildShuttleReservationFact(row, commissionOperatorId),
+      travel_day: row.travel_day,
+      booking_timezone: timeZone,
+      fact_origin: 'live' as const,
+      facts_fetched_at: new Date().toISOString(),
+    })),
   ];
   const byTripId = new Map<string, AuthoritativeReservation>();
   for (const fact of facts) {
@@ -123,5 +152,7 @@ export async function fetchAuthoritativeReservations(
     }
     byTripId.set(fact.moovs_trip_id, fact);
   }
-  return tripIds.map((tripId) => byTripId.get(tripId)).filter((fact): fact is AuthoritativeReservation => Boolean(fact));
+  return tripIds
+    .map((tripId) => byTripId.get(tripId))
+    .filter((fact): fact is AuthoritativeReservation => Boolean(fact));
 }

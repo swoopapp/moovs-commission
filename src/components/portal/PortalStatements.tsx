@@ -103,10 +103,10 @@ export function PortalStatements({
     <div className="space-y-3">
       <h2 className="text-lg font-semibold text-gray-900">Statements &amp; Payouts</h2>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Outstanding Balance */}
+        {/* Calculated unsettled earnings */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base font-medium text-gray-700">Outstanding Balance</CardTitle>
+            <CardTitle className="text-base font-medium text-gray-700">Calculated unsettled earnings</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-4xl font-bold text-gray-900">{formatCurrency(outstandingBalance)}</p>
@@ -144,7 +144,7 @@ export function PortalStatements({
                 onClick={() => window.print()}
               >
                 <FileText className="h-4 w-4" />
-                Export PDF
+                Print earnings view
               </Button>
             </div>
           </CardContent>

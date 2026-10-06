@@ -22,15 +22,17 @@ async function handleResponse<T>(response: Response, context: string): Promise<T
 
 // --- Lookups ---
 
-interface FetchReservationsOptions {
+export interface FetchReservationsOptions {
   agencyId?: string;
   dateFrom?: string;
   dateTo?: string;
   companyId?: string;
   clientKey?: string;
+  clientKeys?: string[];
   limit?: number;
   offset?: number;
   requireLive?: boolean;
+  includeCancelled?: boolean;
 }
 
 export async function fetchReservations(
@@ -52,6 +54,7 @@ export async function fetchReservations(
   if (options?.clientKey) {
     url += `&client_key=${encodeURIComponent(options.clientKey)}`;
   }
+  if (options?.clientKeys?.length) url += `&client_keys=${encodeURIComponent(options.clientKeys.join(','))}`;
   if (options?.limit) {
     url += `&limit=${encodeURIComponent(String(options.limit))}`;
   }
@@ -100,9 +103,13 @@ function transformLiveReservation(raw: RawMoovsReservation, operatorId: string):
   const gratuity = money(raw['Driver Gratuity Amount']);
 
   return {
+    travel_day:text(raw['Travel Day']),booking_timezone:text(raw['Booking Timezone']),fact_origin:'live',facts_fetched_at:text(raw['Facts Fetched At']) ?? undefined,
     id: liveId(operatorId, moovsTripId),
     operator_id: operatorId,
     moovs_trip_id: moovsTripId,
+    moovs_request_id: text(raw['Request ID']),
+    route_public_id: text(raw['Route Public ID']),
+    refund_amount: raw['Refund Amount'] == null ? null : money(raw['Refund Amount']),
     moovs_company_id: text(raw['Company ID']),
     order_number: text(raw['Order Number']),
     confirmation_number: text(raw['Confirmation Number']),
@@ -127,13 +134,13 @@ function transformLiveReservation(raw: RawMoovsReservation, operatorId: string):
   };
 }
 
-export async function fetchLiveReservations(
+export async function fetchLiveReservationPage(
   localOperatorId: string,
   moovsOperatorId: string,
   options?: FetchReservationsOptions,
-): Promise<Reservation[]> {
+): Promise<{reservations:Reservation[];metadata:{fetched_at:string;time_zone:string|null;source:string;complete:boolean};total:number}> {
   if (isDemoOperatorId(localOperatorId) || isDemoMoovsOperatorId(moovsOperatorId)) {
-    return getDemoReservations(options);
+    const rows=getDemoReservations(options),total=getDemoReservations({...options,limit:undefined,offset:undefined}).length;return {reservations:rows,metadata:{fetched_at:new Date().toISOString(),time_zone:'America/Chicago',source:'Synthetic demo',complete:(options?.offset??0)+rows.length>=total},total};
   }
   const res = await fetch(`${API}/fetch-reservations`, {
     method: 'POST',
@@ -144,14 +151,20 @@ export async function fetchLiveReservations(
       date_to: options?.dateTo,
       company_id: options?.companyId,
       client_key: options?.clientKey,
+      client_keys: options?.clientKeys,
+      include_cancelled:options?.includeCancelled,
       limit: options?.limit,
       offset: options?.offset,
     }),
   });
-  const data = await handleResponse<{ reservations?: RawMoovsReservation[] }>(res, 'fetchLiveReservations');
-  return (data.reservations ?? [])
+  const data = await handleResponse<{ reservations?: RawMoovsReservation[];facts_metadata:{fetched_at:string;time_zone:string|null;source:string;complete:boolean};total:number }>(res, 'fetchLiveReservations');
+  return {metadata:data.facts_metadata,total:data.total,reservations:(data.reservations ?? [])
     .map((raw) => transformLiveReservation(raw, localOperatorId))
-    .filter((row): row is Reservation => Boolean(row));
+    .filter((row): row is Reservation => Boolean(row))};
+}
+
+export async function fetchLiveReservations(localOperatorId:string,moovsOperatorId:string,options?:FetchReservationsOptions):Promise<Reservation[]> {
+ return (await fetchLiveReservationPage(localOperatorId,moovsOperatorId,options)).reservations;
 }
 
 /**
@@ -170,6 +183,7 @@ export async function fetchCurrentReservations(
         dateTo: options.dateTo,
         companyId: options.companyId,
         clientKey: options.clientKey,
+        clientKeys: options.clientKeys,
       }
     : undefined;
 
@@ -196,7 +210,7 @@ export async function fetchCurrentReservations(
   if (!isPagedLiveFetch || liveRows.length === 0) {
     const liveTripIds = new Set(liveRows.map((row) => row.moovs_trip_id));
     for (const persisted of persistedRows) {
-      if (!liveTripIds.has(persisted.moovs_trip_id)) merged.push(persisted);
+      if (!liveTripIds.has(persisted.moovs_trip_id)) merged.push({...persisted,fact_origin:'snapshot'});
     }
   }
 

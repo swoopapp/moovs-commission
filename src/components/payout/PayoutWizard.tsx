@@ -25,7 +25,7 @@ interface PayoutWizardProps {
   onPayoutCreated: () => void;
 }
 
-const STEP_LABELS = ['Date Range', 'Select Trips', 'Payment Details'];
+const STEP_LABELS = ['Date Range', 'Select Trips', 'External Payment Record'];
 
 export function PayoutWizard({
   open,
@@ -132,7 +132,7 @@ export function PayoutWizard({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-h-[85vh] overflow-y-auto" style={{ maxWidth: '40rem' }}>
         <DialogHeader>
-          <DialogTitle>Create Payout</DialogTitle>
+          <DialogTitle>Prepare settlement</DialogTitle>
           <DialogDescription>
             {STEP_LABELS[step - 1]}
           </DialogDescription>

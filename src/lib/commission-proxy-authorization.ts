@@ -129,6 +129,31 @@ export async function authorizeOperatorProxyRequest({
   const segments = path.split('/').filter(Boolean);
   const bodyFor = async (): Promise<Record<string, unknown> | null> => asRecord(await readJson());
 
+  if(path==='workflow/facts') {
+    if(method!=='POST')return denied(405,'Method not allowed');
+    const body=await bodyFor();return body?.operator_id===session.operatorId?{allowed:true}:denied(403,'Forbidden');
+  }
+  if(path==='workflow/adjustments'||(segments.length===4&&segments[0]==='workflow'&&segments[1]==='adjustments'&&segments[3]==='cancel')) {
+    if(method!=='POST')return denied(405,'Method not allowed');const body=await bodyFor(),agencyId=nonEmptyString(body?.agency_id);
+    return body?.operator_id===session.operatorId&&agencyId&&await ownsAgencies(lookupOwnership,[agencyId],session.operatorId)?{allowed:true}:denied(403,'Forbidden');
+  }
+  if (path === 'workflow') {
+    if (method !== 'GET') return denied(405, 'Method not allowed');
+    const agencyId = nonEmptyString(url.searchParams.get('agency_id'));
+    return agencyId && await ownsAgencies(lookupOwnership, [agencyId], session.operatorId) ? { allowed: true } : denied(403, 'Forbidden');
+  }
+  if (['workflow/review', 'workflow/rules', 'workflow/question-resolution', 'workflow/correction'].includes(path)) {
+    if (method !== 'POST') return denied(405, 'Method not allowed');
+    const body = await bodyFor();
+    const agencyId = nonEmptyString(body?.agency_id);
+    return body?.operator_id === session.operatorId && agencyId && await ownsAgencies(lookupOwnership, [agencyId], session.operatorId) ? { allowed: true } : denied(403, 'Forbidden');
+  }
+  if (segments.length === 3 && segments[0] === 'payouts' && ['record-payment','void'].includes(segments[2])) {
+    if (method !== 'POST') return denied(405, 'Method not allowed');
+    const body = await bodyFor();
+    return body?.operator_id === session.operatorId && await ownsPayouts(lookupOwnership, [segments[1]], session.operatorId) ? { allowed: true } : denied(403, 'Forbidden');
+  }
+
   if (path === 'agencies') {
     if (method === 'GET') {
       return url.searchParams.get('operator_id') === session.operatorId

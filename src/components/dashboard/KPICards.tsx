@@ -1,81 +1,55 @@
+import type { FinanceWorkspace } from '../../services/financeWorkspaceService';
 import { Card, CardContent } from '../ui/card';
-import { DollarSign, CheckCircle, Building2, Clock } from 'lucide-react';
-
-interface KPICardsProps {
-  totalOwed: number;
-  paidThisPeriod: number;
-  activeAgencies: number;
-  pendingPayouts: number;
-}
-
-function formatCurrency(amount: number): string {
-  return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-const cards = [
-  {
-    key: 'totalOwed',
-    label: 'Total Commission Owed',
-    subtitle: 'Across all agencies',
-    icon: DollarSign,
-    color: 'text-red-600',
-    bgColor: 'bg-red-50',
-    format: 'currency' as const,
-  },
-  {
-    key: 'paidThisPeriod',
-    label: 'Paid This Period',
-    subtitle: 'This month',
-    icon: CheckCircle,
-    color: 'text-green-600',
-    bgColor: 'bg-green-50',
-    format: 'currency' as const,
-  },
-  {
-    key: 'activeAgencies',
-    label: 'Active Agencies',
-    subtitle: 'Currently active',
-    icon: Building2,
-    color: 'text-blue-600',
-    bgColor: 'bg-blue-50',
-    format: 'count' as const,
-  },
-  {
-    key: 'pendingPayouts',
-    label: 'Pending Payouts',
-    subtitle: 'Awaiting payment',
-    icon: Clock,
-    color: 'text-yellow-600',
-    bgColor: 'bg-yellow-50',
-    format: 'count' as const,
-  },
-] as const;
-
-export function KPICards({ totalOwed, paidThisPeriod, activeAgencies, pendingPayouts }: KPICardsProps) {
-  const values: Record<string, number> = { totalOwed, paidThisPeriod, activeAgencies, pendingPayouts };
-
+const money = (n: number) =>
+  n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+export function KPICards({ finance }: { finance: FinanceWorkspace }) {
+  const { totals: t } = finance;
+  const items = [
+    ['Calculated', t.calculated, 'Known booking calculations—not all payable'],
+    ['Projected', t.projected, 'Not yet eligible or completion unverified'],
+    ['Approved', t.approved, 'Eligible and not allocated to a statement'],
+    ['Held', t.held, 'Operator hold; not payable'],
+    [
+      'Prepared',
+      t.prepared,
+      'Frozen booking commission awaiting external payment',
+    ],
+    ['Paid externally', t.paid, 'Frozen booking commission in paid statements'],
+  ] as const;
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Dashboard metrics">
-      {cards.map((card) => {
-        const Icon = card.icon;
-        const value = values[card.key];
-        const display = card.format === 'currency' ? formatCurrency(value) : value.toString();
-
-        return (
-          <Card key={card.key} className="py-4">
-            <CardContent className="flex items-center gap-4">
-              <div className={`${card.bgColor} p-2.5 rounded-lg`} aria-hidden="true">
-                <Icon className={`h-5 w-5 ${card.color}`} />
-              </div>
-              <dl className="min-w-0">
-                <dt className="text-sm font-medium text-gray-600">{card.label}</dt>
-                <dd className="text-2xl font-bold text-gray-900">{display}</dd>
-                <dd className="mt-0.5 text-xs text-gray-600">{card.subtitle}</dd>
+    <section className="space-y-3" aria-label="Dashboard metrics">
+      <div>
+        <h2 className="font-semibold">Booking commission lifecycle</h2>
+        <p className="text-sm text-gray-500">
+          Travel dates {finance.from} through {finance.to}. Each booking
+          occupies one state; calculated is the sum of known states, not a
+          balance owed.
+        </p>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {items.map(([label, value, description]) => (
+          <Card key={label} className="py-4">
+            <CardContent>
+              <dl>
+                <dt className="text-sm font-medium text-gray-600">{label}</dt>
+                <dd className="mt-1 text-2xl font-semibold tabular-nums">
+                  {money(value)}
+                </dd>
+                <dd className="mt-1 text-xs text-gray-500">{description}</dd>
               </dl>
             </CardContent>
           </Card>
-        );
-      })}
-    </div>
+        ))}
+      </div>
+      <p className="text-sm text-gray-600">
+        Needs review / recheck: {money(t.needsReview)} · Rejected:{' '}
+        {money(t.rejected)} · {t.unknownBookings} bookings excluded from known
+        totals. Pending commission corrections:{' '}
+        {money(finance.pendingAdjustments)} (separate from booking amounts).{' '}
+        {finance.carryForward.length} older reviewed/unpaid bookings are
+        outside this dashboard window. Use month-end reconciliation for
+        period-specific carry-forward.
+      </p>
+    </section>
   );
 }

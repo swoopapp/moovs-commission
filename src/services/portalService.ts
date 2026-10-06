@@ -1,3 +1,4 @@
+import type { CommissionQuestion } from '../types/workflow';
 import { Agency, Agent, Reservation, ReservationAttribution, Payout } from '../types/commission';
 
 export interface PortalData {
@@ -9,6 +10,9 @@ export interface PortalData {
   attributions: ReservationAttribution[];
   payouts: Payout[];
   outstandingBalance: number;
+  workflowAvailable?: boolean;
+  commissionStates?: Record<string,{state:string;expected_payment_date:string|null;reason:string|null}>;
+  questions?: CommissionQuestion[];
 }
 
 export async function fetchPortalData(token: string, signal?: AbortSignal): Promise<PortalData | null> {

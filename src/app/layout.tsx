@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import '../styles/globals.css';
+import '../styles/operator-workspace.css';
 
 export const metadata: Metadata = {
   title: 'Moovs Commissions',

@@ -1,3 +1,4 @@
+import { reservationTravelDay } from '../../lib/operator-time';
 import { useMemo } from 'react';
 import { Reservation, ReservationAttribution, Agent, PriceMode } from '../../types/commission';
 import { netAmount } from '../../lib/commission-calc';
@@ -18,6 +19,8 @@ interface PortalReservationsProps {
   agents: Agent[];
   view: 'gm' | 'agent';
   priceMode?: PriceMode;
+  onInspect?: (reservation:Reservation,attribution:ReservationAttribution)=>void;
+  commissionStates?: Record<string,{state:string}>;
 }
 
 function formatCurrency(amount: number): string {
@@ -54,7 +57,7 @@ function agentOrBookingContact(row: JoinedRow): string {
   );
 }
 
-export function PortalReservations({ reservations, attributions, agents, view, priceMode = 'gross' }: PortalReservationsProps) {
+export function PortalReservations({ reservations, attributions, agents, view, priceMode = 'gross', onInspect, commissionStates }: PortalReservationsProps) {
   const agentMap = useMemo(() => {
     const m = new Map<string, Agent>();
     agents.forEach((a) => m.set(a.id, a));
@@ -100,7 +103,7 @@ export function PortalReservations({ reservations, attributions, agents, view, p
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Date</TableHead>
+                <TableHead>Booking</TableHead><TableHead>Date</TableHead>
                 <TableHead>Passenger</TableHead>
                 {view === 'gm' && <TableHead>Agent / Booking Contact</TableHead>}
                 <TableHead>Trip Type</TableHead>
@@ -108,13 +111,14 @@ export function PortalReservations({ reservations, attributions, agents, view, p
                 <TableHead className={`text-right${priceMode === 'gross' ? ' font-semibold text-gray-900' : ''}`}>Gross</TableHead>
                 <TableHead className="text-right">Commission</TableHead>
                 <TableHead className={`text-right${priceMode === 'net' ? ' font-semibold text-gray-900' : ''}`}>Net</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>Trip status</TableHead><TableHead>Commission state</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.map((row) => (
                 <TableRow key={row.attribution.id}>
-                  <TableCell className="whitespace-nowrap">{formatDate(row.reservation.pickup_date)}</TableCell>
+                  <TableCell>{onInspect?<button className="text-blue-700 underline" onClick={()=>onInspect(row.reservation,row.attribution)}>{row.reservation.order_number ?? 'Booking'}</button>:row.reservation.order_number ?? '--'}</TableCell>
+                  <TableCell className="whitespace-nowrap">{formatDate(reservationTravelDay(row.reservation))}</TableCell>
                   <TableCell>{row.reservation.passenger_name || '--'}</TableCell>
                   {view === 'gm' && <TableCell>{agentOrBookingContact(row)}</TableCell>}
                   <TableCell>{row.reservation.trip_type || '--'}</TableCell>
@@ -126,9 +130,10 @@ export function PortalReservations({ reservations, attributions, agents, view, p
                   <TableCell className={`text-right${priceMode === 'net' ? ' font-semibold text-gray-900' : ''}`}>{formatCurrency(netAmount(row.reservation, row.attribution.commission_amount))}</TableCell>
                   <TableCell>
                     <Badge variant="secondary" className={statusBadgeClass(row.reservation.trip_status)}>
-                      {row.reservation.trip_status || 'Unknown'}
+                      {row.reservation.trip_status ?? '--'}
                     </Badge>
                   </TableCell>
+                  <TableCell><Badge variant="secondary">{commissionStates?.[row.reservation.moovs_trip_id]?.state ?? 'projected'}</Badge></TableCell>
                 </TableRow>
               ))}
             </TableBody>

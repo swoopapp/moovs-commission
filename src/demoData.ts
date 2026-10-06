@@ -1,12 +1,33 @@
-import { Agency, Agent, Payout, Reservation, ReservationAttribution } from './types/commission';
-import { CommissionOperator, CommissionOperatorConfig, RouteRateConfig, ShuttleRoute } from './types/commissionOperator';
+import type { WorkflowData } from './types/workflow';
+import {
+  commissionFingerprint,
+  agentMatch,
+  statementLine,
+} from './lib/commission-workflow';
+import {
+  Agency,
+  Agent,
+  Payout,
+  Reservation,
+  ReservationAttribution,
+} from './types/commission';
+import {
+  CommissionOperator,
+  CommissionOperatorConfig,
+  RouteRateConfig,
+  ShuttleRoute,
+} from './types/commissionOperator';
 import { calculateCommission } from './lib/commission-calc';
+import { operatorDay, previousOperatorMonth } from './lib/operator-time';
 
 export const DEMO_SLUG = 'demo';
 export const DEMO_OPERATOR_ID = 'demo-operator';
 export const DEMO_MOOVS_OPERATOR_ID = 'demo-moovs-operator';
 
-const nowIso = '2026-07-02T12:00:00.000Z';
+const nowIso = new Date().toISOString();
+const demoPeriod = previousOperatorMonth('America/Chicago');
+const demoEnd = new Date(`${demoPeriod.to}T00:00:00Z`);
+const demoStart = new Date(`${demoPeriod.from}T00:00:00Z`);
 
 export function isDemoSlug(slug: string): boolean {
   return slug === DEMO_SLUG;
@@ -39,9 +60,21 @@ export function isDemoPayoutId(id: string): boolean {
 export const demoRouteRateConfig: RouteRateConfig = {
   default_rate: 8,
   routes: {
-    'demo-route-airport-downtown': { route_id: 'demo-route-airport-downtown', name: 'Airport ↔ Downtown Hotel Zone', rate: 9 },
-    'demo-route-downtown-event-campus': { route_id: 'demo-route-downtown-event-campus', name: 'Downtown ↔ Event Campus', rate: 10 },
-    'demo-route-corporate-loop': { route_id: 'demo-route-corporate-loop', name: 'Corporate Campus Shuttle Loop', rate: 7 },
+    'demo-route-airport-downtown': {
+      route_id: 'demo-route-airport-downtown',
+      name: 'Airport ↔ Downtown Hotel Zone',
+      rate: 9,
+    },
+    'demo-route-downtown-event-campus': {
+      route_id: 'demo-route-downtown-event-campus',
+      name: 'Downtown ↔ Event Campus',
+      rate: 10,
+    },
+    'demo-route-corporate-loop': {
+      route_id: 'demo-route-corporate-loop',
+      name: 'Corporate Campus Shuttle Loop',
+      rate: 7,
+    },
   },
   updated_at: nowIso,
 };
@@ -59,6 +92,7 @@ export const demoOperatorRecord: CommissionOperator = {
   contact_phone: '(312) 555-0199',
   status: 'active',
   route_rate_config: demoRouteRateConfig,
+  timezone_id:'America/Chicago',
   created_at: nowIso,
   updated_at: nowIso,
 };
@@ -72,9 +106,29 @@ export const demoOperatorConfig: CommissionOperatorConfig = {
   primaryColor: demoOperatorRecord.primary_color,
   secondaryColor: demoOperatorRecord.secondary_color,
   routeRateConfig: demoRouteRateConfig,
+  timeZone:'America/Chicago',
 };
 
-const agencySeed: Array<Pick<Agency, 'id' | 'name' | 'type' | 'commission_rate' | 'commission_type' | 'commission_base' | 'rate_mode' | 'price_mode' | 'contact_name' | 'contact_email' | 'contact_phone' | 'city' | 'state' | 'market_segment' | 'payment_terms'>> = [
+const agencySeed: Array<
+  Pick<
+    Agency,
+    | 'id'
+    | 'name'
+    | 'type'
+    | 'commission_rate'
+    | 'commission_type'
+    | 'commission_base'
+    | 'rate_mode'
+    | 'price_mode'
+    | 'contact_name'
+    | 'contact_email'
+    | 'contact_phone'
+    | 'city'
+    | 'state'
+    | 'market_segment'
+    | 'payment_terms'
+  >
+> = [
   {
     id: 'demo-agency-grandview-hotels',
     name: 'Grandview Hotel Group',
@@ -188,7 +242,18 @@ export const demoAgencies: Agency[] = agencySeed.map((seed, index) => {
     operator_id: DEMO_OPERATOR_ID,
     moovs_company_id: clientType === 'company' ? clientId : null,
     address: `${100 + index * 12} ${['Market Street', 'Wacker Drive', 'Wynkoop Street', 'Commerce Street', 'Central Avenue', 'Pine Street'][index]}`,
-    zip_code: index === 0 ? '10018' : index === 1 ? '60601' : index === 2 ? '80202' : index === 3 ? '75201' : index === 4 ? '85004' : '98101',
+    zip_code:
+      index === 0
+        ? '10018'
+        : index === 1
+          ? '60601'
+          : index === 2
+            ? '80202'
+            : index === 3
+              ? '75201'
+              : index === 4
+                ? '85004'
+                : '98101',
     country: 'US',
     contract_start: '2026-01-01',
     contract_end: '2026-12-31',
@@ -198,159 +263,277 @@ export const demoAgencies: Agency[] = agencySeed.map((seed, index) => {
     last_synced_at: nowIso,
     created_at: nowIso,
     updated_at: nowIso,
-    client_links: [{
-      id: `demo-link-${index + 1}`,
-      agency_id: seed.id,
-      operator_id: DEMO_OPERATOR_ID,
-      client_key: clientKey,
-      client_type: clientType,
-      client_id: clientId,
-      display_name_snapshot: seed.name,
-      is_primary: true,
-      created_at: nowIso,
-      updated_at: nowIso,
-    }],
+    client_links: [
+      {
+        id: `demo-link-${index + 1}`,
+        agency_id: seed.id,
+        operator_id: DEMO_OPERATOR_ID,
+        client_key: clientKey,
+        client_type: clientType,
+        client_id: clientId,
+        display_name_snapshot: seed.name,
+        is_primary: true,
+        created_at: nowIso,
+        updated_at: nowIso,
+      },
+    ],
   };
 });
 
-export const demoAgents: Agent[] = demoAgencies.flatMap((agency, agencyIndex) => {
-  const names = [
-    ['Lena Park', 'Marcus Stone', 'Taylor Wong'],
-    ['Riley Brooks', 'Priya Shah'],
-    ['Emma Rivera', 'Lucas Morgan'],
-    ['Hana Imai', 'Ben Carter'],
-    ['Mason Patel', 'Olivia Reed'],
-    ['Kevin Davis'],
-  ][agencyIndex];
-  return names.map((name, agentIndex) => ({
-    id: `demo-agent-${agencyIndex + 1}-${agentIndex + 1}`,
-    agency_id: agency.id,
-    moovs_contact_id: `demo-contact-${agencyIndex + 1}-${agentIndex + 1}`,
-    name,
-    email: `${name.toLowerCase().replace(/\s+/g, '.')}@example.com`,
-    phone: `(555) 555-02${agencyIndex}${agentIndex}`,
-    role: agentIndex === 0 ? 'gm' : 'agent',
-    department: agentIndex === 0 ? 'Front Office' : 'Reservations',
-    status: 'active',
-    portal_token: `demo-agent-portal-${agencyIndex + 1}-${agentIndex + 1}`,
-    created_at: nowIso,
-  }));
-});
+export const demoAgents: Agent[] = demoAgencies.flatMap(
+  (agency, agencyIndex) => {
+    const names = [
+      ['Lena Park', 'Marcus Stone', 'Taylor Wong'],
+      ['Riley Brooks', 'Priya Shah'],
+      ['Emma Rivera', 'Lucas Morgan'],
+      ['Hana Imai', 'Ben Carter'],
+      ['Mason Patel', 'Olivia Reed'],
+      ['Kevin Davis'],
+    ][agencyIndex];
+    return names.map((name, agentIndex) => ({
+      id: `demo-agent-${agencyIndex + 1}-${agentIndex + 1}`,
+      agency_id: agency.id,
+      moovs_contact_id: `demo-contact-${agencyIndex + 1}-${agentIndex + 1}`,
+      name,
+      email: `${name.toLowerCase().replace(/\s+/g, '.')}@example.com`,
+      phone: `(555) 555-02${agencyIndex}${agentIndex}`,
+      role: agentIndex === 0 ? 'gm' : 'agent',
+      department: agentIndex === 0 ? 'Front Office' : 'Reservations',
+      status: 'active',
+      portal_token: `demo-agent-portal-${agencyIndex + 1}-${agentIndex + 1}`,
+      created_at: nowIso,
+    }));
+  },
+);
 
-const passengers = ['Alex Morgan', 'Jamie Parker', 'Casey Nguyen', 'Morgan Reed', 'Drew Anderson', 'Sam Taylor', 'Cameron Young', 'Quinn Bailey', 'Ari Johnson', 'Robin Clark'];
-const pickupLocations = ['Metro International Airport', 'Grandview Hotel Group', 'Central City Hotel', 'Riverside Suites', 'Metro Convention Center', 'Lakeside Hotel'];
-const dropoffLocations = ['Grandview Hotel Group', 'Event Campus', 'Resort District', 'Downtown District', 'Museum District', 'Metro International Airport'];
-const vehicleTypes = ['Executive SUV', 'Mercedes Sprinter', 'Mini Coach', 'Luxury Sedan'];
+const passengers = [
+  'Alex Morgan',
+  'Jamie Parker',
+  'Casey Nguyen',
+  'Morgan Reed',
+  'Drew Anderson',
+  'Sam Taylor',
+  'Cameron Young',
+  'Quinn Bailey',
+  'Ari Johnson',
+  'Robin Clark',
+];
+const pickupLocations = [
+  'Metro International Airport',
+  'Grandview Hotel Group',
+  'Central City Hotel',
+  'Riverside Suites',
+  'Metro Convention Center',
+  'Lakeside Hotel',
+];
+const dropoffLocations = [
+  'Grandview Hotel Group',
+  'Event Campus',
+  'Resort District',
+  'Downtown District',
+  'Museum District',
+  'Metro International Airport',
+];
+const vehicleTypes = [
+  'Executive SUV',
+  'Mercedes Sprinter',
+  'Mini Coach',
+  'Luxury Sedan',
+];
 const routeIds = Object.keys(demoRouteRateConfig.routes);
 
-export const demoReservations: Reservation[] = Array.from({ length: 36 }, (_, index) => {
-  const agency = demoAgencies[index % demoAgencies.length];
-  const primaryLink = agency.client_links?.[0];
-  const routeId = routeIds[index % routeIds.length];
-  const isShuttle = agency.rate_mode === 'standard' || index % 3 === 0;
-  const date = new Date(Date.UTC(2026, 6 - (index % 5), 2 - (index % 20), 16 + (index % 6), 30));
-  const base = 145 + (index % 9) * 42;
-  const total = base + 35 + (index % 5) * 22;
-  return {
-    id: `demo-res-${index + 1}`,
-    operator_id: DEMO_OPERATOR_ID,
-    moovs_trip_id: `DEMO-TRIP-${String(index + 1).padStart(4, '0')}`,
-    moovs_company_id: agency.moovs_company_id,
-    order_number: `ORD-${7400 + index}`,
-    confirmation_number: `CNF-${93000 + index}`,
-    pickup_date: date.toISOString(),
-    pickup_location: pickupLocations[index % pickupLocations.length],
-    dropoff_location: dropoffLocations[(index + 2) % dropoffLocations.length],
-    passenger_name: passengers[index % passengers.length],
-    booking_contact_id: `demo-booking-contact-${index + 1}`,
-    booking_contact_name: demoAgents.find((agent) => agent.agency_id === agency.id)?.name ?? agency.contact_name,
-    booking_contact_email: demoAgents.find((agent) => agent.agency_id === agency.id)?.email ?? agency.contact_email,
-    vehicle_type: vehicleTypes[index % vehicleTypes.length],
-    trip_type: isShuttle ? 'Shuttle' : 'Private Transfer',
-    source: isShuttle ? 'shuttle' : 'trip',
-    shuttle_route_id: isShuttle ? routeId : null,
-    shuttle_route_name: isShuttle ? demoRouteRateConfig.routes[routeId]?.name ?? null : null,
-    base_rate_amount: base,
-    total_amount: total,
-    total_with_gratuity: total + 45,
-    trip_status: index % 11 === 0 ? 'confirmed' : 'completed',
-    synced_at: nowIso,
-    client_keys: primaryLink ? [primaryLink.client_key] : [],
-  };
-});
+export const demoReservations: Reservation[] = Array.from(
+  { length: 36 },
+  (_, index) => {
+    const agency = demoAgencies[index % demoAgencies.length];
+    const primaryLink = agency.client_links?.[0];
+    const routeId = routeIds[index % routeIds.length];
+    const isShuttle = agency.rate_mode === 'standard' || index % 3 === 0;
+    const date = new Date(
+      Date.UTC(
+        demoEnd.getUTCFullYear(),
+        demoEnd.getUTCMonth(),
+        demoEnd.getUTCDate() - (index % 20),
+        16 + (index % 6),
+        30,
+      ),
+    );
+    const base = 145 + (index % 9) * 42;
+    const total = base + 35 + (index % 5) * 22;
+    return {
+      id: `demo-res-${index + 1}`,
+      operator_id: DEMO_OPERATOR_ID,
+      moovs_trip_id: `DEMO-TRIP-${String(index + 1).padStart(4, '0')}`,
+      moovs_company_id: agency.moovs_company_id,
+      order_number: `ORD-${7400 + index}`,
+      confirmation_number: `CNF-${93000 + index}`,
+      pickup_date: date.toISOString(),
+    travel_day:date.toISOString().slice(0,10),booking_timezone:'America/Chicago',fact_origin:'live',facts_fetched_at:nowIso,
+      pickup_location: pickupLocations[index % pickupLocations.length],
+      dropoff_location: dropoffLocations[(index + 2) % dropoffLocations.length],
+      passenger_name: passengers[index % passengers.length],
+      refund_amount: 0,
+      booking_contact_id:
+        demoAgents.find((agent) => agent.agency_id === agency.id)
+          ?.moovs_contact_id ?? null,
+      booking_contact_name:
+        demoAgents.find((agent) => agent.agency_id === agency.id)?.name ??
+        agency.contact_name,
+      booking_contact_email:
+        demoAgents.find((agent) => agent.agency_id === agency.id)?.email ??
+        agency.contact_email,
+      vehicle_type: vehicleTypes[index % vehicleTypes.length],
+      trip_type: isShuttle ? 'Shuttle' : 'Private Transfer',
+      source: isShuttle ? 'shuttle' : 'trip',
+      shuttle_route_id: isShuttle ? routeId : null,
+      shuttle_route_name: isShuttle
+        ? (demoRouteRateConfig.routes[routeId]?.name ?? null)
+        : null,
+      base_rate_amount: base,
+      total_amount: total,
+      total_with_gratuity: total + 45,
+      trip_status: index % 11 === 0 ? 'confirmed' : 'completed',
+      synced_at: nowIso,
+      client_keys: primaryLink ? [primaryLink.client_key] : [],
+    };
+  },
+);
+
+// Read-only sample of a reviewed older booking that must not disappear at month close.
+const carryDate=new Date(Date.UTC(demoStart.getUTCFullYear(),demoStart.getUTCMonth(),0,16,30));
+demoReservations.push({...demoReservations[0],id:'demo-res-carry',moovs_trip_id:'DEMO-CARRY-001',order_number:'ORD-CARRY',trip_status:'completed',pickup_date:carryDate.toISOString(),travel_day:carryDate.toISOString().slice(0,10)});
 
 const attributionCountByAgency = new Map<string, number>();
 
-export const demoAttributions: ReservationAttribution[] = demoReservations.map((reservation, index) => {
-  const agency = demoAgencies[index % demoAgencies.length];
-  const agents = demoAgents.filter((agent) => agent.agency_id === agency.id);
-  const agencyAttributionIndex = attributionCountByAgency.get(agency.id) ?? 0;
-  attributionCountByAgency.set(agency.id, agencyAttributionIndex + 1);
-  const agent = agents[agencyAttributionIndex % Math.max(agents.length, 1)] ?? null;
-  return {
-    id: `demo-attr-${index + 1}`,
-    reservation_id: reservation.id,
-    agency_id: agency.id,
-    agent_id: agent?.id ?? null,
-    commission_rate: agency.rate_mode === 'standard' && reservation.shuttle_route_id
-      ? demoRouteRateConfig.routes[reservation.shuttle_route_id]?.rate ?? demoRouteRateConfig.default_rate ?? agency.commission_rate
-      : agency.commission_rate,
-    commission_type: agency.commission_type,
-    commission_base: agency.commission_base,
-    commission_amount: calculateCommission(reservation, agency, demoRouteRateConfig),
-    attributed_at: reservation.pickup_date ?? nowIso,
-  };
-});
+export const demoAttributions: ReservationAttribution[] = demoReservations.map(
+  (reservation, index) => {
+    const agency = demoAgencies[index % demoAgencies.length];
+    const agents = demoAgents.filter((agent) => agent.agency_id === agency.id);
+    const agencyAttributionIndex = attributionCountByAgency.get(agency.id) ?? 0;
+    attributionCountByAgency.set(agency.id, agencyAttributionIndex + 1);
+    const agent = agentMatch(reservation, agents).agent;
+    return {
+      id: `demo-attr-${index + 1}`,
+      reservation_id: reservation.id,
+      moovs_trip_id: reservation.moovs_trip_id,
+      agency_id: agency.id,
+      agent_id: agent?.id ?? null,
+      commission_rate:
+        agency.rate_mode === 'standard' && reservation.shuttle_route_id
+          ? (demoRouteRateConfig.routes[reservation.shuttle_route_id]?.rate ??
+            demoRouteRateConfig.default_rate ??
+            agency.commission_rate)
+          : agency.commission_rate,
+      commission_type: agency.commission_type,
+      commission_base: agency.commission_base,
+      commission_amount: calculateCommission(
+        reservation,
+        agency,
+        demoRouteRateConfig,
+      ),
+      attributed_at: reservation.pickup_date ?? nowIso,
+    };
+  },
+);
 
 export const demoPayouts: Payout[] = demoAgencies.flatMap((agency, index) => {
-  const attrs = demoAttributions.filter((attr) => attr.agency_id === agency.id).slice(0, 4);
-  const reservations = attrs.map((attr) => demoReservations.find((reservation) => reservation.id === attr.reservation_id)).filter((reservation): reservation is Reservation => Boolean(reservation));
-  const totalRevenue = reservations.reduce((sum, reservation) => sum + reservation.total_amount, 0);
-  const totalCommission = attrs.reduce((sum, attr) => sum + attr.commission_amount, 0);
+  const attrs = demoAttributions
+    .filter((attr) => attr.agency_id === agency.id)
+    .slice(0, 4);
+  const reservations = attrs
+    .map((attr) =>
+      demoReservations.find(
+        (reservation) => reservation.id === attr.reservation_id,
+      ),
+    )
+    .filter((reservation): reservation is Reservation => Boolean(reservation));
+  const totalRevenue = reservations.reduce(
+    (sum, reservation) => sum + reservation.total_amount,
+    0,
+  );
+  const totalCommission = attrs.reduce(
+    (sum, attr) => sum + attr.commission_amount,
+    0,
+  );
   return [
     {
       id: `demo-payout-${index + 1}`,
       operator_id: DEMO_OPERATOR_ID,
       agency_id: agency.id,
-      period_start: '2026-06-01',
-      period_end: '2026-06-30',
+      period_start: demoStart.toISOString().slice(0, 10),
+      period_end: demoEnd.toISOString().slice(0, 10),
       total_trips: attrs.length,
       total_revenue: Math.round(totalRevenue * 100) / 100,
       total_commission: Math.round(totalCommission * 100) / 100,
       adjustments: index === 2 ? -25 : 0,
-      net_payout: Math.round((totalCommission + (index === 2 ? -25 : 0)) * 100) / 100,
+      net_payout:
+        Math.round((totalCommission + (index === 2 ? -25 : 0)) * 100) / 100,
       method: index % 2 === 0 ? 'ACH' : 'Check',
       reference_number: `DEMO-PAY-${202600 + index}`,
       status: index % 3 === 0 ? 'pending' : 'paid',
       notes: 'Demo payout generated from fixture data.',
-      date_paid: index % 3 === 0 ? null : '2026-07-01',
+      statement_snapshot: {
+        version: 1,
+        agency_name: agency.name,
+        period_start: demoStart.toISOString().slice(0, 10),
+        period_end: demoEnd.toISOString().slice(0, 10),
+        lines: reservations.map((r) =>
+          statementLine(
+            r,
+            agency,
+            attrs.find((a) => a.reservation_id === r.id)!,
+            demoRouteRateConfig,
+          ),
+        ),
+        adjustments: index === 2 ? -25 : 0,
+        adjustment_reason: index === 2 ? 'Sample external correction' : null,
+        total:
+          Math.round((totalCommission + (index === 2 ? -25 : 0)) * 100) / 100,
+      },
+      date_paid: index % 3 === 0 ? null : operatorDay(nowIso, 'America/Chicago'),
       created_at: nowIso,
       updated_at: nowIso,
     },
   ];
 });
 
-export const demoPayoutReservations = demoPayouts.flatMap((payout, payoutIndex) =>
-  demoAttributions
-    .filter((attr) => attr.agency_id === payout.agency_id)
-    .slice(0, payout.total_trips)
-    .map((attr, index) => ({
-      id: `demo-payout-res-${payoutIndex + 1}-${index + 1}`,
-      payout_id: payout.id,
-      reservation_id: attr.reservation_id,
-      created_at: nowIso,
-    })),
+export const demoPayoutReservations = demoPayouts.flatMap(
+  (payout, payoutIndex) =>
+    demoAttributions
+      .filter((attr) => attr.agency_id === payout.agency_id)
+      .slice(0, payout.total_trips)
+      .map((attr, index) => ({
+        id: `demo-payout-res-${payoutIndex + 1}-${index + 1}`,
+        payout_id: payout.id,
+        reservation_id: attr.reservation_id,
+        created_at: nowIso,
+      })),
 );
 
 export const demoShuttleRoutes: ShuttleRoute[] = [
-  { route_id: 'demo-route-airport-downtown', name: 'Airport ↔ Downtown Hotel Zone' },
-  { route_id: 'demo-route-downtown-event-campus', name: 'Downtown ↔ Event Campus' },
-  { route_id: 'demo-route-corporate-loop', name: 'Corporate Campus Shuttle Loop' },
+  {
+    route_id: 'demo-route-airport-downtown',
+    name: 'Airport ↔ Downtown Hotel Zone',
+  },
+  {
+    route_id: 'demo-route-downtown-event-campus',
+    name: 'Downtown ↔ Event Campus',
+  },
+  {
+    route_id: 'demo-route-corporate-loop',
+    name: 'Corporate Campus Shuttle Loop',
+  },
   { route_id: 'demo-route-resort-connector', name: 'Resort Connector' },
   { route_id: 'demo-route-museum-district', name: 'Museum District Shuttle' },
 ];
 
-export function getDemoAgencies(options?: { offset?: number; limit?: number; search?: string; matchedOnly?: boolean; unmatchedOnly?: boolean }) {
+export function getDemoAgencies(options?: {
+  offset?: number;
+  limit?: number;
+  search?: string;
+  matchedOnly?: boolean;
+  unmatchedOnly?: boolean;
+}) {
   const q = options?.search?.trim().toLowerCase();
   let rows = demoAgencies;
   if (q) {
@@ -360,8 +543,14 @@ export function getDemoAgencies(options?: { offset?: number; limit?: number; sea
         .some((value) => String(value).toLowerCase().includes(q)),
     );
   }
-  if (options?.matchedOnly) rows = rows.filter((agency) => agency.client_links?.length || agency.moovs_company_id);
-  if (options?.unmatchedOnly) rows = rows.filter((agency) => !agency.client_links?.length && !agency.moovs_company_id);
+  if (options?.matchedOnly)
+    rows = rows.filter(
+      (agency) => agency.client_links?.length || agency.moovs_company_id,
+    );
+  if (options?.unmatchedOnly)
+    rows = rows.filter(
+      (agency) => !agency.client_links?.length && !agency.moovs_company_id,
+    );
   const total = rows.length;
   const offset = options?.offset ?? 0;
   const limit = options?.limit ?? total;
@@ -389,16 +578,46 @@ export function getDemoAgentsByAgencies(agencyIds: string[]): Agent[] {
   return demoAgents.filter((agent) => ids.has(agent.agency_id));
 }
 
-export function getDemoReservations(options?: { dateFrom?: string; dateTo?: string; companyId?: string; clientKey?: string; limit?: number; offset?: number }): Reservation[] {
+export function getDemoReservations(options?: {
+  dateFrom?: string;
+  dateTo?: string;
+  companyId?: string;
+  clientKey?: string;
+  clientKeys?: string[];
+  limit?: number;
+  offset?: number;
+}): Reservation[] {
   let rows = demoReservations;
-  if (options?.companyId) rows = rows.filter((reservation) => reservation.moovs_company_id === options.companyId);
+  if (options?.companyId)
+    rows = rows.filter(
+      (reservation) => reservation.moovs_company_id === options.companyId,
+    );
   if (options?.clientKey) {
     const clientKey = options.clientKey;
-    rows = rows.filter((reservation) => reservation.client_keys?.includes(clientKey));
+    rows = rows.filter((reservation) =>
+      reservation.client_keys?.includes(clientKey),
+    );
   }
-  if (options?.dateFrom) rows = rows.filter((reservation) => !reservation.pickup_date || reservation.pickup_date.slice(0, 10) >= options.dateFrom!);
-  if (options?.dateTo) rows = rows.filter((reservation) => !reservation.pickup_date || reservation.pickup_date.slice(0, 10) <= options.dateTo!);
-  rows = [...rows].sort((a, b) => (b.pickup_date || '').localeCompare(a.pickup_date || ''));
+  if (options?.clientKeys?.length)
+    rows = rows.filter((r) =>
+      options.clientKeys!.some((k) => r.client_keys?.includes(k)),
+    );
+
+  if (options?.dateFrom)
+    rows = rows.filter(
+      (reservation) =>
+        !reservation.pickup_date ||
+        reservation.pickup_date.slice(0, 10) >= options.dateFrom!,
+    );
+  if (options?.dateTo)
+    rows = rows.filter(
+      (reservation) =>
+        !reservation.pickup_date ||
+        reservation.pickup_date.slice(0, 10) <= options.dateTo!,
+    );
+  rows = [...rows].sort((a, b) =>
+    (b.pickup_date || '').localeCompare(a.pickup_date || ''),
+  );
   const offset = options?.offset ?? 0;
   const limit = options?.limit ?? rows.length;
   return rows.slice(offset, offset + limit);
@@ -409,11 +628,15 @@ export function getDemoReservationsByIds(ids: string[]): Reservation[] {
   return demoReservations.filter((reservation) => idSet.has(reservation.id));
 }
 
-export function getDemoAttributionsByAgency(agencyId: string): ReservationAttribution[] {
+export function getDemoAttributionsByAgency(
+  agencyId: string,
+): ReservationAttribution[] {
   return demoAttributions.filter((attr) => attr.agency_id === agencyId);
 }
 
-export function getDemoAttributionsByReservations(reservationIds: string[]): ReservationAttribution[] {
+export function getDemoAttributionsByReservations(
+  reservationIds: string[],
+): ReservationAttribution[] {
   const idSet = new Set(reservationIds);
   return demoAttributions.filter((attr) => idSet.has(attr.reservation_id));
 }
@@ -432,9 +655,82 @@ export function getDemoPayoutReservationsByPayouts(payoutIds: string[]) {
 }
 
 export function getDemoLinkedClientKeys(): Set<string> {
-  return new Set(demoAgencies.flatMap((agency) => agency.client_links?.map((link) => link.client_key) ?? []));
+  return new Set(
+    demoAgencies.flatMap(
+      (agency) => agency.client_links?.map((link) => link.client_key) ?? [],
+    ),
+  );
 }
 
 export function demoReadOnlyError(action: string): Error {
-  return new Error(`${action} is disabled in demo mode. This link uses read-only fake data.`);
+  return new Error(
+    `${action} is disabled in demo mode. This link uses read-only fake data.`,
+  );
+}
+
+// Demonstration only: not a write-through workflow or evidence of real approvals.
+export function getDemoWorkflow(agencyId: string): WorkflowData {
+  const agency = getDemoAgencyById(agencyId);
+  if (!agency) return { reviews: [], events: [], questions: [] };
+  const agents = getDemoAgentsByAgency(agencyId);
+  const reservations = demoReservations.filter((r) =>
+    demoAttributions.some(
+      (a) => a.reservation_id === r.id && a.agency_id === agencyId,
+    ),
+  );
+  const reviews = reservations
+    .filter((r) => r.trip_status === 'completed')
+    .map((r, i) => ({
+      agency_id: agencyId,
+      moovs_trip_id: r.moovs_trip_id,
+      status: (r.id==='demo-res-carry'?'approved':i % 4 === 1 ? 'held' : i % 4 === 2 ? 'rejected' : 'approved') as
+        | 'held'
+        | 'rejected'
+        | 'approved',
+      reason:
+        i % 4 === 1
+          ? 'Sample hold: confirm booking contact credit'
+          : i % 4 === 2
+            ? 'Sample rejection: outside partner agreement'
+            : 'Sample verified agency credit',
+      fingerprint: commissionFingerprint(
+        r,
+        agency,
+        agentMatch(r, agents).agent?.id ?? null,
+        demoRouteRateConfig,
+      ),
+      expected_payment_date: null,
+      updated_at: nowIso,
+      actor: 'demo-reviewer',
+    }));
+  return {
+    reviews,
+    adjustments: demoPayouts.filter(p=>p.agency_id===agencyId&&p.status==='paid').slice(0,1).map(p=>({id:`demo-correction-${agencyId}`,agency_id:agencyId,source_payout_id:p.id,moovs_trip_id:null,amount:-15,reason:'Sample commission-only rate correction; original statement remains frozen.',actor:'demo-operator',request_key:'demo-read-only',applied_payout_id:null,cancelled_at:null,created_at:nowIso})),
+    events: reviews.map((r, i) => ({
+      id: `demo-event-${agencyId}-${i}`,
+      agency_id: agencyId,
+      moovs_trip_id: r.moovs_trip_id,
+      action: `commission.${r.status}`,
+      actor: r.actor,
+      reason: r.reason,
+      created_at: nowIso,
+    })),
+    questions: reservations.length
+      ? [
+          {
+            id: `demo-question-${agencyId}`,
+            agency_id: agencyId,
+            agent_id: agents[0]?.id ?? null,
+            moovs_trip_id: reservations[0].moovs_trip_id,
+            message:
+              'Sample question: does this commission base include gratuity?',
+            status: 'resolved',
+            resolution:
+              'This sample agency uses the displayed calculation base; gratuity is only included when the base is total with gratuity.',
+            created_at: nowIso,
+            resolved_at: nowIso,
+          },
+        ]
+      : [],
+  };
 }

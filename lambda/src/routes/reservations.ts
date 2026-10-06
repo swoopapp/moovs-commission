@@ -1,3 +1,4 @@
+import { operatorTimezone } from '../operatorTimezone.js';
 import { Hono } from 'hono';
 import { query } from '../db.js';
 
@@ -7,13 +8,14 @@ const app = new Hono();
 // Returns BOTH regular trips and shuttle bookings in a unified format
 app.post('/fetch-reservations', async (c) => {
   try {
-    const { operator_id, date_from, date_to, company_id, client_key, limit, offset } = await c.req.json();
+    const { operator_id, date_from, date_to, company_id, client_key, client_keys, limit, offset, include_cancelled } = await c.req.json();
 
     if (!operator_id) {
       return c.json({ error: 'Missing operator_id' }, 400);
     }
 
-    const params: any[] = [operator_id];
+    const timeZone=await operatorTimezone(operator_id);
+    const params: any[] = [operator_id,timeZone];
     let tripDateFilter = '';
     let shuttleDateFilter = '';
     let tripCompanyFilter = '';
@@ -28,7 +30,7 @@ app.post('/fetch-reservations', async (c) => {
     }
     if (date_to) {
       params.push(date_to);
-      tripDateFilter += ` AND pickup.date_time <= ($${params.length}::date + INTERVAL '1 day')`;
+      tripDateFilter += ` AND pickup.date_time < ($${params.length}::date + INTERVAL '1 day')`;
       shuttleDateFilter += ` AND sb.travel_date <= $${params.length}::date`;
     }
     if (company_id) {
@@ -57,6 +59,14 @@ app.post('/fetch-reservations', async (c) => {
       }
     }
 
+    if (client_keys !== undefined) {
+      if (!Array.isArray(client_keys) || !client_keys.length || client_keys.length > 100 || client_keys.some((k: unknown) => typeof k !== 'string' || !/^(company|shuttle_client):[^:,\s]+$/.test(k))) return c.json({error:'Invalid client_keys'},400);
+      params.push(client_keys);
+      const n=params.length;
+      tripClientFilter += ` AND ('company:' || req.company_id::text) = ANY($${n}::text[])`;
+      shuttleClientFilter += ` AND ARRAY_REMOVE(ARRAY['shuttle_client:' || sb.shuttle_client_id::text,'company:' || sc.company_id::text,'company:' || sp.company_id::text,'company:' || rd.company_id::text],NULL) && $${n}::text[]`;
+    }
+
     const parsedLimit = Number.parseInt(String(limit ?? ''), 10);
     const safeLimit = Number.isFinite(parsedLimit) && parsedLimit > 0
       ? Math.min(parsedLimit, 250)
@@ -68,6 +78,11 @@ app.post('/fetch-reservations', async (c) => {
     const tripsResult = await query(
       `SELECT
         t.trip_id as "Trip ID",
+        to_char(pickup.date_time,'YYYY-MM-DD') AS "Travel Day",
+        $2::text AS "Booking Timezone",
+        req.request_id::text as "Request ID",
+        r.public_id as "Route Public ID",
+        COALESCE((SELECT SUM(sr.sub_refund_amount) FROM sub_refund sr JOIN refund rf ON rf.refund_id = sr.refund_id AND rf.refund_status IN ('succeeded','pending') WHERE sr.route_id = r.route_id OR sr.farmed_route_id = fr.farmed_route_id),0) / 100.0 as "Refund Amount",
         req.order_number as "Order Number",
         req.order_number as "Confirmation Number",
         req.company_id as "Company ID",
@@ -77,8 +92,9 @@ app.post('/fetch-reservations', async (c) => {
           NULLIF(bc.email, '')
         ) as "Booking Contact Full Name",
         bc.email as "Booking Contact Email",
-        pickup.date_time as "Pickup Date Time",
-        dropoff.date_time as "Dropoff Time Local",
+        -- Legacy API Z shape is a wall-clock container, not an instant. No timezone conversion.
+        to_char(pickup.date_time, 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "Pickup Date Time",
+        to_char(dropoff.date_time, 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "Dropoff Time Local",
         pickup.location as "Pickup Address",
         dropoff.location as "Dropoff Address",
         COALESCE(
@@ -136,13 +152,25 @@ app.post('/fetch-reservations', async (c) => {
     const shuttleResult = await query(
       `SELECT
         sb.booking_id as "Trip ID",
+        to_char(sb.travel_date,'YYYY-MM-DD') AS "Travel Day",
+        $2::text AS "Booking Timezone",
         sb.external_reservation_id as "Order Number",
+         -- Missing legacy booking-price facts must not become a payable zero-price booking.
+         CASE WHEN pay.booking_id IS NULL THEN NULL ELSE (
+           COALESCE((SELECT SUM(ra.refund_amount_in_cents) FROM shuttle_booking_refund_allocation ra
+             JOIN shuttle_refund rf ON rf.shuttle_refund_id=ra.shuttle_refund_id AND rf.status IN ('succeeded','pending')
+             WHERE ra.booking_id=sb.booking_id AND ra.operator_id=sb.operator_id),0)
+           + COALESCE((SELECT SUM(rf.refund_amount_in_cents) FROM shuttle_refund rf
+             JOIN shuttle_payment legacy ON legacy.shuttle_payment_id=rf.shuttle_payment_id
+             WHERE legacy.booking_id=sb.booking_id AND rf.operator_id=sb.operator_id AND rf.status IN ('succeeded','pending')
+               AND NOT EXISTS(SELECT 1 FROM shuttle_booking_refund_allocation ra WHERE ra.shuttle_refund_id=rf.shuttle_refund_id)),0)
+         ) END / 100.0 AS "Refund Amount",
         sb.external_reservation_id as "Confirmation Number",
         COALESCE(sc.company_id, sp.company_id, rd.company_id) as "Company ID",
         NULL::uuid as "Booking Contact ID",
         NULL::text as "Booking Contact Full Name",
         NULL::text as "Booking Contact Email",
-        COALESCE(sb.scheduled_pickup_time, sb.travel_date::timestamptz) as "Pickup Date Time",
+        sb.scheduled_pickup_time as "Pickup Date Time",
         sb.scheduled_dropoff_time as "Dropoff Time Local",
         sb.pickup_location as "Pickup Address",
         sb.dropoff_location as "Dropoff Address",
@@ -181,19 +209,21 @@ app.post('/fetch-reservations', async (c) => {
       LEFT JOIN shuttle_route_definition_version rv ON rv.route_version_id = sb.route_version_id
       LEFT JOIN shuttle_route_definition rd ON rd.route_definition_id = rv.route_definition_id AND rd.operator_id = sb.operator_id
       WHERE sb.operator_id = $1
-        AND sb.cancelled_at IS NULL${shuttleDateFilter}${shuttleCompanyFilter}${shuttleClientFilter}
-      ORDER BY COALESCE(sb.scheduled_pickup_time, sb.travel_date::timestamptz) ASC NULLS LAST`,
+        ${include_cancelled === true ? '' : 'AND sb.cancelled_at IS NULL'}${shuttleDateFilter}${shuttleCompanyFilter}${shuttleClientFilter}
+      ORDER BY sb.travel_date ASC, sb.scheduled_pickup_time ASC NULLS LAST`,
       params
     );
 
     // Transform and merge both result sets
-    const tripReservations = tripsResult.rows.map(formatTrip);
-    const shuttleReservations = shuttleResult.rows.map(formatShuttle);
+    const fetchedAt=new Date().toISOString();
+    const health=(r:any)=>({...r,'Booking Timezone':timeZone,'Facts Fetched At':fetchedAt});
+    const tripReservations = tripsResult.rows.map(formatTrip).map(health);
+    const shuttleReservations = shuttleResult.rows.map(formatShuttle).map(health);
 
     // Merge and sort by pickup date
     const reservations = [...tripReservations, ...shuttleReservations].sort((a, b) => {
-      const dateA = a['Pickup Date Time'] || '';
-      const dateB = b['Pickup Date Time'] || '';
+      const dateA = a['Travel Day'] || '';
+      const dateB = b['Travel Day'] || '';
       return dateA < dateB ? -1 : dateA > dateB ? 1 : 0;
     });
 
@@ -204,6 +234,7 @@ app.post('/fetch-reservations', async (c) => {
 
     return c.json({
       success: true,
+      facts_metadata:{fetched_at:fetchedAt,time_zone:timeZone,source:'Moovs replica',complete:safeLimit===null || safeOffset+safeLimit>=total},
       reservations: pagedReservations,
       total,
       limit: safeLimit,
@@ -271,12 +302,16 @@ function formatTrip(row: any) {
 
   return {
     'Trip ID': row['Trip ID'],
+    'Request ID': row['Request ID'] || null,
+    'Route Public ID': row['Route Public ID'] || null,
+    'Refund Amount': row['Refund Amount'] == null ? null : Number(row['Refund Amount']),
     'Order Number': row['Order Number'] || '',
     'Confirmation Number': row['Confirmation Number'] || '',
     'Company ID': row['Company ID'] || null,
     'Booking Contact ID': row['Booking Contact ID'] || null,
     'Booking Contact Full Name': (row['Booking Contact Full Name'] || '').trim() || null,
     'Booking Contact Email': row['Booking Contact Email'] || null,
+    'Travel Day': row['Travel Day'] ?? null,
     'Pickup Date Time': row['Pickup Date Time'] || '',
     'Dropoff Time Local': row['Dropoff Time Local'] || '',
     'Pickup Address': row['Pickup Address'] || '',
@@ -306,12 +341,16 @@ function formatShuttle(row: any) {
 
   return {
     'Trip ID': row['Trip ID'],
+    'Request ID': row['Request ID'] || null,
+    'Route Public ID': row['Route Public ID'] || null,
+    'Refund Amount': row['Refund Amount'] == null ? null : Number(row['Refund Amount']),
     'Order Number': row['Order Number'] || '',
     'Confirmation Number': row['Confirmation Number'] || '',
     'Company ID': row['Company ID'] || null,
     'Booking Contact ID': row['Booking Contact ID'] || null,
     'Booking Contact Full Name': row['Booking Contact Full Name'] || null,
     'Booking Contact Email': row['Booking Contact Email'] || null,
+    'Travel Day': row['Travel Day'] ?? null,
     'Pickup Date Time': row['Pickup Date Time'] || '',
     'Dropoff Time Local': row['Dropoff Time Local'] || '',
     'Pickup Address': row['Pickup Address'] || '',

@@ -1,3 +1,4 @@
+import { applicableRule } from './commission-rules.ts';
 import type { Agency, PriceMode, Reservation } from '../types/commission';
 import type { RouteRateConfig } from '../types/commissionOperator';
 
@@ -29,7 +30,7 @@ export function isShuttleReservation(reservation: Pick<Reservation, 'source' | '
   return marker === 'shuttle';
 }
 
-export type RateSource = 'fixed' | 'route' | 'route-default' | 'agency-default';
+export type RateSource = 'fixed' | 'route' | 'route-default' | 'agency-default' | 'agency-rule';
 
 export interface RateResolution {
   rate: number; // percent for 'percent' type, dollar amount for 'flat'
@@ -39,28 +40,30 @@ export interface RateResolution {
 /** Resolve the commission rate that applies to a single reservation for an agency. */
 export function resolveCommissionRate(
   reservation: Reservation,
-  agency: Pick<Agency, 'commission_rate' | 'rate_mode'>,
+  agency: Pick<Agency, 'commission_rate' | 'rate_mode' | 'commission_rules'> & Partial<Pick<Agency,'commission_type'>>,
   routeConfig?: RouteRateConfig | null,
 ): RateResolution {
-  // Fixed override (and the legacy default) always wins.
+  const rule = applicableRule(reservation, agency.commission_rules);
+  if (rule) return { rate: Number(rule.rate), source: 'agency-rule' };
+  // Existing fixed/standard behavior remains the fallback.
   if (agency.rate_mode !== 'standard') {
-    return { rate: agency.commission_rate, source: 'fixed' };
+    return { rate: Number(agency.commission_rate), source: 'fixed' };
   }
 
   // Standard mode: shuttle bookings follow the operator's route rate config.
-  if (routeConfig && isShuttleReservation(reservation)) {
+  if (agency.commission_type !== 'flat' && routeConfig && isShuttleReservation(reservation)) {
     const routeId = reservation.shuttle_route_id ?? undefined;
     const routeRate = routeId ? routeConfig.routes?.[routeId] : undefined;
     if (routeRate && Number.isFinite(routeRate.rate)) {
-      return { rate: routeRate.rate, source: 'route' };
+      return { rate: Number(routeRate.rate), source: 'route' };
     }
     if (routeConfig.default_rate != null && Number.isFinite(routeConfig.default_rate)) {
-      return { rate: routeConfig.default_rate, source: 'route-default' };
+      return { rate: Number(routeConfig.default_rate), source: 'route-default' };
     }
   }
 
   // Fallback: agency rate (non-shuttle trips, or no matching route config).
-  return { rate: agency.commission_rate, source: 'agency-default' };
+  return { rate: Number(agency.commission_rate), source: 'agency-default' };
 }
 
 /** The dollar amount the commission percentage is applied to. */
@@ -79,11 +82,11 @@ export function commissionBaseAmount(reservation: Reservation, base: Agency['com
 /** Compute the commission amount for a reservation/agency, honoring route rates. */
 export function calculateCommission(
   reservation: Reservation,
-  agency: Pick<Agency, 'commission_rate' | 'commission_type' | 'commission_base' | 'rate_mode'>,
+  agency: Pick<Agency, 'commission_rate' | 'commission_type' | 'commission_base' | 'rate_mode' | 'commission_rules'>,
   routeConfig?: RouteRateConfig | null,
 ): number {
   // Flat commissions are a fixed dollar amount regardless of route.
-  if (agency.commission_type === 'flat') return round2(agency.commission_rate);
+  if (agency.commission_type === 'flat') return round2(resolveCommissionRate(reservation, agency, null).rate);
 
   const { rate } = resolveCommissionRate(reservation, agency, routeConfig);
   const base = commissionBaseAmount(reservation, agency.commission_base);

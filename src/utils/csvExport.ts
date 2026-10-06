@@ -1,3 +1,4 @@
+import { reservationTravelDay } from '../lib/operator-time';
 import type { Agency, Payout, Reservation, ReservationAttribution } from '../types/commission';
 import { formatDisplayDate, toLocalDateInput } from '../lib/date';
 
@@ -56,7 +57,7 @@ export function exportPayoutCSV(
     return [
       res?.order_number ?? '',
       res?.confirmation_number ?? '',
-      formatDate(res?.pickup_date ?? null),
+      formatDate(res ? reservationTravelDay(res) : null),
       res?.passenger_name ?? '',
       res?.pickup_location ?? '',
       res?.dropoff_location ?? '',
@@ -111,7 +112,7 @@ export function exportCommissionStatement(
     return [
       res?.order_number ?? '',
       res?.confirmation_number ?? '',
-      formatDate(res?.pickup_date ?? null),
+      formatDate(res ? reservationTravelDay(res) : null),
       res?.passenger_name ?? '',
       res?.pickup_location ?? '',
       res?.dropoff_location ?? '',

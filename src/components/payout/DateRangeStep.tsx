@@ -1,3 +1,5 @@
+import { fetchWorkflow } from '../../services/workflowService';
+import { commissionState } from '../../lib/commission-workflow';
 import { useState } from 'react';
 import { Calendar, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -8,7 +10,7 @@ import { Agency, Agent, Reservation, ReservationAttribution } from '../../types/
 import { fetchAttributionsByAgency } from '../../services/attributionService';
 import { fetchCurrentReservations } from '../../services/reservationService';
 import { fetchAllPayoutReservations } from '../../services/payoutService';
-import { mergeAgencyAttributions, primaryAgencyClientKey } from '../../services/commissionTripService';
+import { mergeAgencyAttributions, agencyClientKeys } from '../../services/commissionTripService';
 import { useOperator } from '../../contexts/OperatorContext';
 
 export interface TripWithCommission {
@@ -67,16 +69,16 @@ export function DateRangeStep({
       setError(null);
 
       // Fetch attributions, reservations, and already-paid reservation IDs in parallel
-      const [attributions, reservations, payoutReservations] = await Promise.all([
+      const [attributions, reservations, payoutReservations, workflow] = await Promise.all([
         fetchAttributionsByAgency(agencyId),
         fetchCurrentReservations(operatorId, moovsOperatorId, {
           dateFrom,
           dateTo,
-          companyId: agency.moovs_company_id ?? undefined,
-          clientKey: primaryAgencyClientKey(agency),
+          clientKeys: agencyClientKeys(agency),
           requireLive: true,
         }),
         fetchAllPayoutReservations(agencyId),
+        fetchWorkflow(agencyId),
       ]);
 
       // Build set of reservation IDs already in a payout
@@ -90,7 +92,7 @@ export function DateRangeStep({
       const result: TripWithCommission[] = [];
       for (const res of reservations) {
         const attr = attrByResId.get(res.id);
-        if (attr && !paidResIds.has(res.id)) {
+        if (attr && !paidResIds.has(res.id) && commissionState(res,agency,agents,workflow.reviews.find(r=>r.moovs_trip_id===res.moovs_trip_id),false,operator.routeRateConfig) === 'approved') {
           result.push({ reservation: res, attribution: attr });
         }
       }

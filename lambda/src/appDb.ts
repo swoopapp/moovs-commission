@@ -1,3 +1,4 @@
+import { calendarPgTypes } from './pgDateTypes.js';
 import pg from 'pg';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 
@@ -22,10 +23,18 @@ let pool: pg.Pool | null = null;
 
 export async function getAppPool(): Promise<pg.Pool> {
   if (pool) return pool;
+  if (process.env.NODE_ENV !== 'production' && process.env.LOCAL_APP_DATABASE_URL) {
+    const localUrl = new URL(process.env.LOCAL_APP_DATABASE_URL!);
+    if (!['localhost','127.0.0.1','[::1]'].includes(localUrl.hostname)) throw new Error('Local test DB must be loopback');
+    pool = new Pool({ connectionString: localUrl.toString(), max: 5, types: calendarPgTypes });
+    return pool;
+  }
+
 
   const password = await getAppDbPassword();
 
   pool = new Pool({
+    types: calendarPgTypes,
     host: process.env.APP_DB_HOST || 'prototype-db.c4xzucffjf3i.us-east-1.rds.amazonaws.com',
     port: 5432,
     database: process.env.APP_DB_NAME || 'postgres',

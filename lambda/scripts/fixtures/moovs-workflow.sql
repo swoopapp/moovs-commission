@@ -1,0 +1,20 @@
+CREATE TABLE operator(operator_id text,timezone_id text);
+-- Synthetic read-replica shape only. Never execute against a real Moovs DB.
+CREATE TABLE request (request_id uuid PRIMARY KEY,operator_id text,order_number text,company_id text,team_id text,type text);
+CREATE TABLE trip(trip_id uuid PRIMARY KEY,request_id uuid,removed_at timestamptz,temporary_passenger jsonb,contact_id text);
+CREATE TABLE route(route_id uuid,trip_id uuid,public_id text,removed_at timestamptz,base_rate_amt numeric,tax_amt numeric,driver_gratuity_amt numeric,promo_discount_amt numeric,other_amt numeric,other2_amt numeric,other3_amt numeric,meet_greet_amt numeric,tolls_amt numeric,forward_facing_seat_amt numeric,rear_facing_seat_amt numeric,booster_seat_amt numeric,promo_code_amt numeric,status_slug text,vehicle_id text);
+CREATE TABLE farmed_route(farmed_route_id uuid,route_id uuid,cancelled_at timestamptz,base_rate_amt numeric,tax_amt numeric,driver_gratuity_amt numeric,promo_discount_amt numeric,other_amt numeric,other2_amt numeric,other3_amt numeric,meet_greet_amt numeric,tolls_amt numeric,vehicle_id text);
+CREATE TABLE contact_team(team_id text,contact_id text);
+CREATE TABLE contact(contact_id text,first_name text,last_name text,email text);
+CREATE TABLE stop(trip_id uuid,stop_index integer,date_time timestamp without time zone,location text,contact_id text);
+CREATE TABLE vehicle(vehicle_id text,name text);
+CREATE TABLE refund(refund_id uuid,refund_status text);
+CREATE TABLE sub_refund(refund_id uuid,sub_refund_amount numeric,route_id uuid,farmed_route_id uuid);
+CREATE TABLE shuttle_booking(booking_id uuid,operator_id text,external_reservation_id text,shuttle_client_id uuid,shuttle_passenger_id uuid,route_version_id uuid,scheduled_pickup_time timestamptz,scheduled_dropoff_time timestamptz,travel_date date,pickup_location text,dropoff_location text,booking_status text,cancelled_at timestamptz,passenger_count integer);
+CREATE TABLE shuttle_client(shuttle_client_id uuid,operator_id text,company_id text,name text);
+CREATE TABLE shuttle_passenger(shuttle_passenger_id uuid,operator_id text,company_id text,first_name text,last_name text);
+CREATE TABLE shuttle_payment(booking_id uuid,amount_in_cents numeric,shuttle_payment_id uuid);
+CREATE TABLE shuttle_route_definition_version(route_version_id uuid,route_definition_id uuid);
+CREATE TABLE shuttle_route_definition(route_definition_id uuid,operator_id text,company_id text,name text);
+CREATE TABLE shuttle_booking_refund_allocation(booking_id uuid,operator_id text,shuttle_refund_id uuid,refund_amount_in_cents numeric);
+CREATE TABLE shuttle_refund(shuttle_refund_id uuid,status text,shuttle_payment_id uuid,operator_id text,refund_amount_in_cents numeric);

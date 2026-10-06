@@ -168,7 +168,7 @@ export function AgencyMatchingView() {
       {/* Header */}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 items-start gap-2 sm:items-center sm:gap-3">
-          <Button variant="ghost" size="icon" aria-label="Back to agencies" onClick={() => { window.location.hash = '#/'; }}>
+          <Button variant="ghost" size="icon" aria-label="Back to agencies" onClick={() => { window.location.hash = '#/agencies'; }}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="min-w-0">

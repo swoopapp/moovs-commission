@@ -10,3 +10,10 @@ lambda/deploy.zip
 lambda/node_modules
 
 .next
+
+# Local visual QA artifacts
+output/qa/
+
+# Task-owned browser and Lambda QA artifacts
+.playwright-cli/
+lambda/output/qa/

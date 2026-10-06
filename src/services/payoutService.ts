@@ -39,6 +39,8 @@ export interface CreatePayoutFromTripsInput {
   period_start: string;
   period_end: string;
   adjustments: number;
+  adjustment_ids?: string[];
+  include_carry_forward?: boolean;
   method: Payout['method'];
   reference_number: string | null;
   status: Payout['status'];
@@ -76,7 +78,7 @@ export async function fetchAllPayoutReservations(agencyId: string): Promise<Payo
   // First get all payouts for this agency, then get their reservation links
   const payouts = await fetchPayoutsByAgency(agencyId);
   if (payouts.length === 0) return [];
-  return fetchPayoutReservationsByPayouts(payouts.map((p) => p.id));
+  return fetchPayoutReservationsByPayouts(payouts.filter(p=>p.status!=='void').map((p) => p.id));
 }
 
 // --- CRUD ---

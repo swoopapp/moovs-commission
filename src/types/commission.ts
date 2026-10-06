@@ -1,3 +1,4 @@
+import type { CommissionRule, SettlementStatement } from './workflow';
 export type AgencyType = 'Hotel' | 'DMC' | 'Travel Agent' | 'OTA' | 'Concierge' | 'Other';
 export type CommissionType = 'percent' | 'flat';
 export type CommissionBase = 'base_rate' | 'total_amount' | 'total_with_gratuity';
@@ -13,7 +14,7 @@ export type RateMode = 'fixed' | 'standard';
 export type PriceMode = 'gross' | 'net';
 export type AgentRole = 'agent' | 'gm';
 export type PayoutMethod = 'ACH' | 'Wire' | 'Check' | 'Cash' | 'Other';
-export type PayoutStatus = 'draft' | 'pending' | 'paid';
+export type PayoutStatus = 'draft' | 'pending' | 'paid' | 'void';
 
 export type AgencyClientType = 'company' | 'shuttle_client';
 
@@ -40,6 +41,7 @@ export interface Agency {
   commission_type: CommissionType;
   commission_base: CommissionBase;
   rate_mode: RateMode;
+  commission_rules?: CommissionRule[];
   price_mode: PriceMode;
   contact_name: string | null;
   contact_email: string | null;
@@ -80,6 +82,13 @@ export interface Reservation {
   id: string;
   operator_id: string;
   moovs_trip_id: string;
+  travel_day?: string | null;
+  booking_timezone?: string | null;
+  fact_origin?: 'live' | 'snapshot';
+  facts_fetched_at?: string;
+  moovs_request_id?: string | null;
+  route_public_id?: string | null;
+  refund_amount?: number | null;
   moovs_company_id: string | null;
   order_number: string | null;
   confirmation_number: string | null;
@@ -106,6 +115,7 @@ export interface Reservation {
 }
 
 export interface ReservationAttribution {
+  moovs_trip_id?: string; // Operator-scoped read index for unresolved historical reviews.
   id: string;
   reservation_id: string;
   agency_id: string;
@@ -115,6 +125,7 @@ export interface ReservationAttribution {
   commission_base: CommissionBase;
   commission_amount: number;
   attributed_at: string;
+  rule_source?: string;
 }
 
 export interface Payout {
@@ -128,6 +139,7 @@ export interface Payout {
   total_commission: number;
   adjustments: number;
   net_payout: number;
+  statement_snapshot?: SettlementStatement | null;
   method: PayoutMethod;
   reference_number: string | null;
   status: PayoutStatus;

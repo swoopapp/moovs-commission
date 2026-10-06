@@ -1,13 +1,13 @@
-import { Agency, Agent, Reservation, ReservationAttribution } from '../types/commission';
-import type { RouteRateConfig } from '../types/commissionOperator';
-import { fetchAttributionsByOperator } from './attributionService';
-import { mergeAgencyAttributions, primaryAgencyClientKey } from './commissionTripService';
-import { fetchAgentsByOperator } from './agentService';
-import { fetchPayoutsByOperator } from './payoutService';
-import { fetchLiveReservations, fetchReservations } from './reservationService';
-import { calendarMonthKey, localMonthKey, toLocalDateInput } from '../lib/date';
-import { mapWithConcurrency } from '../lib/concurrency';
-
+import type { Agency, Agent } from '../types/commission';
+import type {
+  RouteRateConfig,
+  CommissionOperatorConfig,
+} from '../types/commissionOperator';
+import {
+  fetchFinanceWorkspace,
+  type FinanceWorkspace,
+} from './financeWorkspaceService';
+import { operatorDay, reservationTravelDay } from '../lib/operator-time';
 export interface AgencyTableRow {
   agency: Agency;
   bookings: number;
@@ -16,7 +16,6 @@ export interface AgencyTableRow {
   paid: number;
   outstanding: number;
 }
-
 export interface AgentTableRow {
   agency: Agency;
   agent: Agent;
@@ -24,18 +23,15 @@ export interface AgentTableRow {
   revenue: number;
   earned: number;
 }
-
 export interface MonthlyTrend {
-  month: string; // e.g. "Jan", "Feb"
+  month: string;
   earned: number;
   paid: number;
 }
-
 export interface AgencyMonthlyTrend {
   month: string;
-  [agencyName: string]: string | number; // dynamic keys per agency name
+  [agencyName: string]: string | number;
 }
-
 export interface DashboardStats {
   totalOwed: number;
   paidThisPeriod: number;
@@ -46,278 +42,132 @@ export interface DashboardStats {
   monthlyTrend: MonthlyTrend[];
   agencyMonthlyTrend: AgencyMonthlyTrend[];
   topAgencyNames: string[];
+  finance: FinanceWorkspace;
 }
-
-const DASHBOARD_RESERVATION_PAGE_SIZE = 250;
-
-async function fetchAllDashboardLiveReservations(
-  operatorId: string,
-  moovsOperatorId: string,
-  options: {
-    dateFrom: string;
-    dateTo: string;
-    companyId?: string;
-    clientKey: string;
-  },
-): Promise<Reservation[]> {
-  const byId = new Map<string, Reservation>();
-  let offset = 0;
-
-  while (true) {
-    const page = await fetchLiveReservations(operatorId, moovsOperatorId, {
-      ...options,
-      limit: DASHBOARD_RESERVATION_PAGE_SIZE,
-      offset,
-    });
-    const sizeBefore = byId.size;
-    for (const reservation of page) byId.set(reservation.id, reservation);
-
-    if (page.length < DASHBOARD_RESERVATION_PAGE_SIZE || byId.size === sizeBefore) break;
-    offset += DASHBOARD_RESERVATION_PAGE_SIZE;
-  }
-
-  return [...byId.values()];
-}
-
 export async function fetchDashboardStats(
   operatorId: string,
   moovsOperatorId: string,
   agencies: Agency[],
   routeConfig?: RouteRateConfig | null,
+  timeZone?: string | null,
 ): Promise<DashboardStats> {
-  const now = new Date();
-  const dateFrom = toLocalDateInput(new Date(now.getFullYear(), now.getMonth() - 5, 1));
-  const dateTo = toLocalDateInput(now);
-
-  // Fetch attribution snapshots, live client-key reservations, and payouts in parallel.
-  // Dashboard numbers should reflect the same auto-match logic as agency detail/payout flows,
-  // including Shuttle client overrides (`shuttle_client:<uuid>`).
-  const agencyIds = agencies.map((agency) => agency.id);
-  const [agents, payouts, persistedAttributions, persistedReservations] = await Promise.all([
-    fetchAgentsByOperator(operatorId, agencyIds),
-    fetchPayoutsByOperator(operatorId),
-    fetchAttributionsByOperator(operatorId),
-    fetchReservations(operatorId, { dateFrom, dateTo }),
-  ]);
-  const agentsByAgency = new Map<string, Agent[]>();
-  for (const agent of agents) {
-    if (!agentsByAgency.has(agent.agency_id)) agentsByAgency.set(agent.agency_id, []);
-    agentsByAgency.get(agent.agency_id)!.push(agent);
-  }
-  const persistedAttributionsByAgency = new Map<string, ReservationAttribution[]>();
-  for (const attribution of persistedAttributions) {
-    if (!persistedAttributionsByAgency.has(attribution.agency_id)) {
-      persistedAttributionsByAgency.set(attribution.agency_id, []);
-    }
-    persistedAttributionsByAgency.get(attribution.agency_id)!.push(attribution);
-  }
-
-  // Live Moovs lookups can be expensive for high-volume operators. Keep only two
-  // agencies in flight so one dashboard cannot fan out hundreds of concurrent
-  // Lambda cold starts and exhaust the database.
-  const allAttributionsByAgency = await mapWithConcurrency(
-    agencies,
-    2,
-    async (agency) => {
-      const clientKey = primaryAgencyClientKey(agency);
-      const liveReservations = clientKey
-        ? await fetchAllDashboardLiveReservations(operatorId, moovsOperatorId, {
-              dateFrom,
-              dateTo,
-              clientKey,
-              companyId: agency.moovs_company_id ?? undefined,
-            }).catch((err) => {
-              console.warn(`Dashboard live reservation fetch failed for agency ${agency.id}`, err);
-              return [];
-            })
-        : [];
-      const reservations = [...persistedReservations, ...liveReservations];
-      const attributions = mergeAgencyAttributions(
-        agency,
-        reservations,
-        persistedAttributionsByAgency.get(agency.id) ?? [],
-        agentsByAgency.get(agency.id) ?? [],
-        routeConfig,
-      );
-      return { agencyId: agency.id, attributions, reservations };
-    },
+  const today = operatorDay(new Date(), timeZone ?? '');
+  if (!today)
+    throw new Error(
+      'Operator timezone unavailable. Verify operator settings before using automatic dashboard periods.',
+    );
+  const [year, month] = today.split('-').map(Number);
+  const first = new Date(Date.UTC(year, month - 6, 1));
+  const from = first.toISOString().slice(0, 10);
+  const operator = {
+    operatorId,
+    moovsOperatorId,
+    timeZone,
+    routeRateConfig: routeConfig ?? { default_rate: null, routes: {} },
+  } as CommissionOperatorConfig;
+  const finance = await fetchFinanceWorkspace(operator, agencies, from, today);
+  const known = finance.rows.filter(
+    (r) =>
+      r.agency &&
+      r.attribution &&
+      !['outside-program', 'ambiguous', 'unavailable'].includes(r.state),
   );
-
-  // Build reservation lookup for revenue
-  const reservationMap = new Map(
-    allAttributionsByAgency.flatMap((entry) => entry.reservations.map((r) => [r.id, r] as const)),
-  );
-
-  // Build payout lookup by agency
-  const paidByAgency = new Map<string, number>();
-  let paidThisPeriod = 0;
-  let pendingPayouts = 0;
-  const currentMonth = localMonthKey(now);
-
-  for (const payout of payouts) {
-    if (payout.status === 'paid') {
-      paidByAgency.set(
-        payout.agency_id,
-        (paidByAgency.get(payout.agency_id) ?? 0) + payout.net_payout,
-      );
-      if (calendarMonthKey(payout.date_paid) === currentMonth) {
-        paidThisPeriod += payout.net_payout;
-      }
-    }
-    if (payout.status === 'pending' || payout.status === 'draft') {
-      pendingPayouts++;
-    }
-  }
-
-  // Compute per-agency stats
+  const sum = (rows: typeof known) =>
+    rows.reduce((n, r) => n + Number(r.attribution!.commission_amount), 0);
   const agencyRows: AgencyTableRow[] = agencies.map((agency) => {
-    const entry = allAttributionsByAgency.find((a) => a.agencyId === agency.id);
-    const attributions: ReservationAttribution[] = entry?.attributions ?? [];
-
-    const bookings = attributions.length;
-    let revenue = 0;
-    let earned = 0;
-
-    for (const attr of attributions) {
-      const res = reservationMap.get(attr.reservation_id);
-      if (res) {
-        revenue += res.total_amount;
-      }
-      earned += attr.commission_amount;
-    }
-
-    const paid = paidByAgency.get(agency.id) ?? 0;
-    const outstanding = Math.max(0, earned - paid);
-
-    return { agency, bookings, revenue, earned, paid, outstanding };
-  });
-
-  const agencyMap = new Map(agencies.map((agency) => [agency.id, agency]));
-  const agentRows: AgentTableRow[] = agents
-    .filter((agent) => agent.status === 'active')
-    .map((agent) => {
-      const agency = agencyMap.get(agent.agency_id);
-      const entry = allAttributionsByAgency.find((a) => a.agencyId === agent.agency_id);
-      const attributions = (entry?.attributions ?? []).filter((attr) => attr.agent_id === agent.id);
-      let revenue = 0;
-      let earned = 0;
-      for (const attr of attributions) {
-        const res = reservationMap.get(attr.reservation_id);
-        if (res) revenue += res.total_amount;
-        earned += attr.commission_amount;
-      }
-      return agency ? { agency, agent, bookings: attributions.length, revenue, earned } : null;
-    })
-    .filter((row): row is AgentTableRow => Boolean(row));
-
-  const totalOwed = agencyRows.reduce((sum, r) => sum + r.outstanding, 0);
-  const activeAgencies = agencies.filter((a) => a.status === 'active').length;
-
-  // Build monthly trend data (last 6 months)
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const monthlyEarned = new Map<string, number>();
-  const monthlyPaid = new Map<string, number>();
-
-  // Initialize last 6 months
-  const trendMonths: string[] = [];
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const key = localMonthKey(d);
-    trendMonths.push(key);
-    monthlyEarned.set(key, 0);
-    monthlyPaid.set(key, 0);
-  }
-
-  // Aggregate earned from attributions
-  for (const entry of allAttributionsByAgency) {
-    for (const attr of entry.attributions) {
-      const key = calendarMonthKey(attr.attributed_at);
-      if (key && monthlyEarned.has(key)) {
-        monthlyEarned.set(key, (monthlyEarned.get(key) ?? 0) + attr.commission_amount);
-      }
-    }
-  }
-
-  // Aggregate paid from payouts
-  for (const payout of payouts) {
-    if (payout.status === 'paid' && payout.date_paid) {
-      const key = calendarMonthKey(payout.date_paid);
-      if (key && monthlyPaid.has(key)) {
-        monthlyPaid.set(key, (monthlyPaid.get(key) ?? 0) + payout.net_payout);
-      }
-    }
-  }
-
-  const monthlyTrend: MonthlyTrend[] = trendMonths.map((key) => {
-    const [yearStr, monthStr] = key.split('-');
-    const monthIndex = parseInt(monthStr, 10) - 1;
+    const rows = known.filter((r) => r.agency?.id === agency.id);
     return {
-      month: `${monthNames[monthIndex]} ${yearStr.slice(2)}`,
-      earned: Math.round((monthlyEarned.get(key) ?? 0) * 100) / 100,
-      paid: Math.round((monthlyPaid.get(key) ?? 0) * 100) / 100,
+      agency,
+      bookings: rows.length,
+      revenue: rows.reduce((n, r) => n + Number(r.reservation.total_amount), 0),
+      earned: sum(rows),
+      paid: sum(rows.filter((r) => r.state === 'paid')),
+      outstanding: sum(
+        rows.filter((r) => ['approved', 'prepared'].includes(r.state)),
+      ),
     };
   });
-
-  // Build per-agency monthly trend (top 5 agencies by total commission)
-  const agencyNameMap = new Map(agencies.map((a) => [a.id, a.name]));
-  const agencyTotalCommission = new Map<string, number>();
-  // Map: agencyId -> monthKey -> commission
-  const agencyMonthMap = new Map<string, Map<string, number>>();
-
-  for (const entry of allAttributionsByAgency) {
-    for (const attr of entry.attributions) {
-      const res = reservationMap.get(attr.reservation_id);
-      const dateStr = res?.pickup_date ?? attr.attributed_at;
-      const key = calendarMonthKey(dateStr);
-
-      // Total commission per agency
-      agencyTotalCommission.set(
-        entry.agencyId,
-        (agencyTotalCommission.get(entry.agencyId) ?? 0) + attr.commission_amount,
+  const agentRows: AgentTableRow[] = finance.agencies.flatMap((w) =>
+    w.agents.map((agent) => {
+      const rows = known.filter(
+        (r) =>
+          r.agency?.id === w.agency.id && r.attribution?.agent_id === agent.id,
       );
-
-      // Per-month commission per agency
-      if (key && trendMonths.includes(key)) {
-        if (!agencyMonthMap.has(entry.agencyId)) {
-          agencyMonthMap.set(entry.agencyId, new Map());
-        }
-        const monthMap = agencyMonthMap.get(entry.agencyId)!;
-        monthMap.set(key, (monthMap.get(key) ?? 0) + attr.commission_amount);
-      }
-    }
-  }
-
-  // Get top 5 agencies by total commission
-  const top5AgencyIds = [...agencyTotalCommission.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([id]) => id);
-
-  const topAgencyNames = top5AgencyIds.map((id) => agencyNameMap.get(id) ?? id);
-
-  const agencyMonthlyTrend: AgencyMonthlyTrend[] = trendMonths.map((key) => {
-    const [yearStr, monthStr] = key.split('-');
-    const monthIndex = parseInt(monthStr, 10) - 1;
-    const row: AgencyMonthlyTrend = {
-      month: `${monthNames[monthIndex]} ${yearStr.slice(2)}`,
+      return {
+        agency: w.agency,
+        agent,
+        bookings: rows.length,
+        revenue: rows.reduce(
+          (n, r) => n + Number(r.reservation.total_amount),
+          0,
+        ),
+        earned: sum(rows),
+      };
+    }),
+  );
+  const top = agencyRows
+    .filter((r) => r.earned !== 0)
+    .sort((a, b) => b.earned - a.earned)
+    .slice(0, 5);
+  // Duplicate agency names get distinct legends rather than overwriting a data series.
+  const labels = new Map(
+    top.map((r) => [
+      r.agency.id,
+      agencies.filter((a) => a.name === r.agency.name).length > 1
+        ? `${r.agency.name} (${r.agency.id.slice(0, 6)})`
+        : r.agency.name,
+    ]),
+  );
+  const months = Array.from({ length: 6 }, (_, i) => {
+    const date = new Date(
+      Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + i, 1),
+    );
+    return {
+      key: date.toISOString().slice(0, 7),
+      label: date.toLocaleDateString('en-US', {
+        month: 'short',
+        year: '2-digit',
+        timeZone: 'UTC',
+      }),
     };
-    for (const agencyId of top5AgencyIds) {
-      const name = agencyNameMap.get(agencyId) ?? agencyId;
-      const monthMap = agencyMonthMap.get(agencyId);
-      row[name] = Math.round((monthMap?.get(key) ?? 0) * 100) / 100;
-    }
+  });
+  const monthlyTrend = months.map(({ key, label }) => ({
+    month: label,
+    earned: sum(
+      known.filter((r) => reservationTravelDay(r.reservation)?.startsWith(key)),
+    ),
+    paid: sum(
+      known.filter(
+        (r) =>
+          r.state === 'paid' &&
+          reservationTravelDay(r.reservation)?.startsWith(key),
+      ),
+    ),
+  }));
+  const agencyMonthlyTrend = months.map(({ key, label }) => {
+    const row: AgencyMonthlyTrend = { month: label };
+    for (const a of top)
+      row[labels.get(a.agency.id)!] = sum(
+        known.filter(
+          (r) =>
+            r.agency?.id === a.agency.id &&
+            reservationTravelDay(r.reservation)?.startsWith(key),
+        ),
+      );
     return row;
   });
-
   return {
-    totalOwed,
-    paidThisPeriod,
-    activeAgencies,
-    pendingPayouts,
+    totalOwed: finance.totals.approved,
+    paidThisPeriod: finance.totals.paid,
+    activeAgencies: agencies.filter((a) => a.status === 'active').length,
+    pendingPayouts: finance.payouts.filter(
+      (p) => !['paid', 'void'].includes(p.status),
+    ).length,
     agencyRows,
     agentRows,
     monthlyTrend,
     agencyMonthlyTrend,
-    topAgencyNames,
+    topAgencyNames: [...labels.values()],
+    finance,
   };
 }
