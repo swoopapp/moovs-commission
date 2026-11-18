@@ -192,12 +192,30 @@ export async function authorizeOperatorProxyRequest({
       : denied(403, 'Forbidden');
   }
 
+  if (segments.length === 3 && segments[0] === 'agencies' && ['lifecycle', 'archive', 'restore', 'issue-link', 'issue-agent-link'].includes(segments[2])) {
+    if (segments[2] === 'lifecycle') {
+      if (method !== 'GET') return denied(405, 'Method not allowed');
+      if (url.searchParams.getAll('operator_id').length !== 1 || [...url.searchParams.keys()].some(key => key !== 'operator_id') || url.searchParams.get('operator_id') !== session.operatorId) return denied(403, 'Forbidden');
+    } else {
+      if (method !== 'POST') return denied(405, 'Method not allowed');
+      const body = await bodyFor();
+      if (url.search || body?.operator_id !== session.operatorId) return denied(403, 'Forbidden');
+      if (segments[2] === 'issue-agent-link') {
+        const agentId = nonEmptyString(body.agent_id);
+        if (!agentId) return denied(400, 'Agent required');
+        const agents = await lookupOwnership({ agents: [agentId] });
+        if (!allOwned(agents, 'agent', [agentId], session.operatorId) || agents[0]?.agency_id !== segments[1]) return denied(403, 'Forbidden');
+      }
+    }
+    return await ownsAgencies(lookupOwnership, [segments[1]], session.operatorId) ? { allowed: true } : denied(403, 'Forbidden');
+  }
+
   if (segments[0] === 'agencies' && segments[1] === 'by-token') {
     return denied(403, 'Forbidden');
   }
 
   if (segments.length === 2 && segments[0] === 'agencies') {
-    if (!['GET', 'PATCH', 'DELETE'].includes(method)) return denied(405, 'Method not allowed');
+    if (!['GET', 'PATCH'].includes(method)) return denied(405, 'Method not allowed');
     return await ownsAgencies(lookupOwnership, [segments[1]], session.operatorId)
       ? { allowed: true }
       : denied(403, 'Forbidden');
@@ -208,10 +226,7 @@ export async function authorizeOperatorProxyRequest({
     segments[0] === 'agencies' &&
     segments[2] === 'regenerate-token'
   ) {
-    if (method !== 'POST') return denied(405, 'Method not allowed');
-    return await ownsAgencies(lookupOwnership, [segments[1]], session.operatorId)
-      ? { allowed: true }
-      : denied(403, 'Forbidden');
+    return denied(405, 'Use the agency lifecycle action');
   }
 
   if (path === 'agents') {
@@ -240,7 +255,7 @@ export async function authorizeOperatorProxyRequest({
   }
 
   if (segments.length === 2 && segments[0] === 'agents') {
-    if (!['PATCH', 'DELETE'].includes(method)) return denied(405, 'Method not allowed');
+    if (method !== 'PATCH') return denied(405, 'Method not allowed');
     const records = await lookupOwnership({ agents: [segments[1]] });
     return allOwned(records, 'agent', [segments[1]], session.operatorId)
       ? { allowed: true }

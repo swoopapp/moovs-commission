@@ -9,6 +9,7 @@ import { fetchPayoutReservationsByPayouts } from '../../services/payoutService';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Agency, Agent, Reservation, ReservationAttribution, Payout } from '../../types/commission';
 import { useIsDemo, useOperator } from '../../contexts/OperatorContext';
+import { holdLinks, releaseAfterReload, type LifecycleSignal } from './AgencyLifecycleControls';
 import { fetchAgencyById } from '../../services/agencyService';
 import { fetchAgents } from '../../services/agentService';
 import { fetchCurrentReservations, fetchReservations } from '../../services/reservationService';
@@ -83,7 +84,7 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
       const agencyData = await fetchAgencyById(agencyId);
       if (!agencyData) {
         setError('Agency not found');
-        return;
+        return false;
       }
       setAgency(agencyData);
       setReservations([]);
@@ -103,15 +104,27 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
       const links = await fetchPayoutReservationsByPayouts(payoutsData.filter(p=>p.status!=='void').map(p => p.id));
       setReservedIds(new Set(links.map(l => l.reservation_id)));
       try { setWorkflow(await fetchWorkflow(agencyId)); setWorkflowError(false); } catch { setWorkflow(emptyWorkflow); setWorkflowError(true); }
+      return true;
     } catch (err) {
       console.error('Failed to load agency detail:', err);
       setError(err instanceof Error ? err.message : 'Failed to load agency');
+      return false;
     } finally {
       setLoading(false);
     }
   }, [agencyId, operator.operatorId, operator.moovsOperatorId]);
 
-  const afterChange = () => { invalidateReads(); return loadData(); };
+  const reload = () => { invalidateReads(); return loadData(); };
+  // Existing callers keep their Promise<void> contract; only the link guard below needs to know whether the load succeeded.
+  const afterChange = async () => { await reload(); };
+  // Partner links for this agency are hidden from the moment a lifecycle request is sent. The flag lives here because
+  // the tabs unmount on every switch and reload; only a known refusal or a SUCCESSFUL full reload clears it.
+  const [heldLinks, setHeldLinks] = useState<string | null>(null);
+  const linksHeld = heldLinks === agencyId;
+  const onLifecycle = (signal: LifecycleSignal) => {
+    setHeldLinks(current => holdLinks(current, agencyId, signal));
+    if (signal === 'reload') void reload().then(reloaded => setHeldLinks(current => releaseAfterReload(current, agencyId, reloaded)));
+  };
 
   useEffect(() => {
     loadData();
@@ -324,6 +337,8 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
             reservations={reservations}
             agencyId={agencyId}
             agency={agency}
+            linksHeld={linksHeld}
+            onLifecycle={onLifecycle}
             onAgentCreated={afterChange}
             onFilterByAgent={handleFilterByAgent}
           />
@@ -340,6 +355,8 @@ export function AgencyDetailView({ agencyId }: AgencyDetailViewProps) {
         <TabsContent value="settings" className="mt-4">
           <SettingsTab
             agency={agency}
+            linksHeld={linksHeld}
+            onLifecycle={onLifecycle}
             onUpdated={(updated) => { invalidateReads(); setAgency(updated); }}
           />
         </TabsContent>

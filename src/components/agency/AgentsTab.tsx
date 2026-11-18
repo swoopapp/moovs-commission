@@ -8,7 +8,8 @@ import { Plus, Mail, Phone, BookOpen, TrendingUp, DollarSign, Copy, Trash2 } fro
 import { AddAgentDialog } from './AddAgentDialog';
 import { deactivateAgent } from '../../services/agentService';
 import { toast } from 'sonner';
-import { useIsDemo } from '../../contexts/OperatorContext';
+import { AgencyLifecycleControls, partnerLink, type LifecycleSignal } from './AgencyLifecycleControls';
+import { useIsDemo, useOperator } from '../../contexts/OperatorContext';
 
 interface AgentsTabProps {
   agents: Agent[];
@@ -16,6 +17,8 @@ interface AgentsTabProps {
   reservations: Reservation[];
   agencyId: string;
   agency: Agency;
+  linksHeld: boolean;
+  onLifecycle: (signal: LifecycleSignal) => void;
   onAgentCreated: () => void;
   onFilterByAgent: (agentId: string) => void;
 }
@@ -39,8 +42,11 @@ interface AgentStats {
   commission: number;
 }
 
-export function AgentsTab({ agents, attributions, reservations, agencyId, agency, onAgentCreated, onFilterByAgent }: AgentsTabProps) {
+export function AgentsTab({ agents, attributions, reservations, agencyId, agency, linksHeld, onLifecycle, onAgentCreated, onFilterByAgent }: AgentsTabProps) {
   const isDemo = useIsDemo();
+  const operator = useOperator();
+  const [linkAgentId, setLinkAgentId] = useState<string | null>(null);
+  const linkAgent = agents.find(agent => agent.id === linkAgentId && agent.agency_id === agencyId);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const activeAgents = useMemo(() => agents.filter((agent) => agent.status === 'active'), [agents]);
 
@@ -68,10 +74,11 @@ export function AgentsTab({ agents, attributions, reservations, agencyId, agency
   }, [activeAgents, attributions, reservationMap]);
 
   function portalUrl(agent: Agent): string {
-    return `${window.location.origin}/portal/${agent.portal_token}`;
+    return partnerLink(window.location.origin, agency.status, agent.portal_token, linksHeld);
   }
 
   async function handleCopyPortalLink(agent: Agent) {
+    if (!portalUrl(agent) || linkAgent || isDemo) return;
     try {
       await navigator.clipboard.writeText(portalUrl(agent));
       toast.success(`Portal link copied for ${agent.name}`);
@@ -99,7 +106,7 @@ export function AgentsTab({ agents, attributions, reservations, agencyId, agency
     <div className="space-y-4">
       <div className="flex justify-end">
         {!isDemo && (
-          <Button size="sm" className="gap-1.5" onClick={() => setShowAddDialog(true)}>
+          <Button size="sm" className="gap-1.5" disabled={agency.status === 'archived'} onClick={() => setShowAddDialog(true)}>
             <Plus className="h-4 w-4" />
             Add Agent
           </Button>
@@ -200,11 +207,13 @@ export function AgentsTab({ agents, attributions, reservations, agencyId, agency
                       size="sm"
                       className="gap-1.5"
                       onClick={() => handleCopyPortalLink(agent)}
+                      disabled={isDemo || !!linkAgent || !portalUrl(agent)}
                     >
                       <Copy className="h-3.5 w-3.5" />
                       Copy link
                     </Button>
-                    {!isDemo && (
+                    {!isDemo && agency.status !== 'archived' && <Button type="button" variant="outline" size="sm" disabled={!!linkAgent} onClick={() => setLinkAgentId(agent.id)}>New partner link</Button>}
+                    {!isDemo && agency.status !== 'archived' && (
                       <Button
                         type="button"
                         variant="ghost"
@@ -223,6 +232,12 @@ export function AgentsTab({ agents, attributions, reservations, agencyId, agency
           })}
         </div>
       )}
+
+      {linkAgent && <div className="space-y-2">
+        <AgencyLifecycleControls key={`${operator.operatorId}:${agencyId}:${linkAgent.id}:${isDemo}`} agencyId={agencyId} operatorId={operator.operatorId} agent={{id: linkAgent.id, name: linkAgent.name}} isDemo={isDemo}
+          held={linksHeld} onLifecycle={onLifecycle} />
+        <Button variant="outline" disabled={linksHeld} onClick={() => setLinkAgentId(null)}>Close partner link settings</Button>
+      </div>}
 
       <AddAgentDialog
         open={showAddDialog}
