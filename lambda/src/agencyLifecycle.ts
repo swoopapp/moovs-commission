@@ -19,16 +19,17 @@ type Scope = { agencyId: string; commissionOperatorId: string; actor: string; de
 
 /** Exact UTC microseconds as text, so the value never passes through a JavaScript Date. */
 export const AGENCY_REVISION_SQL = `to_char(a.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US')`;
-const PAID_ALLOCATION = `SELECT 1 FROM payout_reservations pr JOIN commission_reservations cr ON cr.id=pr.reservation_id JOIN payouts pp ON pp.id=pr.payout_id WHERE pp.status='paid' AND cr.operator_id=$2 AND cr.moovs_trip_id=r.moovs_trip_id`;
+const PAID_ALLOCATION = `SELECT 1 FROM payout_reservations pr JOIN commission_reservations cr ON cr.id=pr.reservation_id JOIN payouts pp ON pp.id=pr.payout_id WHERE pp.status='paid' AND pp.operator_id=$2 AND cr.operator_id=$2 AND cr.moovs_trip_id=r.moovs_trip_id`;
 /**
  * Recorded obligations in ONE statement, so every count shares a snapshot (a concurrent void cannot hide between them).
  * An adjustment is open unless applied to a PAID payout. A review is settled only by a PAID payout holding its trip,
- * matched by operator and trip with no agency filter, exactly as allocation works. Not a balance: unreviewed bookings
- * are not here.
+ * matched by operator and trip with no agency filter, exactly as allocation works. Only this operator's payouts can
+ * discharge anything, an adjustment only through a payout of its own agency, and a NULL or unknown payout status
+ * counts as open. Not a balance: unreviewed bookings are not here.
  */
 export const AGENCY_OBLIGATIONS_SQL = `SELECT
- (SELECT count(*) FROM payouts p WHERE p.agency_id=$1 AND p.operator_id=$2 AND p.status NOT IN ('paid','void'))::int AS open_payouts,
- (SELECT count(*) FROM commission_adjustments ca WHERE ca.agency_id=$1 AND ca.cancelled_at IS NULL AND NOT EXISTS (SELECT 1 FROM payouts ap WHERE ap.id=ca.applied_payout_id AND ap.status='paid'))::int AS open_adjustments,
+ (SELECT count(*) FROM payouts p WHERE p.agency_id=$1 AND p.operator_id=$2 AND p.status IS DISTINCT FROM 'paid' AND p.status IS DISTINCT FROM 'void')::int AS open_payouts,
+ (SELECT count(*) FROM commission_adjustments ca WHERE ca.agency_id=$1 AND ca.cancelled_at IS NULL AND NOT EXISTS (SELECT 1 FROM payouts ap WHERE ap.id=ca.applied_payout_id AND ap.operator_id=$2 AND ap.agency_id=ca.agency_id AND ap.status='paid'))::int AS open_adjustments,
  (SELECT count(*) FROM commission_reviews r WHERE r.agency_id=$1 AND r.status='approved' AND NOT EXISTS (${PAID_ALLOCATION}))::int AS approved_unsettled,
  (SELECT count(*) FROM commission_reviews r WHERE r.agency_id=$1 AND r.status='held' AND NOT EXISTS (${PAID_ALLOCATION}))::int AS held_unsettled`;
 const AGENCY_SQL = `SELECT a.id,a.operator_id,a.status,a.moovs_company_id,(a.portal_token IS NOT NULL) AS agency_link,${AGENCY_REVISION_SQL} AS revision FROM agencies a WHERE a.id=$1 AND a.operator_id=$2`;
@@ -71,9 +72,9 @@ export async function readAgencyLifecycle(query: LifecycleClient['query'], agenc
 }
 
 /** Soft archive. Refused while any recorded obligation is open; clears the agency link and every agent link. */
-export async function archiveAgency(client: LifecycleClient, input: Scope & { expectedStatus: 'active' | 'suspended'; expectedRevision: string; reason: string }, audit: LifecycleAudit): Promise<{ agency_id: string }> {
+export async function archiveAgency(client: LifecycleClient, input: Scope & { expectedStatus: string; expectedRevision: string; reason: string }, audit: LifecycleAudit): Promise<{ agency_id: string }> {
   const agency = await lockAgency(client, input);
-  if (!['active', 'suspended'].includes(input.expectedStatus) || agency.status !== input.expectedStatus || agency.revision !== input.expectedRevision) refuse('STALE_FACTS');
+  if (agency.status === 'archived' || agency.status !== input.expectedStatus || agency.revision !== input.expectedRevision) refuse('STALE_FACTS');
   const open = await obligations(client.query.bind(client), input);
   if (Object.values(open).some(count => count > 0)) refuse('OBLIGATIONS_OPEN');
   const agents = await lockAgents(client, agency.id);

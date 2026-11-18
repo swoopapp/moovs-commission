@@ -151,7 +151,11 @@ app.post('/agencies/:id/archive', async (c) => {
     !operatorId ||
     !expectedRevision ||
     !why ||
-    (expectedStatus !== 'active' && expectedStatus !== 'suspended')
+    // Any stored status text may be archived (legacy rows hold values such as 'inactive'); only the reserved
+    // 'archived' is refused here. The helper compares it with the locked row.
+    typeof expectedStatus !== 'string' ||
+    !expectedStatus ||
+    expectedStatus === 'archived'
   )
     return refused(c, 'INVALID_INPUT');
   return transact(c, operatorId, (client, actor) =>
