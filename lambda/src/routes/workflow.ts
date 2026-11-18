@@ -2,7 +2,15 @@ import { unpackUuidIds } from '../../../src/lib/uuid-packing.ts';
 import { fetchAuthoritativeReservations } from '../moovsReservationFacts.js';
 import { Hono } from 'hono';
 import { appQuery, getAppPool } from '../appDb.js';
-import { agencyTrip, loadAgencyContext, audit } from '../workflowContext.js';
+import {
+  agencyTrip,
+  loadAgencyContext,
+  audit,
+  lockOperatorMapping,
+  lockLiveAgency,
+  AgencyArchivedError,
+  AGENCY_ARCHIVED,
+} from '../workflowContext.js';
 import {
   commissionFingerprint,
   agentMatch,
@@ -94,9 +102,12 @@ app.post('/workflow/review', async (c) => {
   const client = await (await getAppPool()).connect();
   try {
     await client.query('BEGIN');
+    await lockOperatorMapping(client, 'agency', b.agency_id, 'SHARE', b.operator_id);
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
       `${b.agency_id}:${b.moovs_trip_id}`,
     ]);
+    // No review of any status may be recorded on an archived agency: approved and held both block archive.
+    await lockLiveAgency(client, b.agency_id);
     const ctx = await agencyTrip(
       client,
       b.agency_id,
@@ -161,8 +172,9 @@ app.post('/workflow/review', async (c) => {
     );
     await client.query('COMMIT');
     return c.json({ success: true });
-  } catch {
+  } catch (err) {
     await client.query('ROLLBACK');
+    if (err instanceof AgencyArchivedError) return c.json(AGENCY_ARCHIVED, 409);
     return c.json({ error: 'Review could not be saved in agency scope.' }, 409);
   } finally {
     client.release();
@@ -181,6 +193,7 @@ app.post('/workflow/rules', async (c) => {
   const client = await (await getAppPool()).connect();
   try {
     await client.query('BEGIN');
+    await lockOperatorMapping(client, 'agency', b.agency_id, 'SHARE', b.operator_id);
     const current = (
       await client.query(
         'SELECT * FROM agencies WHERE id=$1 AND operator_id=$2 FOR UPDATE',
@@ -188,6 +201,7 @@ app.post('/workflow/rules', async (c) => {
       )
     ).rows[0];
     if (!current) throw new Error('scope');
+    if (current.status === 'archived') throw new AgencyArchivedError();
     const err = validateRules(b.rules, current.commission_type);
     if (err) {
       await client.query('ROLLBACK');
@@ -212,8 +226,9 @@ app.post('/workflow/rules', async (c) => {
     );
     await client.query('COMMIT');
     return c.json({ success: true });
-  } catch {
+  } catch (err) {
     await client.query('ROLLBACK');
+    if (err instanceof AgencyArchivedError) return c.json(AGENCY_ARCHIVED, 409);
     return c.json({ error: 'Rules could not be saved.' }, 409);
   } finally {
     client.release();

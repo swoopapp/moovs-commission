@@ -1,6 +1,12 @@
 import { Hono } from 'hono';
 import { getAppPool } from '../appDb.js';
-import { loadAgencyContext, audit } from '../workflowContext.js';
+import {
+  loadAgencyContext,
+  audit,
+  lockOperatorMapping,
+  AgencyArchivedError,
+  AGENCY_ARCHIVED,
+} from '../workflowContext.js';
 const app = new Hono(),
   UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 app.post('/workflow/adjustments', async (c) => {
@@ -31,7 +37,10 @@ app.post('/workflow/adjustments', async (c) => {
   const client = await (await getAppPool()).connect();
   try {
     await client.query('BEGIN');
-    await loadAgencyContext(client, b.agency_id, b.operator_id);
+    await lockOperatorMapping(client, 'agency', b.agency_id, 'SHARE', b.operator_id);
+    const ctx = await loadAgencyContext(client, b.agency_id, b.operator_id);
+    // A new adjustment is a new open obligation, which an archived agency must never gain.
+    if (ctx.agency.status === 'archived') throw new AgencyArchivedError();
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
       b.request_key,
     ]);
@@ -98,8 +107,9 @@ app.post('/workflow/adjustments', async (c) => {
     );
     await client.query('COMMIT');
     return c.json({ adjustment: row }, 201);
-  } catch {
+  } catch (err) {
     await client.query('ROLLBACK');
+    if (err instanceof AgencyArchivedError) return c.json(AGENCY_ARCHIVED, 409);
     return c.json(
       {
         error: 'Adjustment unavailable in agency scope or request key conflict',
@@ -124,6 +134,8 @@ app.post('/workflow/adjustments/:id/cancel', async (c) => {
   const client = await (await getAppPool()).connect();
   try {
     await client.query('BEGIN');
+    // Cancelling only closes an obligation, so it stays available on an archived agency.
+    await lockOperatorMapping(client, 'agency', b.agency_id, 'SHARE', b.operator_id);
     await loadAgencyContext(client, b.agency_id, b.operator_id);
     const r = (
       await client.query(
