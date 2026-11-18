@@ -1032,7 +1032,7 @@ app.patch('/payouts/:id', async (c) => {
       await lockOperatorMapping(client, 'payout', id);
       const current = (
         await client.query(
-          'SELECT statement_snapshot, agency_id FROM payouts WHERE id=$1 FOR UPDATE',
+          'SELECT statement_snapshot, agency_id, operator_id, status FROM payouts WHERE id=$1 FOR UPDATE',
           [id],
         )
       ).rows[0];
@@ -1044,6 +1044,27 @@ app.patch('/payouts/:id', async (c) => {
         });
       // No raw edit of any field on an archived agency: restore it first, then correct.
       await lockLiveAgency(client, current.agency_id);
+      // A paid payout can be what settled a review of ANOTHER agency that has since been archived. Taking it out of
+      // paid would reopen that review behind the archive, so refuse exactly that case and nothing wider.
+      if ('status' in body && current.status === 'paid' && body.status !== 'paid') {
+        const reopened = await client.query(
+          `SELECT 1 FROM payout_reservations pr
+           JOIN commission_reservations cr ON cr.id=pr.reservation_id AND cr.operator_id=$2
+           JOIN commission_reviews r ON r.moovs_trip_id=cr.moovs_trip_id AND r.status IN ('approved','held')
+           JOIN agencies a ON a.id=r.agency_id AND a.operator_id=$2 AND a.status='archived'
+           WHERE pr.payout_id=$1 AND NOT EXISTS (
+             SELECT 1 FROM payout_reservations opr JOIN payouts op ON op.id=opr.payout_id
+             WHERE opr.reservation_id=cr.id AND op.id<>$1 AND op.operator_id=$2 AND op.status='paid')
+           LIMIT 1`,
+          [id, current.operator_id],
+        );
+        if (reopened.rows.length)
+          throw new RouteRefusal(409, {
+            error:
+              'This payout settles a review of an archived agency. Restore that agency before changing it.',
+            code: 'ARCHIVED_AGENCY_SETTLED',
+          });
+      }
       if (sets.length === 0)
         throw new RouteRefusal(400, { error: 'No fields to update' });
       return (

@@ -187,6 +187,22 @@ try {
     const res = await call(method, path, body, live ? 200 : 409);
     if (!live) eq(res.json, archivedBody, `${method} ${path}`);
   }
+  // otherPaid belongs to the live rival but is what settled the archived agency's held review of trip-1. Taking it
+  // out of paid would reopen that review behind the archive: refused, while staying paid or editing notes is not.
+  for (const status of ['draft', 'void'])
+    eq((await call('PATCH', `/payouts/${otherPaid}`, { status }, 409)).json.code, 'ARCHIVED_AGENCY_SETTLED');
+  await call('PATCH', `/payouts/${otherPaid}`, { status: 'paid' }, 200);
+  eq((await db.query('SELECT status FROM payouts WHERE id=$1', [otherPaid])).rows[0].status, 'paid');
+  eq((await advice()).obligations.held_unsettled, 0);
+  // A second paid payout holding the same trip means nothing would reopen, so the edit is allowed and reversible.
+  const secondPaid = randomUUID();
+  await db.query("INSERT INTO payouts(id,operator_id,agency_id,period_start,period_end,status) VALUES($1,$2,$3,'2026-01-01','2026-01-31','paid')", [secondPaid, operator, rival]);
+  await db.query('INSERT INTO payout_reservations(payout_id,reservation_id) VALUES($1,$2)', [secondPaid, reservation]);
+  await call('PATCH', `/payouts/${otherPaid}`, { status: 'draft' }, 200);
+  eq((await advice()).obligations.held_unsettled, 0);
+  eq((await call('PATCH', `/payouts/${secondPaid}`, { status: 'draft' }, 409)).json.code, 'ARCHIVED_AGENCY_SETTLED');
+  await call('PATCH', `/payouts/${otherPaid}`, { status: 'paid' }, 200);
+  await db.query('DELETE FROM payouts WHERE id=$1', [secondPaid]);
   // Raw edit of a pre-workflow payout of the archived agency is refused whatever it changes.
   const legacyPaid = randomUUID();
   await db.query("INSERT INTO payouts(id,operator_id,agency_id,period_start,period_end,status) VALUES($1,$2,$3,'2025-01-01','2025-01-31','paid')", [legacyPaid, operator, agency]);
@@ -209,6 +225,12 @@ try {
   eq((await db.query('SELECT count(*)::int AS n FROM agencies WHERE operator_id=$1', [operator])).rows[0].n, 2);
   eq((await db.query('SELECT count(*)::int AS n FROM agents WHERE agency_id=$1', [agency])).rows[0].n, 2);
   eq((await call('POST', '/agencies', { operator_id: operator, name: 'Born archived', status: 'archived' }, 400)).json.code, 'STATUS_NOT_EDITABLE');
+  // Create is one transaction under the operator row: an unknown operator creates nothing, a known one gets its links.
+  await call('POST', '/agencies', { operator_id: randomUUID(), name: 'No operator' }, 404);
+  eq((await db.query("SELECT count(*)::int AS n FROM agencies WHERE name='No operator'")).rows[0].n, 0);
+  const made = (await call('POST', '/agencies', { operator_id: operator, name: 'Made', moovs_company_id: 'co-7', status: 'inactive' }, 201)).json[0];
+  eq([made.status, made.client_links.map((l: any) => l.client_key)], ['inactive', ['company:co-7']]);
+  await db.query('DELETE FROM agencies WHERE id=$1', [made.id]);
   eq((await call('PATCH', `/agencies/${rival}`, { status: 'archived' }, 400)).json.code, 'STATUS_NOT_EDITABLE');
   eq((await db.query('SELECT status FROM agencies WHERE id=$1', [rival])).rows[0].status, 'active');
   // A live agency still edits, with its client links, in one transaction.

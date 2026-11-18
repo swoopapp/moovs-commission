@@ -193,7 +193,8 @@ app.post('/workflow/rules', async (c) => {
   const client = await (await getAppPool()).connect();
   try {
     await client.query('BEGIN');
-    await lockOperatorMapping(client, 'agency', b.agency_id, 'SHARE', b.operator_id);
+    // FOR UPDATE because this goes on to lock the agency FOR UPDATE; see PATCH /agencies/:id.
+    await lockOperatorMapping(client, 'agency', b.agency_id, 'UPDATE', b.operator_id);
     const current = (
       await client.query(
         'SELECT * FROM agencies WHERE id=$1 AND operator_id=$2 FOR UPDATE',

@@ -276,17 +276,23 @@ app.post('/agencies', async (c) => {
     const vals = present.map((f) => body[f]);
     const placeholders = present.map((_, i) => `$${i + 1}`);
 
-    const r = await appQuery(
-      `INSERT INTO agencies (${present.join(', ')}) VALUES (${placeholders.join(', ')}) RETURNING *`,
-      vals,
-    );
-    const agency = r.rows[0];
-    const bodyLinks = Array.isArray(body.client_links)
-      ? body.client_links.map(normalizeClientLink)
-      : [companyClientLink(agency.moovs_company_id, agency.name)];
-    await syncAgencyClientLinks(agency.id, agency.operator_id, bodyLinks);
+    // One transaction under the operator row FOR UPDATE: a restore checks that no other active agency claims its
+    // clients, so a new agency and its client links must not appear halfway through that check.
+    const agency = await appTransaction(async (client) => {
+      await lockOperatorMapping(client, 'operator', body.operator_id, 'UPDATE');
+      const created = (await client.query(
+        `INSERT INTO agencies (${present.join(', ')}) VALUES (${placeholders.join(', ')}) RETURNING *`,
+        vals,
+      )).rows[0];
+      const bodyLinks = Array.isArray(body.client_links)
+        ? body.client_links.map(normalizeClientLink)
+        : [companyClientLink(created.moovs_company_id, created.name)];
+      await syncAgencyClientLinks(created.id, created.operator_id, bodyLinks, (text, params) => client.query(text, params));
+      return created;
+    });
     return c.json(await attachClientLinks([agency]), 201);
   } catch (err: any) {
+    if (err instanceof RouteRefusal) return c.json(err.body, err.status);
     console.error('Error creating agency:', err);
     return c.json({ error: err.message || 'Internal Server Error' }, 500);
   }
@@ -322,7 +328,9 @@ app.patch('/agencies/:id', async (c) => {
     // The archived test, the validations and every write share one transaction under the agency row lock,
     // so an edit can neither race an archive nor quietly reactivate an archived agency.
     const agency = await appTransaction(async (client) => {
-      await lockOperatorMapping(client, 'agency', id);
+      // FOR UPDATE, as the native editors take it: a writer that goes on to lock the agency FOR UPDATE must not
+      // share the operator row with money writers, or the three can queue in a cycle behind a waiting archive.
+      await lockOperatorMapping(client, 'agency', id, 'UPDATE');
       const current = await lockLiveAgency(client, id, 'UPDATE');
       if ('commission_type' in body) {
         const rulesError = validateRules(current.commission_rules ?? [], body.commission_type);
