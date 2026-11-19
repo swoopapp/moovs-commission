@@ -1,5 +1,11 @@
 import { Hono } from 'hono';
 import { appQuery } from '../appDb.js';
+import {
+  RouteRefusal,
+  appTransaction,
+  lockLiveAgency,
+  lockOperatorMapping,
+} from '../workflowContext.js';
 
 const app = new Hono();
 
@@ -35,7 +41,11 @@ app.get('/agents', async (c) => {
 // GET /agents/by-token/:token
 app.get('/agents/by-token/:token', async (c) => {
   try {
-    const r = await appQuery('SELECT * FROM agents WHERE portal_token = $1 LIMIT 1', [c.req.param('token')]);
+    // An agent of an archived agency has no portal. Suspended agencies and inactive agents are unchanged.
+    const r = await appQuery(
+      "SELECT ag.* FROM agents ag JOIN agencies a ON a.id = ag.agency_id WHERE ag.portal_token = $1 AND a.status <> 'archived' LIMIT 1",
+      [c.req.param('token')],
+    );
     return c.json(r.rows);
   } catch (err: any) {
     console.error('Error fetching agent by token:', err);
@@ -48,14 +58,20 @@ app.post('/agents', async (c) => {
   try {
     const body = await c.req.json();
     const { agency_id, moovs_contact_id, name, email, phone, role, department, status } = body;
-    const r = await appQuery(
-      `INSERT INTO agents (agency_id, moovs_contact_id, name, email, phone, role, department, status)
-       VALUES ($1, $2, $3, $4, $5, COALESCE($6, 'agent'), $7, COALESCE($8, 'active'))
-       RETURNING *`,
-      [agency_id, moovs_contact_id, name, email, phone, role, department, status],
-    );
-    return c.json(r.rows, 201);
+    // The insert default would mint a portal link, so an archived agency must refuse under its row lock.
+    const rows = await appTransaction(async (client) => {
+      await lockOperatorMapping(client, 'agency', agency_id);
+      await lockLiveAgency(client, agency_id);
+      return (await client.query(
+        `INSERT INTO agents (agency_id, moovs_contact_id, name, email, phone, role, department, status)
+         VALUES ($1, $2, $3, $4, $5, COALESCE($6, 'agent'), $7, COALESCE($8, 'active'))
+         RETURNING *`,
+        [agency_id, moovs_contact_id, name, email, phone, role, department, status],
+      )).rows;
+    });
+    return c.json(rows, 201);
   } catch (err: any) {
+    if (err instanceof RouteRefusal) return c.json(err.body, err.status);
     console.error('Error creating agent:', err);
     return c.json({ error: err.message || 'Internal Server Error' }, 500);
   }
@@ -80,27 +96,32 @@ app.patch('/agents/:id', async (c) => {
     if (sets.length === 0) return c.json({ error: 'No fields to update' }, 400);
 
     vals.push(id);
-    const r = await appQuery(
-      `UPDATE agents SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`,
-      vals,
-    );
-    if (r.rows.length === 0) return c.json({ error: 'Not found' }, 404);
-    return c.json(r.rows);
+    const rows = await appTransaction(async (client) => {
+      await lockOperatorMapping(client, 'agent', id);
+      const agent = (await client.query('SELECT agency_id FROM agents WHERE id = $1', [id])).rows[0];
+      if (!agent) throw new RouteRefusal(404, { error: 'Not found' });
+      await lockLiveAgency(client, agent.agency_id);
+      return (await client.query(
+        `UPDATE agents SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`,
+        vals,
+      )).rows;
+    });
+    if (rows.length === 0) return c.json({ error: 'Not found' }, 404);
+    return c.json(rows);
   } catch (err: any) {
+    if (err instanceof RouteRefusal) return c.json(err.body, err.status);
     console.error('Error updating agent:', err);
     return c.json({ error: err.message || 'Internal Server Error' }, 500);
   }
 });
 
 // DELETE /agents/:id
-app.delete('/agents/:id', async (c) => {
-  try {
-    await appQuery('DELETE FROM agents WHERE id = $1', [c.req.param('id')]);
-    return c.body(null, 204);
-  } catch (err: any) {
-    console.error('Error deleting agent:', err);
-    return c.json({ error: 'Internal Server Error' }, 500);
-  }
-});
+// Retired: agents are deactivated, never deleted, so settlement and question history keeps its agent.
+app.delete('/agents/:id', (c) =>
+  c.json(
+    { error: 'Agents cannot be deleted. Deactivate the agent instead.', code: 'DELETE_DISABLED' },
+    409,
+  ),
+);
 
 export default app;

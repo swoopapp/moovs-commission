@@ -10,6 +10,7 @@ import reservations from './routes/reservations.js';
 // Commission CRUD routes (prototype-db)
 import commissionOperators from './routes/commissionOperators.js';
 import agencies from './routes/agencies.js';
+import agencyLifecycle from './routes/agencyLifecycleRoutes.js';
 import agentsCrud from './routes/agentsCrud.js';
 import commissionReservations from './routes/commissionReservations.js';
 import attributions from './routes/attributions.js';
@@ -67,6 +68,7 @@ app.route('/', reservations);
 // Commission CRUD routes
 app.route('/', commissionOperators);
 app.route('/', agencies);
+app.route('/', agencyLifecycle);
 app.route('/', agentsCrud);
 app.route('/', commissionReservations);
 app.route('/', attributions);

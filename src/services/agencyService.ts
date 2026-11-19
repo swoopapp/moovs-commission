@@ -19,13 +19,6 @@ async function handleResponse<T>(response: Response, context: string): Promise<T
   return response.json() as Promise<T>;
 }
 
-async function handleVoidResponse(response: Response, context: string): Promise<void> {
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`${context}: ${response.status} ${response.statusText} - ${body}`);
-  }
-}
-
 // --- Input type (omit auto-generated fields) ---
 
 export interface AgencyClientLinkInput {
@@ -99,9 +92,9 @@ export async function fetchLinkedClientKeys(operatorId: string): Promise<Set<str
   return new Set(rows.map((r) => r.client_key).filter(Boolean));
 }
 
-export async function fetchAgencyById(id: string): Promise<Agency | null> {
+export async function fetchAgencyById(id: string, signal?: AbortSignal): Promise<Agency | null> {
   if (isDemoAgencyId(id)) return getDemoAgencyById(id);
-  const res = await fetch(`${API}/agencies/${encodeURIComponent(id)}`);
+  const res = await fetch(`${API}/agencies/${encodeURIComponent(id)}`, { signal, cache: 'no-store' });
   const rows = await handleResponse<Agency[]>(res, 'fetchAgencyById');
   return rows[0] ?? null;
 }
@@ -136,12 +129,4 @@ export async function updateAgency(id: string, updates: UpdateAgencyInput): Prom
   const rows = await handleResponse<Agency[]>(res, 'updateAgency');
   if (!rows[0]) throw new Error('updateAgency: no row returned');
   return rows[0];
-}
-
-export async function deleteAgency(id: string): Promise<void> {
-  if (isDemoAgencyId(id)) throw demoReadOnlyError('Deleting agencies');
-  const res = await fetch(`${API}/agencies/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-  });
-  return handleVoidResponse(res, 'deleteAgency');
 }

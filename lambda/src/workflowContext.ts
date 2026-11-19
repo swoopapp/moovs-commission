@@ -1,5 +1,6 @@
 import type { PoolClient } from 'pg';
 import { fetchAuthoritativeReservations } from './moovsReservationFacts.js';
+import { getAppPool } from './appDb.js';
 export async function loadAgencyContext(
   client: PoolClient,
   agencyId: string,
@@ -90,4 +91,84 @@ export async function assertUnambiguousAgency(
     throw new Error(
       'Booking matches multiple active agencies; repair agency mapping first.',
     );
+}
+
+/** A refusal a route answers as is. Thrown inside a transaction so the caller rolls back first. */
+export class RouteRefusal extends Error {
+  constructor(
+    readonly status: 400 | 404 | 409,
+    readonly body: Record<string, unknown>,
+  ) {
+    super('Request refused');
+  }
+}
+export const AGENCY_ARCHIVED = {
+  error: 'Agency is archived. Restore it before making changes.',
+  code: 'AGENCY_ARCHIVED',
+} as const;
+export class AgencyArchivedError extends RouteRefusal {
+  constructor() {
+    super(409, AGENCY_ARCHIVED);
+  }
+}
+/** One transaction on the app pool. Rolls back on any throw and rethrows it. */
+export async function appTransaction<T>(
+  work: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  const client = await (await getAppPool()).connect();
+  try {
+    await client.query('BEGIN');
+    const result = await work(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+const OPERATOR_LOCK_SQL = {
+  operator: 'SELECT co.id,co.status FROM commission_operators co WHERE co.id=$1',
+  agency:
+    'SELECT co.id,co.status FROM commission_operators co JOIN agencies x ON x.operator_id=co.id WHERE x.id=$1',
+  agent:
+    'SELECT co.id,co.status FROM commission_operators co JOIN agencies a ON a.operator_id=co.id JOIN agents x ON x.agency_id=a.id WHERE x.id=$1',
+  payout:
+    'SELECT co.id,co.status FROM commission_operators co JOIN payouts x ON x.operator_id=co.id WHERE x.id=$1',
+} as const;
+/**
+ * First lock of every agency or money write: the operator row, found from the row being changed.
+ * Archive/restore/link-issue hold it FOR UPDATE; everyone else FOR SHARE. Only the operator row is locked here.
+ */
+export async function lockOperatorMapping(
+  client: PoolClient,
+  by: keyof typeof OPERATOR_LOCK_SQL,
+  id: string,
+  mode: 'SHARE' | 'UPDATE' = 'SHARE',
+  operatorId?: string,
+): Promise<{ id: string; status: string }> {
+  const row = (
+    await client.query(
+      `${OPERATOR_LOCK_SQL[by]}${operatorId ? ' AND co.id=$2' : ''} FOR ${mode} OF co`,
+      operatorId ? [id, operatorId] : [id],
+    )
+  ).rows[0];
+  if (!row) throw new RouteRefusal(404, { error: 'Not found' });
+  return row;
+}
+/** Agency row lock, taken after the operator lock. An archived agency accepts no edit and no new obligation. */
+export async function lockLiveAgency(
+  client: PoolClient,
+  agencyId: string,
+  mode: 'SHARE' | 'UPDATE' = 'SHARE',
+) {
+  const row = (
+    await client.query(`SELECT * FROM agencies WHERE id=$1 FOR ${mode}`, [
+      agencyId,
+    ])
+  ).rows[0];
+  if (!row) throw new RouteRefusal(404, { error: 'Not found' });
+  if (row.status === 'archived') throw new AgencyArchivedError();
+  return row;
 }

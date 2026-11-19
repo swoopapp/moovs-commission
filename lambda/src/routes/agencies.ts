@@ -1,8 +1,20 @@
 import { validateRules } from '../../../src/lib/commission-rules.ts';
 import { Hono } from 'hono';
 import { appQuery } from '../appDb.js';
+import {
+  RouteRefusal,
+  appTransaction,
+  lockLiveAgency,
+  lockOperatorMapping,
+} from '../workflowContext.js';
 
 const app = new Hono();
+type Query = (text: string, params?: any[]) => Promise<{ rows: any[] }>;
+// Archive and restore are audited lifecycle actions; the profile status field can never enter that state.
+const STATUS_NOT_EDITABLE = {
+  error: 'Use Archive to archive an agency.',
+  code: 'STATUS_NOT_EDITABLE',
+};
 
 function validateCommissionFields(
   body: Record<string, any>,
@@ -64,14 +76,14 @@ function companyClientLink(companyId: string | null | undefined, displayName?: s
   };
 }
 
-async function syncAgencyClientLinks(agencyId: string, operatorId: string, links: ReturnType<typeof normalizeClientLink>[]) {
+async function syncAgencyClientLinks(agencyId: string, operatorId: string, links: ReturnType<typeof normalizeClientLink>[], query: Query = appQuery) {
   const normalized = links.filter((link): link is NonNullable<typeof link> => Boolean(link));
-  await appQuery('DELETE FROM agency_client_links WHERE agency_id = $1', [agencyId]);
+  await query('DELETE FROM agency_client_links WHERE agency_id = $1', [agencyId]);
   if (normalized.length === 0) return;
 
   for (let i = 0; i < normalized.length; i += 1) {
     const link = normalized[i];
-    await appQuery(
+    await query(
       `INSERT INTO agency_client_links
         (agency_id, operator_id, client_key, client_type, client_id, display_name_snapshot, is_primary)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -179,7 +191,8 @@ app.get('/agencies', async (c) => {
 // GET /agencies/by-token/:token
 app.get('/agencies/by-token/:token', async (c) => {
   try {
-    const r = await appQuery('SELECT * FROM agencies WHERE portal_token = $1 LIMIT 1', [c.req.param('token')]);
+    // An archived agency has no portal, even if an old link is still stored on its row.
+    const r = await appQuery("SELECT * FROM agencies WHERE portal_token = $1 AND status <> 'archived' LIMIT 1", [c.req.param('token')]);
     return c.json(await attachClientLinks(r.rows));
   } catch (err: any) {
     console.error('Error fetching agency by token:', err);
@@ -235,19 +248,16 @@ app.get('/agencies/:id', async (c) => {
 });
 
 // POST /agencies/:id/regenerate-token
-app.post('/agencies/:id/regenerate-token', async (c) => {
-  try {
-    const r = await appQuery(
-      `UPDATE agencies SET portal_token = encode(gen_random_bytes(32), 'hex') WHERE id = $1 RETURNING *`,
-      [c.req.param('id')],
-    );
-    if (r.rows.length === 0) return c.json({ error: 'Not found' }, 404);
-    return c.json(r.rows);
-  } catch (err: any) {
-    console.error('Error regenerating agency portal token:', err);
-    return c.json({ error: err.message || 'Internal Server Error' }, 500);
-  }
-});
+// Retired: it replaced a link with no revision check, no archived check and no audit.
+app.post('/agencies/:id/regenerate-token', (c) =>
+  c.json(
+    {
+      error: 'Issue a new partner link from the agency lifecycle actions.',
+      code: 'USE_LIFECYCLE',
+    },
+    409,
+  ),
+);
 
 // POST /agencies
 app.post('/agencies', async (c) => {
@@ -255,6 +265,7 @@ app.post('/agencies', async (c) => {
     const body = await c.req.json();
     const validationError = validateCommissionFields(body);
     if (validationError) return c.json({ error: validationError }, 400);
+    if (body.status === 'archived') return c.json(STATUS_NOT_EDITABLE, 400);
     const fields = [
       'operator_id', 'moovs_company_id', 'name', 'type', 'commission_rate', 'commission_type',
       'commission_base', 'rate_mode', 'price_mode', 'contact_name', 'contact_email', 'contact_phone', 'address', 'city',
@@ -265,17 +276,23 @@ app.post('/agencies', async (c) => {
     const vals = present.map((f) => body[f]);
     const placeholders = present.map((_, i) => `$${i + 1}`);
 
-    const r = await appQuery(
-      `INSERT INTO agencies (${present.join(', ')}) VALUES (${placeholders.join(', ')}) RETURNING *`,
-      vals,
-    );
-    const agency = r.rows[0];
-    const bodyLinks = Array.isArray(body.client_links)
-      ? body.client_links.map(normalizeClientLink)
-      : [companyClientLink(agency.moovs_company_id, agency.name)];
-    await syncAgencyClientLinks(agency.id, agency.operator_id, bodyLinks);
+    // One transaction under the operator row FOR UPDATE: a restore checks that no other active agency claims its
+    // clients, so a new agency and its client links must not appear halfway through that check.
+    const agency = await appTransaction(async (client) => {
+      await lockOperatorMapping(client, 'operator', body.operator_id, 'UPDATE');
+      const created = (await client.query(
+        `INSERT INTO agencies (${present.join(', ')}) VALUES (${placeholders.join(', ')}) RETURNING *`,
+        vals,
+      )).rows[0];
+      const bodyLinks = Array.isArray(body.client_links)
+        ? body.client_links.map(normalizeClientLink)
+        : [companyClientLink(created.moovs_company_id, created.name)];
+      await syncAgencyClientLinks(created.id, created.operator_id, bodyLinks, (text, params) => client.query(text, params));
+      return created;
+    });
     return c.json(await attachClientLinks([agency]), 201);
   } catch (err: any) {
+    if (err instanceof RouteRefusal) return c.json(err.body, err.status);
     console.error('Error creating agency:', err);
     return c.json({ error: err.message || 'Internal Server Error' }, 500);
   }
@@ -286,27 +303,7 @@ app.patch('/agencies/:id', async (c) => {
   try {
     const id = c.req.param('id');
     const body = await c.req.json();
-    if ('commission_type' in body) {
-      const existing = await appQuery('SELECT commission_rules FROM agencies WHERE id=$1', [id]);
-      const rulesError = validateRules(existing.rows[0]?.commission_rules ?? [], body.commission_type);
-      if (rulesError) return c.json({error: rulesError},400);
-    }
-    if ('commission_rate' in body || 'commission_type' in body) {
-      const current = await appQuery('SELECT commission_type FROM agencies WHERE id = $1', [id]);
-      if (current.rows.length === 0) return c.json({ error: 'Not found' }, 404);
-      const validationError = validateCommissionFields(body, current.rows[0].commission_type);
-      if (validationError) return c.json({ error: validationError }, 400);
-      if (
-        body.commission_type === 'percent'
-        && !('commission_rate' in body)
-      ) {
-        const rateResult = await appQuery('SELECT commission_rate FROM agencies WHERE id = $1', [id]);
-        const existingRate = Number(rateResult.rows[0]?.commission_rate);
-        if (!Number.isFinite(existingRate) || existingRate < 0 || existingRate > 100) {
-          return c.json({ error: 'Existing commission_rate is invalid for percent commissions' }, 400);
-        }
-      }
-    }
+    if (body.status === 'archived') return c.json(STATUS_NOT_EDITABLE, 400);
     const allowedFields = [
       'moovs_company_id', 'name', 'type', 'commission_rate', 'commission_type', 'commission_base',
       'rate_mode', 'price_mode',
@@ -326,38 +323,58 @@ app.patch('/agencies/:id', async (c) => {
     }
     const shouldSyncClientLinks = Array.isArray(body.client_links) || 'moovs_company_id' in body;
     if (sets.length === 0 && !shouldSyncClientLinks) return c.json({ error: 'No fields to update' }, 400);
-
     vals.push(id);
-    const r = sets.length > 0
-      ? await appQuery(
-          `UPDATE agencies SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`,
-          vals,
-        )
-      : await appQuery('SELECT * FROM agencies WHERE id = $1', [id]);
-    if (r.rows.length === 0) return c.json({ error: 'Not found' }, 404);
-    const agency = r.rows[0];
-    if (shouldSyncClientLinks) {
-      const bodyLinks = Array.isArray(body.client_links)
-        ? body.client_links.map(normalizeClientLink)
-        : [companyClientLink(agency.moovs_company_id, agency.name)];
-      await syncAgencyClientLinks(agency.id, agency.operator_id, bodyLinks);
-    }
+
+    // The archived test, the validations and every write share one transaction under the agency row lock,
+    // so an edit can neither race an archive nor quietly reactivate an archived agency.
+    const agency = await appTransaction(async (client) => {
+      // FOR UPDATE, as the native editors take it: a writer that goes on to lock the agency FOR UPDATE must not
+      // share the operator row with money writers, or the three can queue in a cycle behind a waiting archive.
+      await lockOperatorMapping(client, 'agency', id, 'UPDATE');
+      const current = await lockLiveAgency(client, id, 'UPDATE');
+      if ('commission_type' in body) {
+        const rulesError = validateRules(current.commission_rules ?? [], body.commission_type);
+        if (rulesError) throw new RouteRefusal(400, { error: rulesError });
+      }
+      if ('commission_rate' in body || 'commission_type' in body) {
+        const validationError = validateCommissionFields(body, current.commission_type);
+        if (validationError) throw new RouteRefusal(400, { error: validationError });
+        if (body.commission_type === 'percent' && !('commission_rate' in body)) {
+          const existingRate = Number(current.commission_rate);
+          if (!Number.isFinite(existingRate) || existingRate < 0 || existingRate > 100) {
+            throw new RouteRefusal(400, { error: 'Existing commission_rate is invalid for percent commissions' });
+          }
+        }
+      }
+      const row = sets.length > 0
+        ? (await client.query(
+            `UPDATE agencies SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`,
+            vals,
+          )).rows[0]
+        : current;
+      if (shouldSyncClientLinks) {
+        const bodyLinks = Array.isArray(body.client_links)
+          ? body.client_links.map(normalizeClientLink)
+          : [companyClientLink(row.moovs_company_id, row.name)];
+        await syncAgencyClientLinks(row.id, row.operator_id, bodyLinks, (text, params) => client.query(text, params));
+      }
+      return row;
+    });
     return c.json(await attachClientLinks([agency]));
   } catch (err: any) {
+    if (err instanceof RouteRefusal) return c.json(err.body, err.status);
     console.error('Error updating agency:', err);
     return c.json({ error: err.message || 'Internal Server Error' }, 500);
   }
 });
 
 // DELETE /agencies/:id
-app.delete('/agencies/:id', async (c) => {
-  try {
-    await appQuery('DELETE FROM agencies WHERE id = $1', [c.req.param('id')]);
-    return c.body(null, 204);
-  } catch (err: any) {
-    console.error('Error deleting agency:', err);
-    return c.json({ error: 'Internal Server Error' }, 500);
-  }
-});
+// Retired: the delete cascaded into payouts. Agencies are archived, never deleted.
+app.delete('/agencies/:id', (c) =>
+  c.json(
+    { error: 'Agencies cannot be deleted. Archive the agency instead.', code: 'DELETE_DISABLED' },
+    409,
+  ),
+);
 
 export default app;

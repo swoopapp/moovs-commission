@@ -13,6 +13,11 @@ import {
   loadAgencyContext,
   audit,
   assertUnambiguousAgency,
+  lockOperatorMapping,
+  lockLiveAgency,
+  appTransaction,
+  AgencyArchivedError,
+  RouteRefusal,
 } from '../workflowContext.js';
 import { Hono } from 'hono';
 import type { PoolClient } from 'pg';
@@ -362,6 +367,7 @@ app.post('/payouts/create-from-trips', async (c) => {
     };
 
     await client.query('BEGIN');
+    await lockOperatorMapping(client, 'agency', body.agency_id, 'SHARE', body.operator_id);
     // Serialize retries with the same key without requiring a schema migration.
     await client.query(
       'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
@@ -424,7 +430,7 @@ app.post('/payouts/create-from-trips', async (c) => {
 
     const agencyResult = await client.query(
       `SELECT
-         a.id, a.commission_rules, a.commission_rate, a.commission_type, a.commission_base, a.rate_mode,
+         a.id, a.status, a.commission_rules, a.commission_rate, a.commission_type, a.commission_base, a.rate_mode,
          ARRAY(
            SELECT DISTINCT linked.client_key
            FROM (
@@ -446,6 +452,8 @@ app.post('/payouts/create-from-trips', async (c) => {
     if (agencyResult.rowCount === 0)
       throw new RequestError('Agency does not belong to operator');
     const agency = agencyResult.rows[0];
+    // Checked here, not in the per-trip loop, so an adjustments-only settlement is refused too.
+    if (agency.status === 'archived') throw new AgencyArchivedError();
     if (!agency.moovs_operator_id) {
       throw new RequestError('Operator is not linked to a Moovs account');
     }
@@ -761,6 +769,10 @@ app.post('/payouts/create-from-trips', async (c) => {
     await client.query('ROLLBACK').catch(() => undefined);
     if (err instanceof RequestError)
       return c.json({ error: err.message }, err.status);
+    if (err instanceof RouteRefusal)
+      return err.status === 404
+        ? c.json({ error: 'Agency does not belong to operator' }, 400)
+        : c.json(err.body, err.status);
     console.error('Error creating payout from trips:', err);
     return c.json({ error: err.message || 'Internal Server Error' }, 500);
   } finally {
@@ -788,7 +800,10 @@ app.post('/payouts', async (c) => {
       notes,
       date_paid,
     } = body;
-    const r = await appQuery(
+    const rows = await appTransaction(async (client) => {
+      await lockOperatorMapping(client, 'agency', agency_id, 'SHARE', operator_id);
+      await lockLiveAgency(client, agency_id);
+      return (await client.query(
       `INSERT INTO payouts (operator_id, agency_id, period_start, period_end, total_trips, total_revenue,
         total_commission, adjustments, net_payout, method, reference_number, status, notes, date_paid)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12, 'draft'), $13, $14)
@@ -809,9 +824,11 @@ app.post('/payouts', async (c) => {
         notes,
         date_paid,
       ],
-    );
-    return c.json(r.rows, 201);
+      )).rows;
+    });
+    return c.json(rows, 201);
   } catch (err: any) {
+    if (err instanceof RouteRefusal) return c.json(err.body, err.status);
     console.error('Error creating payout:', err);
     return c.json({ error: err.message || 'Internal Server Error' }, 500);
   }
@@ -835,6 +852,7 @@ app.post('/payouts/:id/record-payment', async (c) => {
   const client = await (await getAppPool()).connect();
   try {
     await client.query('BEGIN');
+    await lockOperatorMapping(client, 'payout', c.req.param('id'), 'SHARE', b.operator_id);
     const p = (
       await client.query(
         'SELECT * FROM payouts WHERE id=$1 AND operator_id=$2 FOR UPDATE',
@@ -931,6 +949,7 @@ app.post('/payouts/:id/void', async (c) => {
   const client = await (await getAppPool()).connect();
   try {
     await client.query('BEGIN');
+    await lockOperatorMapping(client, 'payout', c.req.param('id'), 'SHARE', b.operator_id);
     const p = (
       await client.query(
         'SELECT * FROM payouts WHERE id=$1 AND operator_id=$2 FOR UPDATE',
@@ -943,6 +962,10 @@ app.post('/payouts/:id/void', async (c) => {
         409,
       );
     if (p.status !== 'void') {
+      // Void reopens ledger rows, so it must not interleave with an archive check on this agency.
+      await client.query('SELECT id FROM agencies WHERE id=$1 FOR SHARE', [
+        p.agency_id,
+      ]);
       // The void snapshot stays immutable; release ledger rows for an explicitly prepared replacement.
       await client.query(
         'UPDATE commission_adjustments SET applied_payout_id=NULL WHERE applied_payout_id=$1',
@@ -980,18 +1003,6 @@ app.patch('/payouts/:id', async (c) => {
   try {
     const id = c.req.param('id');
     const body = await c.req.json();
-    const current = await appQuery(
-      'SELECT statement_snapshot FROM payouts WHERE id=$1',
-      [id],
-    );
-    if (current.rows[0]?.statement_snapshot)
-      return c.json(
-        {
-          error:
-            'Workflow settlements are immutable; use record-payment or a correction.',
-        },
-        409,
-      );
     const allowedFields = [
       'period_start',
       'period_end',
@@ -1016,16 +1027,56 @@ app.patch('/payouts/:id', async (c) => {
         vals.push(body[field]);
       }
     }
-    if (sets.length === 0) return c.json({ error: 'No fields to update' }, 400);
-
     vals.push(id);
-    const r = await appQuery(
-      `UPDATE payouts SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`,
-      vals,
-    );
-    if (r.rows.length === 0) return c.json({ error: 'Not found' }, 404);
-    return c.json(r.rows);
+    const rows = await appTransaction(async (client) => {
+      await lockOperatorMapping(client, 'payout', id);
+      const current = (
+        await client.query(
+          'SELECT statement_snapshot, agency_id, operator_id, status FROM payouts WHERE id=$1 FOR UPDATE',
+          [id],
+        )
+      ).rows[0];
+      if (!current) throw new RouteRefusal(404, { error: 'Not found' });
+      if (current.statement_snapshot)
+        throw new RouteRefusal(409, {
+          error:
+            'Workflow settlements are immutable; use record-payment or a correction.',
+        });
+      // No raw edit of any field on an archived agency: restore it first, then correct.
+      await lockLiveAgency(client, current.agency_id);
+      // A paid payout can be what settled a review of ANOTHER agency that has since been archived. Taking it out of
+      // paid would reopen that review behind the archive, so refuse exactly that case and nothing wider.
+      if ('status' in body && current.status === 'paid' && body.status !== 'paid') {
+        const reopened = await client.query(
+          `SELECT 1 FROM payout_reservations pr
+           JOIN commission_reservations cr ON cr.id=pr.reservation_id AND cr.operator_id=$2
+           JOIN commission_reviews r ON r.moovs_trip_id=cr.moovs_trip_id AND r.status IN ('approved','held')
+           JOIN agencies a ON a.id=r.agency_id AND a.operator_id=$2 AND a.status='archived'
+           WHERE pr.payout_id=$1 AND NOT EXISTS (
+             SELECT 1 FROM payout_reservations opr JOIN payouts op ON op.id=opr.payout_id
+             WHERE opr.reservation_id=cr.id AND op.id<>$1 AND op.operator_id=$2 AND op.status='paid')
+           LIMIT 1`,
+          [id, current.operator_id],
+        );
+        if (reopened.rows.length)
+          throw new RouteRefusal(409, {
+            error:
+              'This payout settles a review of an archived agency. Restore that agency before changing it.',
+            code: 'ARCHIVED_AGENCY_SETTLED',
+          });
+      }
+      if (sets.length === 0)
+        throw new RouteRefusal(400, { error: 'No fields to update' });
+      return (
+        await client.query(
+          `UPDATE payouts SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`,
+          vals,
+        )
+      ).rows;
+    });
+    return c.json(rows);
   } catch (err: any) {
+    if (err instanceof RouteRefusal) return c.json(err.body, err.status);
     console.error('Error updating payout:', err);
     return c.json({ error: err.message || 'Internal Server Error' }, 500);
   }
@@ -1068,12 +1119,24 @@ app.post('/payout-reservations', async (c) => {
       params.push(payout_id, rid);
     }
 
-    await appQuery(
-      `INSERT INTO payout_reservations (payout_id, reservation_id) VALUES ${values.join(', ')} ON CONFLICT DO NOTHING`,
-      params,
-    );
+    await appTransaction(async (client) => {
+      await lockOperatorMapping(client, 'payout', payout_id);
+      const payout = (
+        await client.query('SELECT agency_id FROM payouts WHERE id=$1 FOR SHARE', [
+          payout_id,
+        ])
+      ).rows[0];
+      if (!payout) throw new RouteRefusal(404, { error: 'Not found' });
+      // An allocation changes what the agency is owed, so none may be added while it is archived.
+      await lockLiveAgency(client, payout.agency_id);
+      await client.query(
+        `INSERT INTO payout_reservations (payout_id, reservation_id) VALUES ${values.join(', ')} ON CONFLICT DO NOTHING`,
+        params,
+      );
+    });
     return c.json({ success: true }, 201);
   } catch (err: any) {
+    if (err instanceof RouteRefusal) return c.json(err.body, err.status);
     console.error('Error creating payout reservations:', err);
     return c.json({ error: err.message || 'Internal Server Error' }, 500);
   }

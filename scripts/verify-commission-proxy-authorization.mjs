@@ -211,4 +211,22 @@ await expectDenied(
 );
 await expectDenied('new/unknown routes fail closed', 403, authorize('future-sensitive-route'));
 
-console.log('Commission proxy authorization verification passed (33 assertions).');
+
+
+for (const action of ['archive','restore','issue-link','issue-agent-link']) {
+ const body={operator_id:session.operatorId,expected_revision:'2026-11-18T15:00:00.123456',...(action==='issue-agent-link'?{agent_id:'agent-a'}:{})};
+ await expectAllowed('owned lifecycle '+action,authorize('agencies/agency-a/'+action,'POST',{body}));
+ await expectDenied('foreign lifecycle '+action,403,authorize('agencies/agency-b/'+action,'POST',{body}));
+ await expectDenied('forged operator lifecycle '+action,403,authorize('agencies/agency-a/'+action,'POST',{body:{...body,operator_id:'operator-b'}}));
+ await expectDenied('query not a mutation scope '+action,403,authorize('agencies/agency-a/'+action,'POST',{query:'?operator_id=operator-a',body}));
+ await expectDenied('lifecycle wrong method '+action,405,authorize('agencies/agency-a/'+action,'DELETE',{body}));
+}
+await expectAllowed('scoped lifecycle read',authorize('agencies/agency-a/lifecycle','GET',{query:'?operator_id=operator-a'}));
+for(const query of ['?operator_id=operator-b','?operator_id=operator-a&operator_id=operator-a','?operator_id=operator-a&token=bad'])await expectDenied('strict lifecycle scope '+query,403,authorize('agencies/agency-a/lifecycle','GET',{query}));
+await expectDenied('foreign parent for agent issuance',403,authorize('agencies/agency-a/issue-agent-link','POST',{body:{operator_id:session.operatorId,agent_id:'agent-other-agency'}}));
+await expectDenied('foreign operator agent issuance',403,authorize('agencies/agency-a/issue-agent-link','POST',{body:{operator_id:session.operatorId,agent_id:'agent-b'}}));
+await expectDenied('hard agency delete removed',405,authorize('agencies/agency-a','DELETE'));
+await expectDenied('hard agent delete removed',405,authorize('agents/agent-a','DELETE'));
+await expectDenied('unrevisioned token rotation removed',405,authorize('agencies/agency-a/regenerate-token','POST'));
+
+console.log('Commission proxy and agency lifecycle authorization verification passed.');

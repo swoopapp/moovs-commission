@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useIsDemo, useOperator } from '../../contexts/OperatorContext';
 import { Agency, AgencyType, CommissionType, CommissionBase, RateMode, PriceMode } from '../../types/commission';
 import { defaultPriceModeForTerms } from '../../lib/commission-calc';
-import { updateAgency, deleteAgency, fetchLinkedClientKeys } from '../../services/agencyService';
+import { updateAgency, fetchLinkedClientKeys } from '../../services/agencyService';
 import { fetchMoovsCompanies, MoovsCompany } from '../../services/companyLookupService';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
@@ -10,7 +10,6 @@ import { Label } from '../ui/label';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
 import { Switch } from '../ui/switch';
-import { Separator } from '../ui/separator';
 import {
   Select,
   SelectTrigger,
@@ -18,11 +17,14 @@ import {
   SelectItem,
   SelectValue,
 } from '../ui/select';
-import { Copy, Trash2, Link, Percent, DollarSign, Info, Building2, Loader2, X } from 'lucide-react';
+import { Copy, Link, Percent, DollarSign, Info, Building2, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { AgencyLifecycleControls, partnerLink, type LifecycleSignal } from './AgencyLifecycleControls';
 
 interface SettingsTabProps {
   agency: Agency;
+  linksHeld: boolean;
+  onLifecycle: (signal: LifecycleSignal) => void;
   onUpdated: (agency: Agency) => void;
 }
 
@@ -32,7 +34,7 @@ function clientKeyFor(company: MoovsCompany): string {
   return company.client_key || `${company.client_type || company.source || 'company'}:${company.client_id || company.company_id}`;
 }
 
-export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
+export function SettingsTab({ agency, linksHeld, onLifecycle, onUpdated }: SettingsTabProps) {
   const operator = useOperator();
   const isDemo = useIsDemo();
   const [agencyType, setAgencyType] = useState<AgencyType>(agency.type);
@@ -144,10 +146,8 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
       toast.error('Failed to unlink company');
     }
   }
-  const [deleting, setDeleting] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const portalUrl = `${window.location.origin}/portal/${agency.portal_token}`;
+  const portalUrl = partnerLink(window.location.origin, agency.status, agency.portal_token, linksHeld);
   const isActive = agency.status === 'active';
   const parsedCommissionRate = Number(commissionRate);
   const commissionRateValid =
@@ -220,29 +220,8 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
     }
   }
 
-  async function handleDelete() {
-    if (isDemo) {
-      toast.info('Demo mode is read-only. Deletes are disabled.');
-      return;
-    }
-    if (!confirmDelete) {
-      setConfirmDelete(true);
-      return;
-    }
-    try {
-      setDeleting(true);
-      await deleteAgency(agency.id);
-      toast.success('Agency deleted');
-      window.location.hash = '#/';
-    } catch (err) {
-      console.error('Failed to delete agency:', err);
-      toast.error('Failed to delete agency');
-    } finally {
-      setDeleting(false);
-    }
-  }
-
   async function handleCopyPortalLink() {
+    if (!portalUrl) return;
     try {
       await navigator.clipboard.writeText(portalUrl);
       toast.success('Portal link copied to clipboard');
@@ -259,6 +238,7 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
           Settings are visible for walkthrough purposes only. Demo mode does not save changes.
         </div>
       )}
+      <fieldset disabled={agency.status === 'archived'} className="contents">
       {/* Left column: Commission & Contract */}
       <div className="space-y-6">
         <Card>
@@ -572,7 +552,7 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
         </Card>
       </div>
 
-      {/* Right column: Company Link, Portal, Status, Danger Zone */}
+      {/* Right column: Company Link, Portal, Status */}
       <div className="space-y-6">
         <Card className={primaryClientKey ? 'border-green-200' : 'border-amber-200'}>
           <CardHeader>
@@ -660,7 +640,8 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
                 readOnly
                 className="font-mono text-sm"
               />
-              <Button variant="outline" size="icon" aria-label="Copy agency portal link" onClick={handleCopyPortalLink}>
+              <Button variant="outline" size="icon" aria-label="Copy agency portal link" onClick={handleCopyPortalLink}
+                disabled={!portalUrl || isDemo}>
                 <Copy className="h-4 w-4" />
               </Button>
             </div>
@@ -682,7 +663,7 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-medium text-gray-900">
-                  {isActive ? 'Active' : 'Suspended'}
+                  {agency.status === 'archived' ? 'Archived' : isActive ? 'Active' : 'Suspended'}
                   {contractStart && (
                     <span className="text-sm font-normal text-gray-500 ml-2">
                       Since {new Date(contractStart + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
@@ -690,7 +671,7 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
                   )}
                 </p>
                 <p className="text-sm text-gray-500">
-                  {isActive
+                  {agency.status === 'archived' ? 'Partner access is revoked. Financial history is retained.' : isActive
                     ? 'Agency is active and can receive commissions'
                     : 'Agency is suspended and will not receive new commissions'}
                 </p>
@@ -700,31 +681,12 @@ export function SettingsTab({ agency, onUpdated }: SettingsTabProps) {
           </CardContent>
         </Card>
 
-        <Card className="border-red-200">
-          <CardHeader>
-            <CardTitle className="text-base text-red-600">Danger Zone</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-gray-500">
-              Permanently delete this agency, all agents, and their attribution history. This action cannot be undone.
-            </p>
-            <Separator />
-            <Button
-              variant="destructive"
-              className="gap-1.5"
-              onClick={handleDelete}
-              disabled={deleting || isDemo}
-            >
-              <Trash2 className="h-4 w-4" />
-              {deleting ? 'Deleting...' : confirmDelete ? 'Click again to confirm' : 'Delete Agency'}
-            </Button>
-            {confirmDelete && !deleting && (
-              <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)}>
-                Cancel
-              </Button>
-            )}
-          </CardContent>
-        </Card>
+
+      </div>
+      </fieldset>
+      <div className="lg:col-span-2">
+        <AgencyLifecycleControls key={`${operator.operatorId}:${agency.id}:${isDemo}`} agencyId={agency.id} operatorId={operator.operatorId} isDemo={isDemo}
+          held={linksHeld} onLifecycle={onLifecycle} />
       </div>
     </div>
   );
